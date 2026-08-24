@@ -1,0 +1,422 @@
+'use client';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase/client';
+import Sidebar from '@/components/Sidebar';
+import Navbar from '@/components/Navbar';
+import { Plus, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, FileDown, Edit3, Trash2, Link2 } from 'lucide-react';
+import { Box, Location } from '@/lib/database.types';
+import Link from 'next/link';
+
+export default function BoxesPage() {
+  const [boxes, setBoxes] = useState<Box[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  
+  // Search, sorting, pagination state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterPriority, setFilterPriority] = useState('ALL');
+  const [filterStatus, setFilterStatus] = useState('ALL');
+  const [sortField, setSortField] = useState<'box_code' | 'priority' | 'weight'>('box_code');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+
+  // Add Box Modal
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [boxCode, setBoxCode] = useState('');
+  const [prodName, setProdName] = useState('');
+  const [category, setCategory] = useState('Electronics');
+  const [weight, setWeight] = useState(1.5);
+  const [srcLoc, setSrcLoc] = useState('');
+  const [destLoc, setDestLoc] = useState('');
+  const [priority, setPriority] = useState<'NORMAL' | 'HIGH' | 'URGENT'>('NORMAL');
+
+  const loadBoxes = () => {
+    const list = supabase.from('boxes').select().data || [];
+    setBoxes(list as Box[]);
+    const locs = supabase.from('locations').select().data || [];
+    setLocations(locs as Location[]);
+    if (locs.length > 0) {
+      setSrcLoc(locs[0].id);
+      setDestLoc(locs[1]?.id || locs[0].id);
+    }
+  };
+
+  useEffect(() => {
+    loadBoxes();
+  }, []);
+
+  const handleAddBox = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!boxCode || !prodName) return;
+
+    const newBox: Box = {
+      id: `box-${Date.now()}`,
+      box_code: boxCode,
+      product_name: prodName,
+      category,
+      weight: Number(weight),
+      current_location_id: srcLoc,
+      destination_location_id: destLoc,
+      priority,
+      status: 'WAITING',
+      qr_code_data: boxCode,
+      created_by: 'u-manager',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    supabase.from('boxes').insert(newBox);
+    
+    // Auto-create task if box is created
+    const estDistance = 15;
+    const estDuration = 120;
+    
+    const newTask = {
+      id: `task-${Date.now()}`,
+      task_code: `TSK-${Date.now().toString().substring(7)}`,
+      box_id: newBox.id,
+      vehicle_id: null,
+      source_location_id: srcLoc,
+      destination_location_id: destLoc,
+      priority,
+      status: 'PENDING',
+      priority_score: priority === 'URGENT' ? 100 : (priority === 'HIGH' ? 50 : 10),
+      estimated_distance: estDistance,
+      estimated_duration: estDuration,
+      actual_duration: null,
+      created_by: 'u-manager',
+      assigned_at: null,
+      started_at: null,
+      completed_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    supabase.from('tasks').insert(newTask);
+
+    setShowAddModal(false);
+    setBoxCode('');
+    setProdName('');
+    loadBoxes();
+  };
+
+  const handleDeleteBox = (id: string) => {
+    supabase.from('boxes').delete().eq('id', id);
+    loadBoxes();
+  };
+
+  // Filter, Sort, Paginate Pipeline
+  const filtered = boxes.filter(b => {
+    const matchesSearch = b.box_code.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          b.product_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          b.category.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesPriority = filterPriority === 'ALL' || b.priority === filterPriority;
+    const matchesStatus = filterStatus === 'ALL' || b.status === filterStatus;
+    return matchesSearch && matchesPriority && matchesStatus;
+  });
+
+  const sorted = [...filtered].sort((a, b) => {
+    let fieldA = a[sortField];
+    let fieldB = b[sortField];
+    if (typeof fieldA === 'string') {
+      return sortOrder === 'asc' 
+        ? fieldA.localeCompare(fieldB as string)
+        : (fieldB as string).localeCompare(fieldA);
+    }
+    return sortOrder === 'asc' 
+      ? (fieldA as number) - (fieldB as number)
+      : (fieldB as number) - (fieldA as number);
+  });
+
+  const totalPages = Math.ceil(sorted.length / itemsPerPage);
+  const paginated = sorted.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const toggleSort = (field: 'box_code' | 'priority' | 'weight') => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
+
+  return (
+    <div className="flex min-h-screen bg-slate-950">
+      <Sidebar />
+      <div className="flex-grow flex flex-col min-w-0">
+        <Navbar />
+
+        <main className="p-8 space-y-8 overflow-y-auto flex-1">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-100">Warehouse Cargo & Boxes</h1>
+              <p className="text-sm text-slate-400">View register catalogs, download generated QR identities, and assign priorities.</p>
+            </div>
+            <button
+              onClick={() => {
+                setBoxCode(`BX-${Math.floor(Math.random() * 9000 + 1000)}`);
+                setShowAddModal(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-semibold text-slate-50 transition duration-150"
+            >
+              <Plus className="h-4 w-4" /> Register Box Packet
+            </button>
+          </div>
+
+          {/* Search filters panel */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 rounded-xl border border-slate-900 bg-slate-950 p-4">
+            <div className="relative">
+              <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Search box code, category..."
+                value={searchQuery}
+                onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-800 bg-slate-950/80 text-xs text-slate-100 placeholder-slate-500 outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <div>
+              <select
+                value={filterPriority}
+                onChange={e => { setFilterPriority(e.target.value); setCurrentPage(1); }}
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-800 bg-slate-950 text-xs text-slate-400"
+              >
+                <option value="ALL">All Priorities</option>
+                <option value="NORMAL">NORMAL</option>
+                <option value="HIGH">HIGH</option>
+                <option value="URGENT">URGENT</option>
+              </select>
+            </div>
+
+            <div>
+              <select
+                value={filterStatus}
+                onChange={e => { setFilterStatus(e.target.value); setCurrentPage(1); }}
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-800 bg-slate-950 text-xs text-slate-400"
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="WAITING">WAITING</option>
+                <option value="ASSIGNED">ASSIGNED</option>
+                <option value="PICKED_UP">PICKED_UP</option>
+                <option value="IN_TRANSIT">IN_TRANSIT</option>
+                <option value="DELIVERED">DELIVERED</option>
+              </select>
+            </div>
+
+            <div className="flex items-center justify-end">
+              <span className="text-[11px] text-slate-500 font-mono">Found {filtered.length} packets</span>
+            </div>
+          </div>
+
+          {/* Boxes list table layout */}
+          <div className="rounded-xl border border-slate-900 bg-slate-950 p-6 space-y-4">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-900 text-slate-500 font-bold uppercase tracking-wider">
+                    <th className="pb-3 cursor-pointer" onClick={() => toggleSort('box_code')}>
+                      <div className="flex items-center gap-1">Box ID <ArrowUpDown className="h-3 w-3" /></div>
+                    </th>
+                    <th className="pb-3">Product Name</th>
+                    <th className="pb-3 cursor-pointer" onClick={() => toggleSort('priority')}>
+                      <div className="flex items-center gap-1">Priority <ArrowUpDown className="h-3 w-3" /></div>
+                    </th>
+                    <th className="pb-3 cursor-pointer" onClick={() => toggleSort('weight')}>
+                      <div className="flex items-center gap-1">Weight (KG) <ArrowUpDown className="h-3 w-3" /></div>
+                    </th>
+                    <th className="pb-3">Status</th>
+                    <th className="pb-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-900/60 text-slate-300">
+                  {paginated.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-500">No box packets found. Register one or reset seeds.</td>
+                    </tr>
+                  ) : (
+                    paginated.map(box => (
+                      <tr key={box.id}>
+                        <td className="py-4 font-mono font-bold text-blue-400">
+                          <Link href={`/boxes/${box.id}`} className="hover:underline flex items-center gap-1">
+                            <Link2 className="h-3.5 w-3.5" /> {box.box_code}
+                          </Link>
+                        </td>
+                        <td className="py-4">
+                          <span className="font-semibold block text-slate-100">{box.product_name}</span>
+                          <span className="text-[10px] text-slate-500">{box.category}</span>
+                        </td>
+                        <td className="py-4">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            box.priority === 'URGENT' ? 'bg-red-950 text-red-400 border border-red-900/20' : (box.priority === 'HIGH' ? 'bg-yellow-950 text-yellow-500' : 'bg-slate-900 text-slate-400')
+                          }`}>{box.priority}</span>
+                        </td>
+                        <td className="py-4 font-semibold">{box.weight} kg</td>
+                        <td className="py-4">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            box.status === 'DELIVERED' ? 'bg-green-950 text-green-400' : (box.status === 'WAITING' ? 'bg-slate-900 text-slate-400 animate-pulse' : 'bg-blue-950 text-blue-400')
+                          }`}>{box.status}</span>
+                        </td>
+                        <td className="py-4 text-right space-x-2">
+                          <Link
+                            href={`/boxes/${box.id}`}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-950 hover:bg-slate-900 text-[10px] font-semibold text-slate-400 hover:text-slate-200"
+                          >
+                            Identity QR
+                          </Link>
+                          <button
+                            onClick={() => handleDeleteBox(box.id)}
+                            className="p-1.5 rounded bg-red-950/20 text-red-400 hover:bg-red-950/40"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between border-t border-slate-900 pt-4">
+                <span className="text-[11px] text-slate-500 font-mono">Page {currentPage} of {totalPages}</span>
+                <div className="flex gap-1.5">
+                  <button
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    className="p-2 rounded border border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200 disabled:opacity-50"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    className="p-2 rounded border border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200 disabled:opacity-50"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </main>
+      </div>
+
+      {/* Add Box Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4 backdrop-blur-sm">
+          <form onSubmit={handleAddBox} className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
+            <h3 className="text-lg font-bold text-slate-100">Register New Box Packet</h3>
+            
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Generated Box Code</label>
+                <input
+                  type="text"
+                  required
+                  value={boxCode}
+                  onChange={e => setBoxCode(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs font-mono text-slate-100"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Product Description</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Lithium-Ion Battery pack B9"
+                  value={prodName}
+                  onChange={e => setProdName(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-100"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Category</label>
+                  <select
+                    value={category}
+                    onChange={e => setCategory(e.target.value)}
+                    className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-400"
+                  >
+                    <option value="Electronics">Electronics</option>
+                    <option value="Mechanical">Mechanical</option>
+                    <option value="Medical">Medical</option>
+                    <option value="Hazmat">Hazmat</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Weight (KG)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    value={weight}
+                    onChange={e => setWeight(Number(e.target.value))}
+                    className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-100"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Source Location</label>
+                  <select
+                    value={srcLoc}
+                    onChange={e => setSrcLoc(e.target.value)}
+                    className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-400"
+                  >
+                    {locations.map(l => (
+                      <option key={l.id} value={l.id}>{l.name} (Floor {l.floor_id === 'f-01' ? '1' : l.floor_id === 'f-02' ? '2' : '3'})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Destination Location</label>
+                  <select
+                    value={destLoc}
+                    onChange={e => setDestLoc(e.target.value)}
+                    className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-400"
+                  >
+                    {locations.map(l => (
+                      <option key={l.id} value={l.id}>{l.name} (Floor {l.floor_id === 'f-01' ? '1' : l.floor_id === 'f-02' ? '2' : '3'})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Cargo Priority</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {['NORMAL', 'HIGH', 'URGENT'].map(level => (
+                    <button
+                      key={level}
+                      type="button"
+                      onClick={() => setPriority(level as any)}
+                      className={`py-2 rounded-lg text-xs font-semibold border transition duration-150 ${
+                        priority === level
+                          ? 'border-blue-500 bg-blue-600/15 text-slate-50'
+                          : 'border-slate-800 bg-slate-950 text-slate-400'
+                      }`}
+                    >
+                      {level}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 text-xs font-semibold text-slate-400">Cancel</button>
+              <button type="submit" className="px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 rounded-lg">Save & Dispatch Task</button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}
