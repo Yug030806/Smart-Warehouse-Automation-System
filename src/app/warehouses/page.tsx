@@ -12,21 +12,43 @@ export default function WarehousesPage() {
   const [floors, setFloors] = useState<Floor[]>([]);
   const [selectedFloor, setSelectedFloor] = useState<Floor | null>(null);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [zones, setZones] = useState<any[]>([]);
 
   // Modals forms inputs
   const [showAddWarehouse, setShowAddWarehouse] = useState(false);
   const [wName, setWName] = useState('');
   const [wAddress, setWAddress] = useState('');
 
+  // Edit Warehouse state
+  const [editingWarehouse, setEditingWarehouse] = useState<Warehouse | null>(null);
+  const [editWName, setEditWName] = useState('');
+  const [editWAddress, setEditWAddress] = useState('');
+
+  // Add/Edit Floor state
   const [showAddFloor, setShowAddFloor] = useState(false);
   const [floorNum, setFloorNum] = useState(1);
   const [floorName, setFloorName] = useState('');
+  const [editingFloor, setEditingFloor] = useState<Floor | null>(null);
+  const [editFloorName, setEditFloorName] = useState('');
 
+  // Add/Edit Location state
   const [showAddLoc, setShowAddLoc] = useState(false);
   const [locName, setLocName] = useState('');
   const [locType, setLocType] = useState<'RACK' | 'PICKUP' | 'DELIVERY' | 'CHARGING' | 'ELEVATOR'>('RACK');
   const [locX, setLocX] = useState(0);
   const [locY, setLocY] = useState(0);
+
+  const [editingLoc, setEditingLoc] = useState<Location | null>(null);
+  const [editLocName, setEditLocName] = useState('');
+  const [editLocType, setEditLocType] = useState<'RACK' | 'PICKUP' | 'DELIVERY' | 'CHARGING' | 'ELEVATOR'>('RACK');
+  const [editLocX, setEditLocX] = useState(0);
+  const [editLocY, setEditLocY] = useState(0);
+
+  // Zone management state
+  const [showAddZone, setShowAddZone] = useState(false);
+  const [zoneName, setZoneName] = useState('');
+  const [zoneCode, setZoneCode] = useState('');
+  const [zoneColor, setZoneColor] = useState('#3b82f6');
 
   const loadData = () => {
     const w = supabase.from('warehouses').select().data || [];
@@ -56,8 +78,11 @@ export default function WarehousesPage() {
     if (selectedFloor) {
       const l = supabase.from('locations').select().eq('floor_id', selectedFloor.id).data || [];
       setLocations(l as Location[]);
+      const z = supabase.from('zones').select().eq('floor_id', selectedFloor.id).data || [];
+      setZones(z);
     } else {
       setLocations([]);
+      setZones([]);
     }
   }, [selectedFloor]);
 
@@ -77,6 +102,23 @@ export default function WarehousesPage() {
     loadData();
   };
 
+  const handleEditWarehouseSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingWarehouse || !editWName) return;
+    supabase.from('warehouses').update({
+      name: editWName,
+      address: editWAddress
+    }).eq('id', editingWarehouse.id);
+    setEditingWarehouse(null);
+    loadData();
+  };
+
+  const handleDeleteWarehouse = (id: string) => {
+    supabase.from('warehouses').delete().eq('id', id);
+    setSelectedWarehouse(null);
+    loadData();
+  };
+
   const handleAddFloorSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedWarehouse || !floorName) return;
@@ -92,19 +134,35 @@ export default function WarehousesPage() {
     setFloorName('');
     setFloorNum(floors.length + 1);
     setShowAddFloor(false);
-    
-    // Refresh floors list manually
     const f = supabase.from('floors').select().eq('warehouse_id', selectedWarehouse.id).data || [];
     setFloors(f as Floor[]);
+  };
+
+  const handleEditFloorSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingFloor || !editFloorName) return;
+    supabase.from('floors').update({ name: editFloorName }).eq('id', editingFloor.id);
+    setEditingFloor(null);
+    if (selectedWarehouse) {
+      const f = supabase.from('floors').select().eq('warehouse_id', selectedWarehouse.id).data || [];
+      setFloors(f as Floor[]);
+    }
+  };
+
+  const handleDeleteFloor = (id: string) => {
+    supabase.from('floors').delete().eq('id', id);
+    if (selectedWarehouse) {
+      const f = supabase.from('floors').select().eq('warehouse_id', selectedWarehouse.id).data || [];
+      setFloors(f as Floor[]);
+      setSelectedFloor(f.length > 0 ? (f[0] as Floor) : null);
+    }
   };
 
   const handleAddLocSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFloor || !locName) return;
-    
-    // Find zones under this floor or default to zone-1a
-    const zones = supabase.from('zones').select().eq('floor_id', selectedFloor.id).data || [];
-    const zoneId = zones.length > 0 ? zones[0].id : 'z-1a';
+    const zList = supabase.from('zones').select().eq('floor_id', selectedFloor.id).data || [];
+    const zoneId = zList.length > 0 ? zList[0].id : 'z-1a';
 
     const newLoc = {
       id: `loc-${Date.now()}`,
@@ -120,10 +178,24 @@ export default function WarehousesPage() {
     setLocX(0);
     setLocY(0);
     setShowAddLoc(false);
-
-    // Refresh locations
     const l = supabase.from('locations').select().eq('floor_id', selectedFloor.id).data || [];
     setLocations(l as Location[]);
+  };
+
+  const handleEditLocSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLoc || !editLocName) return;
+    supabase.from('locations').update({
+      name: editLocName,
+      type: editLocType,
+      x: Number(editLocX),
+      y: Number(editLocY)
+    }).eq('id', editingLoc.id);
+    setEditingLoc(null);
+    if (selectedFloor) {
+      const l = supabase.from('locations').select().eq('floor_id', selectedFloor.id).data || [];
+      setLocations(l as Location[]);
+    }
   };
 
   const handleDeleteLocation = (id: string) => {
@@ -131,6 +203,32 @@ export default function WarehousesPage() {
     if (selectedFloor) {
       const l = supabase.from('locations').select().eq('floor_id', selectedFloor.id).data || [];
       setLocations(l as Location[]);
+    }
+  };
+
+  const handleAddZoneSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedFloor || !zoneName) return;
+    const newZ = {
+      id: `z-${Date.now()}`,
+      floor_id: selectedFloor.id,
+      name: zoneName,
+      code: zoneCode || `Z-${Date.now().toString().substring(8)}`,
+      color: zoneColor
+    };
+    supabase.from('zones').insert(newZ);
+    setZoneName('');
+    setZoneCode('');
+    setShowAddZone(false);
+    const z = supabase.from('zones').select().eq('floor_id', selectedFloor.id).data || [];
+    setZones(z);
+  };
+
+  const handleDeleteZone = (id: string) => {
+    supabase.from('zones').delete().eq('id', id);
+    if (selectedFloor) {
+      const z = supabase.from('zones').select().eq('floor_id', selectedFloor.id).data || [];
+      setZones(z);
     }
   };
 
@@ -162,18 +260,33 @@ export default function WarehousesPage() {
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest font-bold">Logistics Facilities</span>
               <div className="space-y-2">
                 {warehouses.map(w => (
-                  <button
+                  <div
                     key={w.id}
-                    onClick={() => setSelectedWarehouse(w)}
-                    className={`w-full text-left p-3.5 rounded-xl border transition duration-150 ${
+                    className={`p-3.5 rounded-xl border transition duration-150 flex items-center justify-between ${
                       selectedWarehouse?.id === w.id
                         ? 'border-blue-500 bg-blue-600/10 text-slate-100'
                         : 'border-slate-900 bg-slate-950/40 text-slate-400 hover:border-slate-800'
                     }`}
                   >
-                    <span className="text-sm font-bold block">{w.name}</span>
-                    <span className="text-[10px] block mt-1">{w.address || 'No Address'}</span>
-                  </button>
+                    <button onClick={() => setSelectedWarehouse(w)} className="text-left flex-1">
+                      <span className="text-sm font-bold block">{w.name}</span>
+                      <span className="text-[10px] block mt-1">{w.address || 'No Address'}</span>
+                    </button>
+                    <div className="flex items-center gap-1.5 ml-2">
+                      <button
+                        onClick={() => { setEditingWarehouse(w); setEditWName(w.name); setEditWAddress(w.address || ''); }}
+                        className="text-slate-400 hover:text-slate-200 p-1"
+                      >
+                        <Edit2 className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteWarehouse(w.id)}
+                        className="text-red-400 hover:text-red-300 p-1"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -196,74 +309,129 @@ export default function WarehousesPage() {
                   </div>
 
                   {/* Floor Level selector buttons */}
-                  <div className="flex gap-2.5">
+                  <div className="flex flex-wrap gap-2.5">
                     {floors.map(f => (
-                      <button
-                        key={f.id}
-                        onClick={() => setSelectedFloor(f)}
-                        className={`px-4 py-2 rounded-xl text-xs font-semibold transition duration-150 ${
-                          selectedFloor?.id === f.id
-                            ? 'bg-blue-600 text-slate-50'
-                            : 'bg-slate-900 text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        {f.name}
-                      </button>
+                      <div key={f.id} className="flex items-center gap-1">
+                        <button
+                          onClick={() => setSelectedFloor(f)}
+                          className={`px-4 py-2 rounded-xl text-xs font-semibold transition duration-150 ${
+                            selectedFloor?.id === f.id
+                              ? 'bg-blue-600 text-slate-50'
+                              : 'bg-slate-900 text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          {f.name}
+                        </button>
+                        {selectedFloor?.id === f.id && (
+                          <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl">
+                            <button
+                              onClick={() => { setEditingFloor(f); setEditFloorName(f.name); }}
+                              className="text-slate-400 hover:text-slate-200 p-1"
+                            >
+                              <Edit2 className="h-3 w-3" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteFloor(f.id)}
+                              className="text-red-400 hover:text-red-300 p-1"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
 
                   {selectedFloor && (
                     <div className="space-y-6 pt-4">
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Topology Locations List</span>
-                        <button
-                          onClick={() => setShowAddLoc(true)}
-                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-[11px] font-bold text-blue-400 border border-blue-900/30"
-                        >
-                          <Plus className="h-3.5 w-3.5" /> Add Location node
-                        </button>
+                      {/* Zones Section */}
+                      <div className="rounded-xl border border-slate-900 bg-slate-950/60 p-4 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Warehouse Zones</span>
+                          <button
+                            onClick={() => setShowAddZone(true)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-[11px] font-bold text-blue-400 border border-blue-900/30"
+                          >
+                            <Plus className="h-3.5 w-3.5" /> Add Zone
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                          {zones.map(z => (
+                            <div key={z.id} className="p-3 rounded-lg border border-slate-900 bg-slate-950 flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: z.color || '#3b82f6' }} />
+                                <div>
+                                  <span className="text-xs font-bold text-slate-200 block">{z.name}</span>
+                                  <span className="text-[10px] text-slate-500 font-mono">{z.code}</span>
+                                </div>
+                              </div>
+                              <button onClick={() => handleDeleteZone(z.id)} className="text-red-400 hover:text-red-300 p-1">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
 
-                      <div className="overflow-x-auto rounded-xl border border-slate-900">
-                        <table className="w-full text-left text-xs">
-                          <thead>
-                            <tr className="bg-slate-950 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-900">
-                              <th className="p-4">Location Name</th>
-                              <th className="p-4">Type</th>
-                              <th className="p-4">X Coordinate</th>
-                              <th className="p-4">Y Coordinate</th>
-                              <th className="p-4 text-right">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-900/50 bg-slate-950/20">
-                            {locations.length === 0 ? (
-                              <tr>
-                                <td colSpan={5} className="p-8 text-center text-slate-500">No layout nodes configured for this level.</td>
+                      {/* Locations Section */}
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Topology Locations & Racks List</span>
+                          <button
+                            onClick={() => setShowAddLoc(true)}
+                            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-[11px] font-bold text-blue-400 border border-blue-900/30"
+                          >
+                            <Plus className="h-3.5 w-3.5" /> Add Location node
+                          </button>
+                        </div>
+
+                        <div className="overflow-x-auto rounded-xl border border-slate-900">
+                          <table className="w-full text-left text-xs">
+                            <thead>
+                              <tr className="bg-slate-950 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-900">
+                                <th className="p-4">Location Name</th>
+                                <th className="p-4">Type</th>
+                                <th className="p-4">X Coordinate</th>
+                                <th className="p-4">Y Coordinate</th>
+                                <th className="p-4 text-right">Actions</th>
                               </tr>
-                            ) : (
-                              locations.map(loc => (
-                                <tr key={loc.id} className="text-slate-300">
-                                  <td className="p-4 font-semibold">{loc.name}</td>
-                                  <td className="p-4">
-                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                      loc.type === 'RACK' ? 'bg-blue-950 text-blue-400' : (loc.type === 'PICKUP' ? 'bg-green-950 text-green-400' : 'bg-purple-950 text-purple-400')
-                                    }`}>{loc.type}</span>
-                                  </td>
-                                  <td className="p-4 font-mono font-semibold">{loc.x}</td>
-                                  <td className="p-4 font-mono font-semibold">{loc.y}</td>
-                                  <td className="p-4 text-right">
-                                    <button 
-                                      onClick={() => handleDeleteLocation(loc.id)}
-                                      className="text-red-400 hover:text-red-300"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </button>
-                                  </td>
+                            </thead>
+                            <tbody className="divide-y divide-slate-900/50 bg-slate-950/20">
+                              {locations.length === 0 ? (
+                                <tr>
+                                  <td colSpan={5} className="p-8 text-center text-slate-500">No layout nodes configured for this level.</td>
                                 </tr>
-                              ))
-                            )}
-                          </tbody>
-                        </table>
+                              ) : (
+                                locations.map(loc => (
+                                  <tr key={loc.id} className="text-slate-300">
+                                    <td className="p-4 font-semibold">{loc.name}</td>
+                                    <td className="p-4">
+                                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                        loc.type === 'RACK' ? 'bg-blue-950 text-blue-400' : (loc.type === 'PICKUP' ? 'bg-green-950 text-green-400' : 'bg-purple-950 text-purple-400')
+                                      }`}>{loc.type}</span>
+                                    </td>
+                                    <td className="p-4 font-mono font-semibold">{loc.x}</td>
+                                    <td className="p-4 font-mono font-semibold">{loc.y}</td>
+                                    <td className="p-4 text-right flex items-center justify-end gap-2">
+                                      <button 
+                                        onClick={() => { setEditingLoc(loc); setEditLocName(loc.name); setEditLocType(loc.type as any); setEditLocX(loc.x); setEditLocY(loc.y); }}
+                                        className="text-slate-400 hover:text-slate-200"
+                                      >
+                                        <Edit2 className="h-4 w-4" />
+                                      </button>
+                                      <button 
+                                        onClick={() => handleDeleteLocation(loc.id)}
+                                        className="text-red-400 hover:text-red-300"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -309,6 +477,39 @@ export default function WarehousesPage() {
         </div>
       )}
 
+      {/* Edit warehouse modal */}
+      {editingWarehouse && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4 backdrop-blur-sm">
+          <form onSubmit={handleEditWarehouseSubmit} className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+            <h3 className="text-lg font-bold text-slate-100">Edit Logistics Center</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Warehouse Name</label>
+                <input 
+                  type="text" 
+                  value={editWName} 
+                  onChange={e => setEditWName(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-sm text-slate-100" 
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Address / Code</label>
+                <input 
+                  type="text" 
+                  value={editWAddress} 
+                  onChange={e => setEditWAddress(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-sm text-slate-100" 
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button type="button" onClick={() => setEditingWarehouse(null)} className="px-4 py-2 text-xs font-semibold text-slate-400">Cancel</button>
+              <button type="submit" className="px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 rounded-lg">Update Facility</button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* Add Floor Level modal */}
       {showAddFloor && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4 backdrop-blur-sm">
@@ -338,6 +539,72 @@ export default function WarehousesPage() {
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
               <button type="button" onClick={() => setShowAddFloor(false)} className="px-4 py-2 text-xs font-semibold text-slate-400">Cancel</button>
               <button type="submit" className="px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 rounded-lg">Save Level</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Edit Floor Level modal */}
+      {editingFloor && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4 backdrop-blur-sm">
+          <form onSubmit={handleEditFloorSubmit} className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+            <h3 className="text-lg font-bold text-slate-100">Edit Level Name</h3>
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase">Level Name</label>
+              <input 
+                type="text" 
+                value={editFloorName} 
+                onChange={e => setEditFloorName(e.target.value)}
+                className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-sm text-slate-100" 
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button type="button" onClick={() => setEditingFloor(null)} className="px-4 py-2 text-xs font-semibold text-slate-400">Cancel</button>
+              <button type="submit" className="px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 rounded-lg">Update Level</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Add Zone modal */}
+      {showAddZone && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4 backdrop-blur-sm">
+          <form onSubmit={handleAddZoneSubmit} className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+            <h3 className="text-lg font-bold text-slate-100">Add Warehouse Zone</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Zone Name</label>
+                <input 
+                  type="text" 
+                  value={zoneName} 
+                  onChange={e => setZoneName(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-sm text-slate-100" 
+                  placeholder="e.g. Zone A - Inbound Buffer"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Zone Code</label>
+                <input 
+                  type="text" 
+                  value={zoneCode} 
+                  onChange={e => setZoneCode(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-sm text-slate-100" 
+                  placeholder="e.g. Z1-A"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Zone Color</label>
+                <input 
+                  type="color" 
+                  value={zoneColor} 
+                  onChange={e => setZoneColor(e.target.value)}
+                  className="w-full h-10 p-1 rounded-lg border border-slate-800 bg-slate-950 cursor-pointer" 
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button type="button" onClick={() => setShowAddZone(false)} className="px-4 py-2 text-xs font-semibold text-slate-400">Cancel</button>
+              <button type="submit" className="px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 rounded-lg">Save Zone</button>
             </div>
           </form>
         </div>
@@ -401,6 +668,68 @@ export default function WarehousesPage() {
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
               <button type="button" onClick={() => setShowAddLoc(false)} className="px-4 py-2 text-xs font-semibold text-slate-400">Cancel</button>
               <button type="submit" className="px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 rounded-lg">Save Node</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Edit node location modal */}
+      {editingLoc && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4 backdrop-blur-sm">
+          <form onSubmit={handleEditLocSubmit} className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+            <h3 className="text-lg font-bold text-slate-100">Edit Location Node</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Node Name</label>
+                <input 
+                  type="text" 
+                  value={editLocName} 
+                  onChange={e => setEditLocName(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-sm text-slate-100" 
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Node Type</label>
+                <select 
+                  value={editLocType} 
+                  onChange={e => setEditLocType(e.target.value as any)}
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-sm text-slate-100"
+                >
+                  <option value="RACK">RACK</option>
+                  <option value="PICKUP">PICKUP</option>
+                  <option value="DELIVERY">DELIVERY</option>
+                  <option value="CHARGING">CHARGING</option>
+                  <option value="ELEVATOR">ELEVATOR</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Grid X (0-11)</label>
+                  <input 
+                    type="number" 
+                    value={editLocX} 
+                    min={0}
+                    max={11}
+                    onChange={e => setEditLocX(Number(e.target.value))}
+                    className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-sm text-slate-100" 
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Grid Y (0-7)</label>
+                  <input 
+                    type="number" 
+                    value={editLocY} 
+                    min={0}
+                    max={7}
+                    onChange={e => setEditLocY(Number(e.target.value))}
+                    className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-sm text-slate-100" 
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button type="button" onClick={() => setEditingLoc(null)} className="px-4 py-2 text-xs font-semibold text-slate-400">Cancel</button>
+              <button type="submit" className="px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 rounded-lg">Update Node</button>
             </div>
           </form>
         </div>

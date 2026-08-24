@@ -8,7 +8,10 @@ import { ArrowLeft, Download, Printer, RefreshCw, Layers, ShieldAlert } from 'lu
 import { Box, Location } from '@/lib/database.types';
 import QRCode from 'qrcode';
 
+import { useAuth } from '@/lib/supabase/AuthProvider';
+
 export default function BoxDetailsPage() {
+  const { user } = useAuth();
   const params = useParams();
   const router = useRouter();
   const boxId = params.id as string;
@@ -16,6 +19,7 @@ export default function BoxDetailsPage() {
   const [box, setBox] = useState<Box | null>(null);
   const [locations, setLocations] = useState<Location[]>([]);
   const [qrUrl, setQrUrl] = useState('');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -51,7 +55,7 @@ export default function BoxDetailsPage() {
     // Add log
     supabase.from('audit_logs').insert({
       id: `log-${Date.now()}`,
-      user_email: 'manager@demo.com',
+      user_email: user?.email || 'manager@demo.com',
       action: 'REGENERATE_QR',
       object_type: 'BOX',
       object_id: box.id,
@@ -97,8 +101,6 @@ export default function BoxDetailsPage() {
 
   const srcName = locations.find(l => l.id === box.current_location_id)?.name || 'Sorting Inbound';
   const destName = locations.find(l => l.id === box.destination_location_id)?.name || 'Outbound Dock';
-
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <div className="flex min-h-screen bg-slate-950">

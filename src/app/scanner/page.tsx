@@ -5,9 +5,11 @@ import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
 import { ScanQrCode, AlertTriangle, CheckCircle, HelpCircle } from 'lucide-react';
 import { Task, Box, Vehicle, Location } from '@/lib/database.types';
+import { useAuth } from '@/lib/supabase/AuthProvider';
 import confetti from 'canvas-confetti';
 
 export default function ScannerPage() {
+  const { user } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [boxes, setBoxes] = useState<Box[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -135,7 +137,7 @@ export default function ScannerPage() {
         // Add Audit Log
         supabase.from('audit_logs').insert({
           id: `log-${Date.now()}`,
-          user_email: 'operator@demo.com',
+          user_email: user?.email || 'operator@demo.com',
           action: 'DELIVERY_CONFIRMED',
           object_type: 'TASK',
           object_id: selectedTask.id,

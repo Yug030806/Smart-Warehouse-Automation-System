@@ -7,7 +7,10 @@ import { Settings, Save, ShieldCheck, PlayCircle, Sparkles } from 'lucide-react'
 import { SystemSettings } from '@/lib/database.types';
 import mockDb from '@/lib/supabase/mockDb';
 
+import { useAuth } from '@/lib/supabase/AuthProvider';
+
 export default function SettingsPage() {
+  const { user } = useAuth();
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [success, setSuccess] = useState(false);
 
@@ -48,7 +51,7 @@ export default function SettingsPage() {
     // Audit log
     mockDb.addAuditLog({
       id: `log-${Date.now()}`,
-      user_email: 'admin@demo.com',
+      user_email: user?.email || 'admin@demo.com',
       action: 'UPDATE_SETTINGS',
       object_type: 'SETTINGS',
       object_id: 'sys',

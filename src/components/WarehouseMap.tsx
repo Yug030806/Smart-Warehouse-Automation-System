@@ -19,8 +19,8 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
       const locs = supabase.from('locations').select().eq('floor_id', floorId).data || [];
       setLocations(locs as Location[]);
 
-      const vehs = supabase.from('vehicles').select().data || [];
-      setVehicles(vehs.filter(v => v.current_floor_id === floorId) as Vehicle[]);
+      const vehs = (supabase.from('vehicles').select().data || []) as Vehicle[];
+      setVehicles(vehs.filter(v => v.current_floor_id === floorId));
     };
 
     loadMapElements();

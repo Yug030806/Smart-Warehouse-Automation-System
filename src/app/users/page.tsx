@@ -51,6 +51,29 @@ export default function UsersPage() {
     loadUsers();
   };
 
+  // Edit User states
+  const [editingUser, setEditingUser] = useState<Profile | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editRole, setEditRole] = useState<'ADMIN' | 'MANAGER' | 'OPERATOR' | 'VIEWER'>('VIEWER');
+
+  const handleEditUserSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser || !editName) return;
+
+    supabase.from('profiles').update({
+      full_name: editName,
+      role: editRole
+    }).eq('id', editingUser.id);
+
+    setEditingUser(null);
+    loadUsers();
+  };
+
+  const handleDeleteUser = (id: string) => {
+    supabase.from('profiles').delete().eq('id', id);
+    loadUsers();
+  };
+
   const filtered = users.filter(u => {
     const term = searchQuery.toLowerCase();
     return u.full_name.toLowerCase().includes(term) || u.email.toLowerCase().includes(term);
@@ -116,12 +139,24 @@ export default function UsersPage() {
                           u.is_active ? 'bg-green-950 text-green-400' : 'bg-red-950 text-red-400'
                         }`}>{u.is_active ? 'ACTIVE' : 'INACTIVE'}</span>
                       </td>
-                      <td className="py-4 text-right">
+                      <td className="py-4 text-right space-x-3">
+                        <button
+                          onClick={() => { setEditingUser(u); setEditName(u.full_name); setEditRole(u.role as any); }}
+                          className="text-xs text-slate-300 hover:text-slate-100 font-semibold"
+                        >
+                          Edit
+                        </button>
                         <button
                           onClick={() => handleDeactivate(u.id, u.is_active)}
                           className="text-xs text-blue-400 hover:text-blue-300 font-semibold"
                         >
                           {u.is_active ? 'Deactivate' : 'Reactivate'}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteUser(u.id)}
+                          className="text-xs text-red-400 hover:text-red-300 font-semibold"
+                        >
+                          Delete
                         </button>
                       </td>
                     </tr>
@@ -132,6 +167,47 @@ export default function UsersPage() {
           </div>
         </main>
       </div>
+
+      {/* Edit User Modal */}
+      {editingUser && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4 backdrop-blur-sm">
+          <form onSubmit={handleEditUserSubmit} className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
+            <h3 className="text-lg font-bold text-slate-100">Edit User Profile ({editingUser.email})</h3>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Full Name</label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-100"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Role Group Permission</label>
+                <select
+                  value={editRole}
+                  onChange={e => setEditRole(e.target.value as any)}
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-400"
+                >
+                  <option value="ADMIN">ADMIN</option>
+                  <option value="MANAGER">MANAGER</option>
+                  <option value="OPERATOR">OPERATOR</option>
+                  <option value="VIEWER">VIEWER</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button type="button" onClick={() => setEditingUser(null)} className="px-4 py-2 text-xs font-semibold text-slate-400">Cancel</button>
+              <button type="submit" className="px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 rounded-lg">Update Profile</button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Add User Modal */}
       {showAddModal && (

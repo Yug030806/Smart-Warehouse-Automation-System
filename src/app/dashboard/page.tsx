@@ -39,10 +39,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     const fetchDashboardData = () => {
-      const boxes = supabase.from('boxes').select().data || [];
-      const vehicles = supabase.from('vehicles').select().data || [];
-      const tasks = supabase.from('tasks').select().data || [];
-      const alerts = supabase.from('alerts').select().eq('is_acknowledged', false).data || [];
+      const boxes = (supabase.from('boxes').select().data || []) as Box[];
+      const vehicles = (supabase.from('vehicles').select().data || []) as Vehicle[];
+      const tasks = (supabase.from('tasks').select().data || []) as Task[];
+      const alerts = (supabase.from('alerts').select().eq('is_acknowledged', false).data || []) as Alert[];
 
       const totalBoxes = boxes.length;
       const pendingTasks = tasks.filter(t => t.status === 'PENDING').length;

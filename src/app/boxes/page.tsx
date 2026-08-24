@@ -99,8 +99,30 @@ export default function BoxesPage() {
     loadBoxes();
   };
 
+  // Edit Box Modal state
+  const [editingBox, setEditingBox] = useState<Box | null>(null);
+  const [editProdName, setEditProdName] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+  const [editWeight, setEditWeight] = useState(1);
+  const [editPriority, setEditPriority] = useState<'NORMAL' | 'HIGH' | 'URGENT'>('NORMAL');
+
   const handleDeleteBox = (id: string) => {
     supabase.from('boxes').delete().eq('id', id);
+    loadBoxes();
+  };
+
+  const handleEditBoxSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBox || !editProdName) return;
+
+    supabase.from('boxes').update({
+      product_name: editProdName,
+      category: editCategory,
+      weight: Number(editWeight),
+      priority: editPriority
+    }).eq('id', editingBox.id);
+
+    setEditingBox(null);
     loadBoxes();
   };
 
@@ -259,6 +281,18 @@ export default function BoxesPage() {
                           }`}>{box.status}</span>
                         </td>
                         <td className="py-4 text-right space-x-2">
+                          <button
+                            onClick={() => {
+                              setEditingBox(box);
+                              setEditProdName(box.product_name);
+                              setEditCategory(box.category);
+                              setEditWeight(box.weight);
+                              setEditPriority(box.priority as any);
+                            }}
+                            className="p-1.5 rounded bg-slate-900 text-slate-300 hover:text-slate-100"
+                          >
+                            <Edit3 className="h-3.5 w-3.5" />
+                          </button>
                           <Link
                             href={`/boxes/${box.id}`}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-950 hover:bg-slate-900 text-[10px] font-semibold text-slate-400 hover:text-slate-200"
@@ -304,6 +338,81 @@ export default function BoxesPage() {
           </div>
         </main>
       </div>
+
+      {/* Edit Box Modal */}
+      {editingBox && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4 backdrop-blur-sm">
+          <form onSubmit={handleEditBoxSubmit} className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
+            <h3 className="text-lg font-bold text-slate-100">Edit Box Details ({editingBox.box_code})</h3>
+            
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Product Description</label>
+                <input
+                  type="text"
+                  required
+                  value={editProdName}
+                  onChange={e => setEditProdName(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-100"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Category</label>
+                  <select
+                    value={editCategory}
+                    onChange={e => setEditCategory(e.target.value)}
+                    className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-400"
+                  >
+                    <option value="Electronics">Electronics</option>
+                    <option value="Mechanical">Mechanical</option>
+                    <option value="Medical">Medical</option>
+                    <option value="Hazmat">Hazmat</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Weight (KG)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    value={editWeight}
+                    onChange={e => setEditWeight(Number(e.target.value))}
+                    className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-100"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Cargo Priority</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {['NORMAL', 'HIGH', 'URGENT'].map(level => (
+                    <button
+                      key={level}
+                      type="button"
+                      onClick={() => setEditPriority(level as any)}
+                      className={`py-2 rounded-lg text-xs font-semibold border transition duration-150 ${
+                        editPriority === level
+                          ? 'border-blue-500 bg-blue-600/15 text-slate-50'
+                          : 'border-slate-800 bg-slate-950 text-slate-400'
+                      }`}
+                    >
+                      {level}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button type="button" onClick={() => setEditingBox(null)} className="px-4 py-2 text-xs font-semibold text-slate-400">Cancel</button>
+              <button type="submit" className="px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 rounded-lg">Update Box</button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Add Box Modal */}
       {showAddModal && (

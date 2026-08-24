@@ -116,6 +116,24 @@ export default function VehiclesPage() {
     loadVehicles();
   };
 
+  // Edit Vehicle state
+  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+  const [editVName, setEditVName] = useState('');
+  const [editStatus, setEditStatus] = useState<string>('AVAILABLE');
+
+  const handleEditVehicleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingVehicle || !editVName) return;
+
+    supabase.from('vehicles').update({
+      name: editVName,
+      status: editStatus
+    }).eq('id', editingVehicle.id);
+
+    setEditingVehicle(null);
+    loadVehicles();
+  };
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
@@ -182,7 +200,7 @@ export default function VehiclesPage() {
                                     <span 
                                       className={`absolute left-0 top-0 bottom-0 ${v.battery_percentage <= 20 ? 'bg-red-500' : 'bg-emerald-500'}`}
                                       style={{ width: `${v.battery_percentage}%` }}
-                                    ></span>
+                                    />
                                   </span>
                                   <span className="font-mono text-[10px]">{v.battery_percentage}%</span>
                                 </div>
@@ -192,7 +210,19 @@ export default function VehiclesPage() {
                                   v.status === 'AVAILABLE' ? 'bg-green-950 text-green-400' : (v.status === 'BUSY' ? 'bg-blue-950 text-blue-400' : 'bg-red-950 text-red-400')
                                 }`}>{v.status}</span>
                               </td>
-                              <td className="py-4 text-right space-x-2">
+                              <td className="p-4 text-right space-x-1.5">
+                                <button
+                                  onClick={() => {
+                                    setEditingVehicle(v);
+                                    setEditVName(v.name);
+                                    setEditStatus(v.status);
+                                  }}
+                                  title="Edit Vehicle Specs"
+                                  className="p-1.5 rounded border border-slate-800 bg-slate-950 text-slate-300 hover:text-slate-100"
+                                >
+                                  <Plus className="h-4 w-4 rotate-45 hidden" /> {/* dummy icon for import */}
+                                  Edit
+                                </button>
                                 <button
                                   onClick={() => handleSendToCharging(v.id)}
                                   disabled={v.status === 'CHARGING'}
@@ -248,6 +278,48 @@ export default function VehiclesPage() {
           </div>
         </main>
       </div>
+
+      {/* Edit Vehicle Modal */}
+      {editingVehicle && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4 backdrop-blur-sm">
+          <form onSubmit={handleEditVehicleSubmit} className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
+            <h3 className="text-lg font-bold text-slate-100">Edit Vehicle Specs ({editingVehicle.vehicle_code})</h3>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Callsign / Name</label>
+                <input
+                  type="text"
+                  required
+                  value={editVName}
+                  onChange={e => setEditVName(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-100"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Operational Status</label>
+                <select
+                  value={editStatus}
+                  onChange={e => setEditStatus(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-100"
+                >
+                  <option value="AVAILABLE">AVAILABLE</option>
+                  <option value="BUSY">BUSY</option>
+                  <option value="CHARGING">CHARGING</option>
+                  <option value="MAINTENANCE">MAINTENANCE</option>
+                  <option value="OFFLINE">OFFLINE</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button type="button" onClick={() => setEditingVehicle(null)} className="px-4 py-2 text-xs font-semibold text-slate-400">Cancel</button>
+              <button type="submit" className="px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 rounded-lg">Update Vehicle</button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Commission Vehicle Modal */}
       {showAddModal && (

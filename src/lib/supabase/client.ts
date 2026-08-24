@@ -174,6 +174,10 @@ export const getSupabaseClient = () => {
                 mockDb.getVehicles().filter(x => (x as any)[col] === val).forEach(x => mockDb.deleteVehicle(x.id));
               } else if (table === 'boxes') {
                 mockDb.getBoxes().filter(x => (x as any)[col] === val).forEach(x => mockDb.deleteBox(x.id));
+              } else if (table === 'tasks') {
+                mockDb.getTasks().filter(x => (x as any)[col] === val).forEach(x => mockDb.deleteTask(x.id));
+              } else if (table === 'profiles') {
+                mockDb.getProfiles().filter(x => (x as any)[col] === val).forEach(x => mockDb.deleteProfile(x.id));
               } else if (table === 'alerts') {
                 mockDb.getAlerts().filter(x => (x as any)[col] === val).forEach(x => mockDb.deleteAlert(x.id));
               }
@@ -207,4 +211,5 @@ export const getSupabaseClient = () => {
   };
 };
 
-export const supabase = getSupabaseClient();
+export const supabase = useSupabaseReal && supabaseReal ? (supabaseReal as any) : getSupabaseClient();
+

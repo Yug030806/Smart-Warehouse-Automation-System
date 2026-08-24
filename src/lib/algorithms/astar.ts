@@ -65,17 +65,29 @@ function solveSingleFloor(
   ty: number,
   allLocations: any[],
   gridWidth: number,
-  gridHeight: number
+  gridHeight: number,
+  otherVehicles: any[] = []
 ): RouteSegment[] {
-  // Identify blocked coordinates (e.g. racks other than target, walls, etc.)
+  // Identify blocked coordinates (e.g. racks other than target, busy vehicles, etc.)
   const obstacles = new Set<string>();
   allLocations.forEach(loc => {
-    // If it's on this floor, and it's a RACK or ELEVATOR (and NOT our destination or start)
+    // If it's on this floor, and it's a RACK (and NOT our destination or start)
     if (loc.floor_id === floorId) {
       const isTarget = loc.x === tx && loc.y === ty;
       const isStart = loc.x === sx && loc.y === sy;
       if (loc.type === 'RACK' && !isTarget && !isStart) {
         obstacles.add(`${loc.x},${loc.y}`);
+      }
+    }
+  });
+
+  // Add active positions of other busy vehicles on this floor as dynamic obstacles
+  otherVehicles.forEach(v => {
+    if (v.current_floor_id === floorId) {
+      const isTarget = v.x_position === tx && v.y_position === ty;
+      const isStart = v.x_position === sx && v.y_position === sy;
+      if (!isTarget && !isStart) {
+        obstacles.add(`${v.x_position},${v.y_position}`);
       }
     }
   });

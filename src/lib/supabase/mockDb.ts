@@ -352,6 +352,13 @@ class MockDB {
     this.notify('boxes', 'DELETE', { id });
   }
 
+  // Profiles CRUD
+  deleteProfile(id: string) {
+    this.state.profiles = this.state.profiles.filter(x => x.id !== id);
+    this.save();
+    this.notify('profiles', 'DELETE', { id });
+  }
+
   // Tasks CRUD
   getTasks() { return this.state.tasks; }
   saveTask(t: Task) {
@@ -360,6 +367,11 @@ class MockDB {
     else this.state.tasks.push(t);
     this.save();
     this.notify('tasks', idx >= 0 ? 'UPDATE' : 'INSERT', t);
+  }
+  deleteTask(id: string) {
+    this.state.tasks = this.state.tasks.filter(x => x.id !== id);
+    this.save();
+    this.notify('tasks', 'DELETE', { id });
   }
 
   // Routes CRUD

@@ -206,6 +206,96 @@ export default function TasksPage() {
     loadTasksData();
   };
 
+  // Manual assignment state
+  const [manualAssignTask, setManualAssignTask] = useState<Task | null>(null);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>('');
+
+  // Create Task Modal state
+  const [showCreateTask, setShowCreateTask] = useState(false);
+  const [selectedBoxId, setSelectedBoxId] = useState<string>('');
+  const [taskPriority, setTaskPriority] = useState<'NORMAL' | 'HIGH' | 'URGENT'>('NORMAL');
+
+  const handleManualAssignSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualAssignTask || !selectedVehicleId) return;
+
+    const chosen = vehicles.find(v => v.id === selectedVehicleId);
+    const destLoc = locations.find(l => l.id === manualAssignTask.destination_location_id);
+    if (!chosen || !destLoc) return;
+
+    const routePts = calculateRoute(
+      chosen.current_floor_id,
+      chosen.x_position,
+      chosen.y_position,
+      destLoc.floor_id,
+      destLoc.x,
+      destLoc.y,
+      locations
+    );
+
+    supabase.from('routes').insert({
+      id: `route-${Date.now()}`,
+      task_id: manualAssignTask.id,
+      path_coordinates: routePts,
+      created_at: new Date().toISOString()
+    });
+
+    supabase.from('vehicles').update({
+      status: 'BUSY',
+      current_task_id: manualAssignTask.id
+    }).eq('id', chosen.id);
+
+    supabase.from('tasks').update({
+      vehicle_id: chosen.id,
+      status: 'ASSIGNED',
+      assigned_at: new Date().toISOString()
+    }).eq('id', manualAssignTask.id);
+
+    supabase.from('boxes').update({
+      status: 'ASSIGNED'
+    }).eq('id', manualAssignTask.box_id);
+
+    setManualAssignTask(null);
+    setSelectedVehicleId('');
+    loadTasksData();
+  };
+
+  const handleCreateTaskSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedBoxId) return;
+
+    const targetBox = boxes.find(b => b.id === selectedBoxId);
+    if (!targetBox) return;
+
+    const newTask: Task = {
+      id: `task-${Date.now()}`,
+      task_code: `TSK-${Date.now().toString().substring(7)}`,
+      box_id: targetBox.id,
+      vehicle_id: null,
+      source_location_id: targetBox.current_location_id,
+      destination_location_id: targetBox.destination_location_id,
+      priority: taskPriority,
+      status: 'PENDING',
+      priority_score: taskPriority === 'URGENT' ? 100 : (taskPriority === 'HIGH' ? 50 : 10),
+      estimated_distance: 15,
+      estimated_duration: 120,
+      actual_duration: null,
+      created_by: 'operator@demo.com',
+      assigned_at: null,
+      started_at: null,
+      completed_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    supabase.from('tasks').insert(newTask);
+    supabase.from('boxes').update({ status: 'WAITING', priority: taskPriority }).eq('id', targetBox.id);
+
+    setShowCreateTask(false);
+    setSelectedBoxId('');
+    loadTasksData();
+  };
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
@@ -220,6 +310,12 @@ export default function TasksPage() {
               <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Transportation Tasks Console</h1>
               <p className="text-xs sm:text-sm text-slate-400">View tasks backlog scheduler, trigger AI vehicle assignments, and track delivery lifecycles.</p>
             </div>
+            <button
+              onClick={() => setShowCreateTask(true)}
+              className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-slate-50 transition shrink-0"
+            >
+              + Create New Task
+            </button>
           </div>
 
           {/* Recommended AI task alert card */}
@@ -300,12 +396,20 @@ export default function TasksPage() {
                           </td>
                           <td className="py-4 text-right space-x-2">
                             {task.status === 'PENDING' && (
-                              <button
-                                onClick={() => handleAutoAssign(task.id)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-[10px] font-bold text-slate-50"
-                              >
-                                <Truck className="h-3.5 w-3.5" /> Auto Assign Cart
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => handleAutoAssign(task.id)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-[10px] font-bold text-slate-50"
+                                >
+                                  <Truck className="h-3.5 w-3.5" /> Auto Assign
+                                </button>
+                                <button
+                                  onClick={() => { setManualAssignTask(task); setSelectedVehicleId(vehicles.find(v => v.status === 'AVAILABLE')?.id || ''); }}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-950 hover:bg-slate-900 text-[10px] font-bold text-slate-300"
+                                >
+                                  Manual Pick
+                                </button>
+                              </>
                             )}
 
                             {['PENDING', 'ASSIGNED'].includes(task.status) && (
@@ -328,6 +432,82 @@ export default function TasksPage() {
           </div>
         </main>
       </div>
+
+      {/* Manual Assignment Modal */}
+      {manualAssignTask && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4 backdrop-blur-sm">
+          <form onSubmit={handleManualAssignSubmit} className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
+            <h3 className="text-lg font-bold text-slate-100">Manual Vehicle Assignment ({manualAssignTask.task_code})</h3>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Select AGV/AMR Vehicle</label>
+                <select
+                  value={selectedVehicleId}
+                  onChange={e => setSelectedVehicleId(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-100"
+                >
+                  {vehicles.filter(v => v.status === 'AVAILABLE').map(v => (
+                    <option key={v.id} value={v.id}>
+                      {v.vehicle_code} - {v.name} (Battery: {v.battery_percentage}%, Floor {v.current_floor_id === 'f-01' ? '1' : v.current_floor_id === 'f-02' ? '2' : '3'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button type="button" onClick={() => setManualAssignTask(null)} className="px-4 py-2 text-xs font-semibold text-slate-400">Cancel</button>
+              <button type="submit" className="px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 rounded-lg">Assign Selected Cart</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Create Task Modal */}
+      {showCreateTask && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4 backdrop-blur-sm">
+          <form onSubmit={handleCreateTaskSubmit} className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
+            <h3 className="text-lg font-bold text-slate-100">Create Transportation Order</h3>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Select Waiting Payload Box</label>
+                <select
+                  value={selectedBoxId}
+                  onChange={e => setSelectedBoxId(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-100"
+                >
+                  <option value="">-- Choose Box Payload --</option>
+                  {boxes.map(b => (
+                    <option key={b.id} value={b.id}>
+                      {b.box_code} - {b.product_name} ({b.priority})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Task Priority Level</label>
+                <select
+                  value={taskPriority}
+                  onChange={e => setTaskPriority(e.target.value as any)}
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-100"
+                >
+                  <option value="NORMAL">NORMAL</option>
+                  <option value="HIGH">HIGH</option>
+                  <option value="URGENT">URGENT</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button type="button" onClick={() => setShowCreateTask(false)} className="px-4 py-2 text-xs font-semibold text-slate-400">Cancel</button>
+              <button type="submit" disabled={!selectedBoxId} className="px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 rounded-lg disabled:opacity-40">Dispatch Order</button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
