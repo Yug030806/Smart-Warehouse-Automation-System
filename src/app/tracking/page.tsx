@@ -187,20 +187,22 @@ export default function TrackingPage() {
     }
   };
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
     <div className="flex min-h-screen bg-slate-950">
-      <Sidebar />
+      <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
       <div className="flex-grow flex flex-col min-w-0">
-        <Navbar />
+        <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
 
-        <main className="p-8 space-y-8 overflow-y-auto flex-1">
-          <div className="flex justify-between items-center">
+        <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-slate-100">Live Fleet Tracking & Simulation</h1>
-              <p className="text-sm text-slate-400">Track active paths coordinates, trigger simulator drives, and control playback speeds.</p>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Live Fleet Tracking & Simulation</h1>
+              <p className="text-xs sm:text-sm text-slate-400">Track active paths coordinates, trigger simulator drives, and control playback speeds.</p>
             </div>
             {/* Speed control buttons */}
-            <div className="flex gap-2.5">
+            <div className="flex flex-wrap gap-2">
               {[1, 2, 5, 10].map(mult => (
                 <button
                   key={mult}

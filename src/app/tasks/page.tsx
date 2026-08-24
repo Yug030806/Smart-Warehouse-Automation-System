@@ -206,23 +206,25 @@ export default function TasksPage() {
     loadTasksData();
   };
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
     <div className="flex min-h-screen bg-slate-950">
-      <Sidebar />
+      <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
       <div className="flex-grow flex flex-col min-w-0">
-        <Navbar />
+        <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
 
-        <main className="p-8 space-y-8 overflow-y-auto flex-1">
-          <div className="flex justify-between items-center">
+        <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-slate-100">Transportation Tasks Console</h1>
-              <p className="text-sm text-slate-400">View tasks backlog scheduler, trigger AI vehicle assignments, and track delivery lifecycles.</p>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Transportation Tasks Console</h1>
+              <p className="text-xs sm:text-sm text-slate-400">View tasks backlog scheduler, trigger AI vehicle assignments, and track delivery lifecycles.</p>
             </div>
           </div>
 
           {/* Recommended AI task alert card */}
           {recommendedTask && (
-            <div className="rounded-xl border border-blue-900/40 bg-blue-950/15 p-5 flex items-center justify-between gap-6 shadow-lg shadow-blue-950/5">
+            <div className="rounded-xl border border-blue-900/40 bg-blue-950/15 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg shadow-blue-950/5">
               <div className="flex items-center gap-4">
                 <div className="h-10 w-10 rounded-lg bg-blue-600/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
                   <Sparkles className="h-5 w-5 animate-pulse" />

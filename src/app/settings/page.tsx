@@ -65,16 +65,18 @@ export default function SettingsPage() {
     window.location.reload();
   };
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
     <div className="flex min-h-screen bg-slate-950">
-      <Sidebar />
+      <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
       <div className="flex-grow flex flex-col min-w-0">
-        <Navbar />
+        <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
 
-        <main className="p-8 space-y-8 overflow-y-auto flex-1">
+        <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1">
           <div>
-            <h1 className="text-2xl font-bold text-slate-100">System Config & Simulation Controls</h1>
-            <p className="text-sm text-slate-400">Configure global movement speeds, transitions, automation defaults and reset seed data.</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-100">System Config & Simulation Controls</h1>
+            <p className="text-xs sm:text-sm text-slate-400">Configure global movement speeds, transitions, automation defaults and reset seed data.</p>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

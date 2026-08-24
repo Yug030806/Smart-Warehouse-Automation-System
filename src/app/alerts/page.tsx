@@ -39,24 +39,26 @@ export default function AlertsPage() {
     return a.severity === filterSeverity;
   });
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
     <div className="flex min-h-screen bg-slate-950">
-      <Sidebar />
+      <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
       <div className="flex-grow flex flex-col min-w-0">
-        <Navbar />
+        <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
 
-        <main className="p-8 space-y-8 overflow-y-auto flex-1">
-          <div className="flex justify-between items-center">
+        <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-slate-100">Active System Alerts</h1>
-              <p className="text-sm text-slate-400">View active system warnings, hardware anomalies, scanner mismatches and low batteries.</p>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Active System Alerts</h1>
+              <p className="text-xs sm:text-sm text-slate-400">View active system warnings, hardware anomalies, scanner mismatches and low batteries.</p>
             </div>
 
             <div>
               <select
                 value={filterSeverity}
                 onChange={e => setFilterSeverity(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-xs text-slate-400 font-semibold"
+                className="w-full sm:w-auto px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-xs text-slate-400 font-semibold"
               >
                 <option value="ALL">All Severities</option>
                 <option value="INFO">INFO</option>

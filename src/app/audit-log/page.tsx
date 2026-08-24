@@ -26,16 +26,18 @@ export default function AuditLogPage() {
            log.object_type.toLowerCase().includes(term);
   });
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
     <div className="flex min-h-screen bg-slate-950">
-      <Sidebar />
+      <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
       <div className="flex-grow flex flex-col min-w-0">
-        <Navbar />
+        <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
 
-        <main className="p-8 space-y-8 overflow-y-auto flex-1">
+        <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1">
           <div>
-            <h1 className="text-2xl font-bold text-slate-100">Security Audit Logs</h1>
-            <p className="text-sm text-slate-400">Track user log in logins, task dispatches, settings adjustments and database transactions.</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Security Audit Logs</h1>
+            <p className="text-xs sm:text-sm text-slate-400">Track user log in logins, task dispatches, settings adjustments and database transactions.</p>
           </div>
 
           <div className="relative max-w-md">

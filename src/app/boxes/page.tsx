@@ -127,6 +127,8 @@ export default function BoxesPage() {
       : (fieldB as number) - (fieldA as number);
   });
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   const totalPages = Math.ceil(sorted.length / itemsPerPage);
   const paginated = sorted.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
@@ -141,22 +143,22 @@ export default function BoxesPage() {
 
   return (
     <div className="flex min-h-screen bg-slate-950">
-      <Sidebar />
+      <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
       <div className="flex-grow flex flex-col min-w-0">
-        <Navbar />
+        <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
 
-        <main className="p-8 space-y-8 overflow-y-auto flex-1">
-          <div className="flex justify-between items-center">
+        <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-slate-100">Warehouse Cargo & Boxes</h1>
-              <p className="text-sm text-slate-400">View register catalogs, download generated QR identities, and assign priorities.</p>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Warehouse Cargo & Boxes</h1>
+              <p className="text-xs sm:text-sm text-slate-400">View register catalogs, download generated QR identities, and assign priorities.</p>
             </div>
             <button
               onClick={() => {
                 setBoxCode(`BX-${Math.floor(Math.random() * 9000 + 1000)}`);
                 setShowAddModal(true);
               }}
-              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-semibold text-slate-50 transition duration-150"
+              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-semibold text-slate-50 transition duration-150 shrink-0"
             >
               <Plus className="h-4 w-4" /> Register Box Packet
             </button>

@@ -20,6 +20,7 @@ import { Box, Vehicle, Task, Alert } from '@/lib/database.types';
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [stats, setStats] = useState({
     totalBoxes: 0,
     pendingTasks: 0,
@@ -75,32 +76,32 @@ export default function Dashboard() {
 
   return (
     <div className="flex min-h-screen bg-slate-950">
-      <Sidebar />
+      <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
       <div className="flex-1 flex flex-col min-w-0">
-        <Navbar />
+        <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
         
-        <main className="flex-grow p-8 overflow-y-auto space-y-8">
-          <div className="flex items-center justify-between">
+        <main className="flex-grow p-4 sm:p-6 md:p-8 overflow-y-auto space-y-6 md:space-y-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-slate-100">Logistics Master Console</h1>
-              <p className="text-sm text-slate-400">Real-time status overview of vehicles, tasks, and system payloads.</p>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Logistics Master Console</h1>
+              <p className="text-xs sm:text-sm text-slate-400">Real-time status overview of vehicles, tasks, and system payloads.</p>
             </div>
             <div className="flex gap-2">
               <button 
                 onClick={() => setSelectedFloor('f-01')}
-                className={`px-4 py-2 rounded-xl text-xs font-semibold border transition duration-150 ${selectedFloor === 'f-01' ? 'bg-blue-600 border-blue-500 text-slate-100' : 'bg-slate-950 border-slate-900 text-slate-400 hover:text-slate-200'}`}
+                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-semibold border transition duration-150 ${selectedFloor === 'f-01' ? 'bg-blue-600 border-blue-500 text-slate-100' : 'bg-slate-950 border-slate-900 text-slate-400 hover:text-slate-200'}`}
               >
                 Floor 1
               </button>
               <button 
                 onClick={() => setSelectedFloor('f-02')}
-                className={`px-4 py-2 rounded-xl text-xs font-semibold border transition duration-150 ${selectedFloor === 'f-02' ? 'bg-blue-600 border-blue-500 text-slate-100' : 'bg-slate-950 border-slate-900 text-slate-400 hover:text-slate-200'}`}
+                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-semibold border transition duration-150 ${selectedFloor === 'f-02' ? 'bg-blue-600 border-blue-500 text-slate-100' : 'bg-slate-950 border-slate-900 text-slate-400 hover:text-slate-200'}`}
               >
                 Floor 2
               </button>
               <button 
                 onClick={() => setSelectedFloor('f-03')}
-                className={`px-4 py-2 rounded-xl text-xs font-semibold border transition duration-150 ${selectedFloor === 'f-03' ? 'bg-blue-600 border-blue-500 text-slate-100' : 'bg-slate-950 border-slate-900 text-slate-400 hover:text-slate-200'}`}
+                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-semibold border transition duration-150 ${selectedFloor === 'f-03' ? 'bg-blue-600 border-blue-500 text-slate-100' : 'bg-slate-950 border-slate-900 text-slate-400 hover:text-slate-200'}`}
               >
                 Floor 3
               </button>

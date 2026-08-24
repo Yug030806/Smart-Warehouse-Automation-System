@@ -56,21 +56,23 @@ export default function UsersPage() {
     return u.full_name.toLowerCase().includes(term) || u.email.toLowerCase().includes(term);
   });
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
     <div className="flex min-h-screen bg-slate-950">
-      <Sidebar />
+      <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
       <div className="flex-grow flex flex-col min-w-0">
-        <Navbar />
+        <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
 
-        <main className="p-8 space-y-8 overflow-y-auto flex-1">
-          <div className="flex justify-between items-center">
+        <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-slate-100">User & Permission Settings</h1>
-              <p className="text-sm text-slate-400">Control system logins access permissions, role groups, and operational active statuses.</p>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-100">User & Permission Settings</h1>
+              <p className="text-xs sm:text-sm text-slate-400">Control system logins access permissions, role groups, and operational active statuses.</p>
             </div>
             <button
               onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-semibold text-slate-50 transition duration-150"
+              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-semibold text-slate-50 transition duration-150 shrink-0"
             >
               <Plus className="h-4 w-4" /> Add User Profile
             </button>

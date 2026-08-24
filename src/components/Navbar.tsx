@@ -1,10 +1,14 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
-import { Bell, AlertTriangle, ShieldCheck, Mail } from 'lucide-react';
+import { Bell, AlertTriangle, Menu } from 'lucide-react';
 import { Alert, Notification } from '@/lib/database.types';
 
-export default function Navbar() {
+interface NavbarProps {
+  onMenuClick?: () => void;
+}
+
+export default function Navbar({ onMenuClick }: NavbarProps) {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showAlertsMenu, setShowAlertsMenu] = useState(false);
@@ -35,12 +39,23 @@ export default function Navbar() {
   };
 
   return (
-    <header className="h-16 border-b border-slate-900 bg-slate-950 flex items-center justify-between px-8 relative z-50">
-      <div>
-        <h2 className="text-sm font-semibold tracking-wider uppercase text-slate-400">Warehouse Logistics</h2>
+    <header className="h-16 border-b border-slate-900 bg-slate-950 flex items-center justify-between px-4 md:px-8 relative z-30">
+      <div className="flex items-center gap-3">
+        {onMenuClick && (
+          <button
+            onClick={onMenuClick}
+            className="p-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800 md:hidden"
+            aria-label="Toggle navigation menu"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        )}
+        <h2 className="text-xs md:text-sm font-semibold tracking-wider uppercase text-slate-400 truncate">
+          Warehouse Logistics
+        </h2>
       </div>
 
-      <div className="flex items-center gap-4 relative">
+      <div className="flex items-center gap-3 md:gap-4 relative">
         {/* Active System Warnings */}
         <div className="relative">
           <button 
@@ -60,7 +75,7 @@ export default function Navbar() {
           </button>
 
           {showAlertsMenu && (
-            <div className="absolute right-0 mt-2 w-80 rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-xl">
+            <div className="absolute right-0 mt-2 w-72 sm:w-80 rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-xl z-50">
               <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
                 <span className="text-xs font-bold text-slate-300">Active Fleet Warnings</span>
                 <span className="text-[10px] text-slate-500 font-mono">Unresolved ({alerts.length})</span>
@@ -110,7 +125,7 @@ export default function Navbar() {
           </button>
 
           {showNotifMenu && (
-            <div className="absolute right-0 mt-2 w-80 rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-xl">
+            <div className="absolute right-0 mt-2 w-72 sm:w-80 rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-xl z-50">
               <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
                 <span className="text-xs font-bold text-slate-300">Notification Center</span>
                 <button 
@@ -139,3 +154,4 @@ export default function Navbar() {
     </header>
   );
 }
+

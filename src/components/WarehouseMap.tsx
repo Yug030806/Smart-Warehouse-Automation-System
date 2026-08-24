@@ -57,10 +57,10 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
   };
 
   return (
-    <div className="rounded-xl border border-slate-900 bg-slate-950 p-6 shadow-xl space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="rounded-xl border border-slate-900 bg-slate-950 p-4 sm:p-6 shadow-xl space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Warehouse Digital Twin Layout</span>
-        <div className="flex items-center gap-4 text-xs">
+        <div className="flex flex-wrap items-center gap-3 text-[11px] sm:text-xs">
           <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-blue-500/20 border border-blue-500"></span><span className="text-slate-400">Rack</span></div>
           <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-green-500/20 border border-green-500"></span><span className="text-slate-400">Pickup</span></div>
           <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-purple-500/20 border border-purple-500"></span><span className="text-slate-400">Elevator</span></div>
