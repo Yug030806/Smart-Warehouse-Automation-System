@@ -1,14 +1,22 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
-import { Bell, AlertTriangle, Menu } from 'lucide-react';
+import { useTheme, ThemeMode } from '@/lib/ThemeProvider';
+import { Bell, AlertTriangle, Menu, Sun, Moon, Sparkles } from 'lucide-react';
 import { Alert, Notification } from '@/lib/database.types';
 
 interface NavbarProps {
   onMenuClick?: () => void;
 }
 
+const themeOptions: { mode: ThemeMode; icon: typeof Sun; label: string }[] = [
+  { mode: 'dark', icon: Moon, label: 'Dark' },
+  { mode: 'light', icon: Sun, label: 'Light' },
+  { mode: 'aesthetic', icon: Sparkles, label: 'Aesthetic' },
+];
+
 export default function Navbar({ onMenuClick }: NavbarProps) {
+  const { theme, setTheme } = useTheme();
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showAlertsMenu, setShowAlertsMenu] = useState(false);
@@ -55,7 +63,27 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
         </h2>
       </div>
 
-      <div className="flex items-center gap-3 md:gap-4 relative">
+      <div className="flex items-center gap-2 md:gap-3 relative">
+        {/* Theme Switcher */}
+        <div className="flex items-center gap-1 p-1 rounded-xl border border-slate-800 bg-slate-900">
+          {themeOptions.map(({ mode, icon: Icon, label }) => (
+            <button
+              key={mode}
+              onClick={() => setTheme(mode)}
+              title={`${label} Mode`}
+              className={`p-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                theme === mode
+                  ? mode === 'aesthetic'
+                    ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+                    : 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+            </button>
+          ))}
+        </div>
+
         {/* Active System Warnings */}
         <div className="relative">
           <button 
@@ -154,4 +182,3 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
     </header>
   );
 }
-

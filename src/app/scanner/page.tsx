@@ -3,10 +3,13 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
+import RoleGuard from '@/components/RoleGuard';
 import { ScanQrCode, AlertTriangle, CheckCircle, HelpCircle } from 'lucide-react';
 import { Task, Box, Vehicle, Location } from '@/lib/database.types';
 import { useAuth } from '@/lib/supabase/AuthProvider';
 import confetti from 'canvas-confetti';
+
+import Link from 'next/link';
 
 export default function ScannerPage() {
   const { user } = useAuth();
@@ -24,17 +27,23 @@ export default function ScannerPage() {
   const [statusType, setStatusType] = useState<'IDLE' | 'SUCCESS' | 'ERROR'>('IDLE');
 
   const loadData = () => {
-    const t = supabase.from('tasks').select().data || [];
-    setTasks(t as Task[]);
+    const t = (supabase.from('tasks').select().data || []) as Task[];
+    setTasks(t);
 
-    const b = supabase.from('boxes').select().data || [];
-    setBoxes(b as Box[]);
+    const b = (supabase.from('boxes').select().data || []) as Box[];
+    setBoxes(b);
 
-    const v = supabase.from('vehicles').select().data || [];
-    setVehicles(v as Vehicle[]);
+    const v = (supabase.from('vehicles').select().data || []) as Vehicle[];
+    setVehicles(v);
 
-    const l = supabase.from('locations').select().data || [];
-    setLocations(l as Location[]);
+    const l = (supabase.from('locations').select().data || []) as Location[];
+    setLocations(l);
+
+    // Auto-select first active/pending task if none is selected
+    const activeTasks = t.filter(x => x.status !== 'COMPLETED' && x.status !== 'CANCELLED');
+    if (activeTasks.length > 0 && !selectedTask) {
+      setSelectedTask(activeTasks[0]);
+    }
   };
 
   useEffect(() => {
@@ -172,15 +181,48 @@ export default function ScannerPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen bg-slate-950">
-      <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
-      <div className="flex-grow flex flex-col min-w-0">
-        <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
+    <RoleGuard allowedRoles={['ADMIN', 'MANAGER', 'OPERATOR']}>
+      <div className="flex min-h-screen bg-slate-950">
+        <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
+        <div className="flex-grow flex flex-col min-w-0">
+          <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
 
         <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-100">QR Scan Console & Verification</h1>
             <p className="text-xs sm:text-sm text-slate-400">Scan box identities at routing nodes to confirm pickups and finalise deliveries.</p>
+          </div>
+
+          {/* Step-by-step quick guide */}
+          <div className="rounded-xl border border-slate-900 bg-slate-900/40 p-4 grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
+            <div className="flex items-start gap-2.5">
+              <span className="h-5 w-5 rounded-full bg-blue-600/20 text-blue-400 font-bold flex items-center justify-center text-[10px] shrink-0">1</span>
+              <div>
+                <span className="font-bold text-slate-200 block">Select Task</span>
+                <span className="text-[11px] text-slate-400">Pick an active dispatch order from queue.</span>
+              </div>
+            </div>
+            <div className="flex items-start gap-2.5">
+              <span className="h-5 w-5 rounded-full bg-blue-600/20 text-blue-400 font-bold flex items-center justify-center text-[10px] shrink-0">2</span>
+              <div>
+                <span className="font-bold text-slate-200 block">Read Expected QR</span>
+                <span className="text-[11px] text-slate-400">View payload QR identity & target floor.</span>
+              </div>
+            </div>
+            <div className="flex items-start gap-2.5">
+              <span className="h-5 w-5 rounded-full bg-blue-600/20 text-blue-400 font-bold flex items-center justify-center text-[10px] shrink-0">3</span>
+              <div>
+                <span className="font-bold text-slate-200 block">Scan or Pre-fill</span>
+                <span className="text-[11px] text-slate-400">Type or click test shortcut buttons.</span>
+              </div>
+            </div>
+            <div className="flex items-start gap-2.5">
+              <span className="h-5 w-5 rounded-full bg-blue-600/20 text-blue-400 font-bold flex items-center justify-center text-[10px] shrink-0">4</span>
+              <div>
+                <span className="font-bold text-slate-200 block">Simulate Scan</span>
+                <span className="text-[11px] text-slate-400">Confirms pickup or completes delivery.</span>
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -232,13 +274,13 @@ export default function ScannerPage() {
                     <div className="flex gap-2 text-[10px]">
                       <button
                         onClick={() => setScanCodeInput(boxes.find(b => b.id === selectedTask.box_id)?.qr_code_data || '')}
-                        className="text-blue-500 hover:underline"
+                        className="text-blue-500 hover:underline font-semibold"
                       >
                         [Pre-fill Expected Code]
                       </button>
                       <button
                         onClick={() => setScanCodeInput('BX-MISMATCH-999')}
-                        className="text-red-500 hover:underline"
+                        className="text-red-500 hover:underline font-semibold"
                       >
                         [Pre-fill Mismatch Error Code]
                       </button>
@@ -254,17 +296,22 @@ export default function ScannerPage() {
                     }`}>
                       {statusType === 'SUCCESS' ? <CheckCircle className="h-5 w-5 shrink-0" /> : <AlertTriangle className="h-5 w-5 shrink-0" />}
                       <div className="space-y-1">
-                        <span className="text-xs font-bold uppercase tracking-wider block">{statusType === 'SUCCESS' ? 'Verification Success' : 'Security Alert Alert'}</span>
+                        <span className="text-xs font-bold uppercase tracking-wider block">{statusType === 'SUCCESS' ? 'Verification Success' : 'Security Alert'}</span>
                         <p className="text-xs">{statusMessage}</p>
                       </div>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="rounded-xl border border-slate-900 bg-slate-950 p-12 text-center text-slate-500">
-                  <ScanQrCode className="h-12 w-12 text-slate-700 mx-auto mb-4" />
-                  <h3 className="font-bold text-slate-300">Select Active Dispatch task</h3>
-                  <p className="text-xs text-slate-500 mt-1.5 max-w-sm mx-auto">Select any active or pending task from the scheduler roster board on the right side to initiate QR scanning.</p>
+                <div className="rounded-xl border border-slate-900 bg-slate-950 p-12 text-center text-slate-500 space-y-3">
+                  <ScanQrCode className="h-12 w-12 text-slate-700 mx-auto" />
+                  <h3 className="font-bold text-slate-300">No Active Tasks Available</h3>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">Create a transportation task first or select an active task from the right queue to initiate QR verification.</p>
+                  <div className="pt-2">
+                    <Link href="/tasks" className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-slate-50 rounded-xl transition">
+                      Go to Transportation Tasks
+                    </Link>
+                  </div>
                 </div>
               )}
             </div>
@@ -295,6 +342,7 @@ export default function ScannerPage() {
           </div>
         </main>
       </div>
-    </div>
+      </div>
+    </RoleGuard>
   );
 }

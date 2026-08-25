@@ -11,6 +11,8 @@ export const metadata = {
 };
 
 import { AuthProvider } from '@/lib/supabase/AuthProvider';
+import { ThemeProvider } from '@/lib/ThemeProvider';
+import MotionBackground from '@/components/MotionBackground';
 
 export default function RootLayout({
   children,
@@ -18,10 +20,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
-      <body className={`${inter.className} min-h-screen bg-slate-950 text-slate-100 antialiased`}>
+    <html lang="en" className="theme-dark">
+      <body className={`${inter.className} min-h-screen bg-transparent text-slate-100 antialiased overflow-x-hidden`}>
         <AuthProvider>
-          {children}
+          <ThemeProvider>
+            <MotionBackground />
+            <div className="relative z-10 min-h-screen">
+              {children}
+            </div>
+          </ThemeProvider>
         </AuthProvider>
       </body>
     </html>

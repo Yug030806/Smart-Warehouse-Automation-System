@@ -3,10 +3,14 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
-import { Plus, Search, Shield, UserCheck, Trash2 } from 'lucide-react';
+import RoleGuard from '@/components/RoleGuard';
+import { useAuth } from '@/lib/supabase/AuthProvider';
+import { Plus, Search, Shield, UserCheck, Trash2, ShieldAlert } from 'lucide-react';
 import { Profile } from '@/lib/database.types';
 
 export default function UsersPage() {
+  const { user } = useAuth();
+  const userRole = user?.user_metadata?.role || 'OPERATOR';
   const [users, setUsers] = useState<Profile[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -14,7 +18,7 @@ export default function UsersPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
-  const [role, setRole] = useState<'ADMIN' | 'MANAGER' | 'OPERATOR' | 'VIEWER'>('VIEWER');
+  const [role, setRole] = useState<'ADMIN' | 'MANAGER' | 'OPERATOR'>('OPERATOR');
 
   const loadUsers = () => {
     const list = supabase.from('profiles').select().data || [];
@@ -54,7 +58,7 @@ export default function UsersPage() {
   // Edit User states
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
   const [editName, setEditName] = useState('');
-  const [editRole, setEditRole] = useState<'ADMIN' | 'MANAGER' | 'OPERATOR' | 'VIEWER'>('VIEWER');
+  const [editRole, setEditRole] = useState<'ADMIN' | 'MANAGER' | 'OPERATOR'>('OPERATOR');
 
   const handleEditUserSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,24 +86,33 @@ export default function UsersPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen bg-slate-950">
-      <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
-      <div className="flex-grow flex flex-col min-w-0">
-        <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
+    <RoleGuard allowedRoles={['ADMIN']}>
+      <div className="flex min-h-screen bg-slate-950">
+        <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
+        <div className="flex-grow flex flex-col min-w-0">
+          <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
 
         <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-100">User & Permission Settings</h1>
-              <p className="text-xs sm:text-sm text-slate-400">Control system logins access permissions, role groups, and operational active statuses.</p>
+          {userRole !== 'ADMIN' ? (
+            <div className="rounded-xl border border-red-900/30 bg-red-950/10 p-12 text-center text-slate-400 space-y-4 max-w-lg mx-auto mt-12">
+              <ShieldAlert className="h-16 w-16 text-red-500 mx-auto" />
+              <h2 className="text-xl font-bold text-slate-100">Access Restricted</h2>
+              <p className="text-xs text-slate-400">User Management & Role Permissions administration is strictly limited to System Administrators (ADMIN role).</p>
             </div>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-semibold text-slate-50 transition duration-150 shrink-0"
-            >
-              <Plus className="h-4 w-4" /> Add User Profile
-            </button>
-          </div>
+          ) : (
+            <>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-xl sm:text-2xl font-bold text-slate-100">User & Permission Settings</h1>
+                  <p className="text-xs sm:text-sm text-slate-400">Control system logins access permissions, role groups, and operational active statuses.</p>
+                </div>
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-semibold text-slate-50 transition duration-150 shrink-0"
+                >
+                  <Plus className="h-4 w-4" /> Add User Profile
+                </button>
+              </div>
 
           <div className="relative max-w-md">
             <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
@@ -165,6 +178,8 @@ export default function UsersPage() {
               </table>
             </div>
           </div>
+          </>
+          )}
         </main>
       </div>
 
@@ -196,7 +211,6 @@ export default function UsersPage() {
                   <option value="ADMIN">ADMIN</option>
                   <option value="MANAGER">MANAGER</option>
                   <option value="OPERATOR">OPERATOR</option>
-                  <option value="VIEWER">VIEWER</option>
                 </select>
               </div>
             </div>
@@ -250,7 +264,6 @@ export default function UsersPage() {
                   <option value="ADMIN">ADMIN</option>
                   <option value="MANAGER">MANAGER</option>
                   <option value="OPERATOR">OPERATOR</option>
-                  <option value="VIEWER">VIEWER</option>
                 </select>
               </div>
             </div>
@@ -262,6 +275,7 @@ export default function UsersPage() {
           </form>
         </div>
       )}
-    </div>
+      </div>
+    </RoleGuard>
   );
 }

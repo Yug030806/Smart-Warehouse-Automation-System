@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
+import RoleGuard from '@/components/RoleGuard';
 import { Plus, Edit2, Trash2, MapPin, Layers, Network } from 'lucide-react';
 import { Warehouse, Floor, Location } from '@/lib/database.types';
 
@@ -235,10 +236,11 @@ export default function WarehousesPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen bg-slate-950">
-      <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
-      <div className="flex-grow flex flex-col min-w-0">
-        <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
+    <RoleGuard allowedRoles={['ADMIN', 'MANAGER']}>
+      <div className="flex min-h-screen bg-slate-950">
+        <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
+        <div className="flex-grow flex flex-col min-w-0">
+          <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
 
         <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -734,6 +736,7 @@ export default function WarehousesPage() {
           </form>
         </div>
       )}
-    </div>
+      </div>
+    </RoleGuard>
   );
 }

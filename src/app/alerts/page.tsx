@@ -3,10 +3,13 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
+import { useAuth } from '@/lib/supabase/AuthProvider';
 import { AlertCircle, CheckCircle, BellRing, Info, ShieldAlert } from 'lucide-react';
 import { Alert } from '@/lib/database.types';
 
 export default function AlertsPage() {
+  const { user } = useAuth();
+  const userRole = user?.user_metadata?.role || 'OPERATOR';
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [filterSeverity, setFilterSeverity] = useState('ALL');
 

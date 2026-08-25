@@ -3,11 +3,15 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
+import RoleGuard from '@/components/RoleGuard';
+import { useAuth } from '@/lib/supabase/AuthProvider';
 import { Plus, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, FileDown, Edit3, Trash2, Link2 } from 'lucide-react';
 import { Box, Location } from '@/lib/database.types';
 import Link from 'next/link';
 
 export default function BoxesPage() {
+  const { user } = useAuth();
+  const userRole = user?.user_metadata?.role || 'OPERATOR';
   const [boxes, setBoxes] = useState<Box[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   
@@ -164,10 +168,11 @@ export default function BoxesPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-950">
-      <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
-      <div className="flex-grow flex flex-col min-w-0">
-        <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
+    <RoleGuard allowedRoles={['ADMIN', 'MANAGER', 'OPERATOR']}>
+      <div className="flex min-h-screen bg-slate-950">
+        <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
+        <div className="flex-grow flex flex-col min-w-0">
+          <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
 
         <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -175,15 +180,17 @@ export default function BoxesPage() {
               <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Warehouse Cargo & Boxes</h1>
               <p className="text-xs sm:text-sm text-slate-400">View register catalogs, download generated QR identities, and assign priorities.</p>
             </div>
-            <button
-              onClick={() => {
-                setBoxCode(`BX-${Math.floor(Math.random() * 9000 + 1000)}`);
-                setShowAddModal(true);
-              }}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-semibold text-slate-50 transition duration-150 shrink-0"
-            >
-              <Plus className="h-4 w-4" /> Register Box Packet
-            </button>
+            {['ADMIN', 'MANAGER', 'OPERATOR'].includes(userRole) && (
+              <button
+                onClick={() => {
+                  setBoxCode(`BX-${Math.floor(Math.random() * 9000 + 1000)}`);
+                  setShowAddModal(true);
+                }}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-semibold text-slate-50 transition duration-150 shrink-0"
+              >
+                <Plus className="h-4 w-4" /> Register Box Packet
+              </button>
+            )}
           </div>
 
           {/* Search filters panel */}
@@ -281,30 +288,36 @@ export default function BoxesPage() {
                           }`}>{box.status}</span>
                         </td>
                         <td className="py-4 text-right space-x-2">
-                          <button
-                            onClick={() => {
-                              setEditingBox(box);
-                              setEditProdName(box.product_name);
-                              setEditCategory(box.category);
-                              setEditWeight(box.weight);
-                              setEditPriority(box.priority as any);
-                            }}
-                            className="p-1.5 rounded bg-slate-900 text-slate-300 hover:text-slate-100"
-                          >
-                            <Edit3 className="h-3.5 w-3.5" />
-                          </button>
+                          {['ADMIN', 'MANAGER'].includes(userRole) && (
+                            <button
+                              onClick={() => {
+                                setEditingBox(box);
+                                setEditProdName(box.product_name);
+                                setEditCategory(box.category);
+                                setEditWeight(box.weight);
+                                setEditPriority(box.priority as any);
+                              }}
+                              className="p-1.5 rounded bg-slate-900 text-slate-300 hover:text-slate-100"
+                              title="Edit Box Specs"
+                            >
+                              <Edit3 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                           <Link
                             href={`/boxes/${box.id}`}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-950 hover:bg-slate-900 text-[10px] font-semibold text-slate-400 hover:text-slate-200"
                           >
                             Identity QR
                           </Link>
-                          <button
-                            onClick={() => handleDeleteBox(box.id)}
-                            className="p-1.5 rounded bg-red-950/20 text-red-400 hover:bg-red-950/40"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          {['ADMIN', 'MANAGER'].includes(userRole) && (
+                            <button
+                              onClick={() => handleDeleteBox(box.id)}
+                              className="p-1.5 rounded bg-red-950/20 text-red-400 hover:bg-red-950/40"
+                              title="Delete Box"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))
@@ -528,6 +541,7 @@ export default function BoxesPage() {
           </form>
         </div>
       )}
-    </div>
+      </div>
+    </RoleGuard>
   );
 }

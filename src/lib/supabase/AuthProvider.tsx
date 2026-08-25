@@ -7,15 +7,15 @@ export interface UserSession {
   email: string;
   user_metadata: {
     full_name: string;
-    role: 'ADMIN' | 'MANAGER' | 'OPERATOR' | 'VIEWER';
+    role: 'ADMIN' | 'MANAGER' | 'OPERATOR';
   };
-  role: 'ADMIN' | 'MANAGER' | 'OPERATOR' | 'VIEWER';
+  role: 'ADMIN' | 'MANAGER' | 'OPERATOR';
 }
 
 interface AuthContextType {
   user: UserSession | null;
   loading: boolean;
-  login: (email: string, role: 'ADMIN' | 'MANAGER' | 'OPERATOR' | 'VIEWER') => Promise<boolean>;
+  login: (email: string, role: 'ADMIN' | 'MANAGER' | 'OPERATOR') => Promise<boolean>;
   logout: () => void;
 }
 
@@ -57,12 +57,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, loading, pathname, router]);
 
-  const login = async (email: string, role: 'ADMIN' | 'MANAGER' | 'OPERATOR' | 'VIEWER'): Promise<boolean> => {
+  const login = async (email: string, role: 'ADMIN' | 'MANAGER' | 'OPERATOR'): Promise<boolean> => {
     const names = {
       ADMIN: 'Super Admin',
       MANAGER: 'Warehouse Manager',
       OPERATOR: 'Cart Operator',
-      VIEWER: 'Auditor Viewer'
     };
     const sessionObj: UserSession = {
       id: `u-${role.toLowerCase()}`,

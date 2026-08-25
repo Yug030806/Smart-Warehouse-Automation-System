@@ -3,10 +3,13 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
+import { useAuth } from '@/lib/supabase/AuthProvider';
 import { Search, MapPin, Truck, Plus, Trash2, BatteryCharging, AlertCircle, RefreshCw } from 'lucide-react';
 import { Vehicle, Floor, Location, Task } from '@/lib/database.types';
 
 export default function VehiclesPage() {
+  const { user } = useAuth();
+  const userRole = user?.user_metadata?.role || 'OPERATOR';
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [floors, setFloors] = useState<Floor[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
@@ -148,15 +151,17 @@ export default function VehiclesPage() {
               <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Vehicle Fleet Roster</h1>
               <p className="text-xs sm:text-sm text-slate-400">Manage autonomous carts, view battery charges, assign locations and monitor tasks.</p>
             </div>
-            <button
-              onClick={() => {
-                setVCode(`CART-${Math.floor(Math.random() * 900 + 100)}`);
-                setShowAddModal(true);
-              }}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-semibold text-slate-50 transition duration-150 shrink-0"
-            >
-              <Plus className="h-4 w-4" /> Commission Cart
-            </button>
+            {['ADMIN', 'MANAGER'].includes(userRole) && (
+              <button
+                onClick={() => {
+                  setVCode(`CART-${Math.floor(Math.random() * 900 + 100)}`);
+                  setShowAddModal(true);
+                }}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-semibold text-slate-50 transition duration-150 shrink-0"
+              >
+                <Plus className="h-4 w-4" /> Commission Cart
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
@@ -211,39 +216,47 @@ export default function VehiclesPage() {
                                 }`}>{v.status}</span>
                               </td>
                               <td className="p-4 text-right space-x-1.5">
-                                <button
-                                  onClick={() => {
-                                    setEditingVehicle(v);
-                                    setEditVName(v.name);
-                                    setEditStatus(v.status);
-                                  }}
-                                  title="Edit Vehicle Specs"
-                                  className="p-1.5 rounded border border-slate-800 bg-slate-950 text-slate-300 hover:text-slate-100"
-                                >
-                                  <Plus className="h-4 w-4 rotate-45 hidden" /> {/* dummy icon for import */}
-                                  Edit
-                                </button>
-                                <button
-                                  onClick={() => handleSendToCharging(v.id)}
-                                  disabled={v.status === 'CHARGING'}
-                                  title="Send to charging dock"
-                                  className="p-1.5 rounded border border-slate-800 bg-slate-950 text-yellow-500 hover:bg-slate-900 disabled:opacity-30"
-                                >
-                                  <BatteryCharging className="h-4.5 w-4.5" />
-                                </button>
-                                <button
-                                  onClick={() => handleResetVehicle(v.id)}
-                                  title="Reset Cart State"
-                                  className="p-1.5 rounded border border-slate-800 bg-slate-950 text-blue-400 hover:bg-slate-900"
-                                >
-                                  <RefreshCw className="h-4.5 w-4.5" />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteVehicle(v.id)}
-                                  className="p-1.5 rounded bg-red-950/20 text-red-400 hover:bg-red-950/40"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
+                                {['ADMIN', 'MANAGER'].includes(userRole) && (
+                                  <button
+                                    onClick={() => {
+                                      setEditingVehicle(v);
+                                      setEditVName(v.name);
+                                      setEditStatus(v.status);
+                                    }}
+                                    title="Edit Vehicle Specs"
+                                    className="p-1.5 rounded border border-slate-800 bg-slate-950 text-slate-300 hover:text-slate-100 font-semibold text-[11px]"
+                                  >
+                                    Edit
+                                  </button>
+                                )}
+                                {['ADMIN', 'MANAGER', 'OPERATOR'].includes(userRole) && (
+                                  <>
+                                    <button
+                                      onClick={() => handleSendToCharging(v.id)}
+                                      disabled={v.status === 'CHARGING'}
+                                      title="Send to charging dock"
+                                      className="p-1.5 rounded border border-slate-800 bg-slate-950 text-yellow-500 hover:bg-slate-900 disabled:opacity-30"
+                                    >
+                                      <BatteryCharging className="h-4.5 w-4.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleResetVehicle(v.id)}
+                                      title="Reset Cart State"
+                                      className="p-1.5 rounded border border-slate-800 bg-slate-950 text-blue-400 hover:bg-slate-900"
+                                    >
+                                      <RefreshCw className="h-4.5 w-4.5" />
+                                    </button>
+                                  </>
+                                )}
+                                {['ADMIN', 'MANAGER'].includes(userRole) && (
+                                  <button
+                                    onClick={() => handleDeleteVehicle(v.id)}
+                                    className="p-1.5 rounded bg-red-950/20 text-red-400 hover:bg-red-950/40"
+                                    title="Delete Vehicle"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                )}
                               </td>
                             </tr>
                           );

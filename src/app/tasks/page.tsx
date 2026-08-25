@@ -14,9 +14,12 @@ import {
   XSquare,
   Sparkles
 } from 'lucide-react';
+import { useAuth } from '@/lib/supabase/AuthProvider';
 import { Task, Vehicle, Box, Location } from '@/lib/database.types';
 
 export default function TasksPage() {
+  const { user } = useAuth();
+  const userRole = user?.user_metadata?.role || 'OPERATOR';
   const [tasks, setTasks] = useState<Task[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [boxes, setBoxes] = useState<Box[]>([]);
@@ -310,12 +313,14 @@ export default function TasksPage() {
               <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Transportation Tasks Console</h1>
               <p className="text-xs sm:text-sm text-slate-400">View tasks backlog scheduler, trigger AI vehicle assignments, and track delivery lifecycles.</p>
             </div>
-            <button
-              onClick={() => setShowCreateTask(true)}
-              className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-slate-50 transition shrink-0"
-            >
-              + Create New Task
-            </button>
+            {['ADMIN', 'MANAGER'].includes(userRole) && (
+              <button
+                onClick={() => setShowCreateTask(true)}
+                className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-slate-50 transition shrink-0"
+              >
+                + Create New Task
+              </button>
+            )}
           </div>
 
           {/* Recommended AI task alert card */}
@@ -330,12 +335,14 @@ export default function TasksPage() {
                   <p className="text-xs text-slate-300 mt-1 font-medium">{recReason}</p>
                 </div>
               </div>
-              <button
-                onClick={() => handleAutoAssign(recommendedTask.id)}
-                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-slate-50 transition shrink-0"
-              >
-                Dispatch Recommended Vehicle
-              </button>
+              {['ADMIN', 'MANAGER', 'OPERATOR'].includes(userRole) && (
+                <button
+                  onClick={() => handleAutoAssign(recommendedTask.id)}
+                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-slate-50 transition shrink-0"
+                >
+                  Dispatch Recommended Vehicle
+                </button>
+              )}
             </div>
           )}
 
@@ -395,7 +402,7 @@ export default function TasksPage() {
                             </div>
                           </td>
                           <td className="py-4 text-right space-x-2">
-                            {task.status === 'PENDING' && (
+                            {task.status === 'PENDING' && ['ADMIN', 'MANAGER', 'OPERATOR'].includes(userRole) && (
                               <>
                                 <button
                                   onClick={() => handleAutoAssign(task.id)}
@@ -412,7 +419,7 @@ export default function TasksPage() {
                               </>
                             )}
 
-                            {['PENDING', 'ASSIGNED'].includes(task.status) && (
+                            {['PENDING', 'ASSIGNED'].includes(task.status) && ['ADMIN', 'MANAGER'].includes(userRole) && (
                               <button
                                 onClick={() => handleCancelTask(task.id)}
                                 className="p-1.5 rounded bg-red-950/20 text-red-400 hover:bg-red-950/40"
