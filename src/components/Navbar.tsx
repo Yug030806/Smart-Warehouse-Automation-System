@@ -2,8 +2,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { useTheme, ThemeMode } from '@/lib/ThemeProvider';
-import { Bell, AlertTriangle, Menu, Sun, Moon, Sparkles } from 'lucide-react';
+import { Bell, AlertTriangle, Menu, Sun, Moon, Sparkles, PlusCircle } from 'lucide-react';
 import { Alert, Notification } from '@/lib/database.types';
+import { triggerGlobalAlert } from '@/lib/alertService';
 
 interface NavbarProps {
   onMenuClick?: () => void;
@@ -44,6 +45,15 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
   const handleAcknowledgeAlert = (id: string) => {
     supabase.from('alerts').update({ is_acknowledged: true }).eq('id', id);
     setAlerts(alerts.filter(x => x.id !== id));
+  };
+
+  const triggerQuickTestAlert = () => {
+    triggerGlobalAlert({
+      type: 'ROUTE_BLOCKED',
+      severity: 'CRITICAL',
+      message: 'Critical Fleet Anomaly: Unexpected obstacle detected on Main Transit Corridor 2.',
+      vehicle_id: 'v-01'
+    });
   };
 
   return (
@@ -106,7 +116,15 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
             <div className="absolute right-0 mt-2 w-72 sm:w-80 rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-xl z-50">
               <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
                 <span className="text-xs font-bold text-slate-300">Active Fleet Warnings</span>
-                <span className="text-[10px] text-slate-500 font-mono">Unresolved ({alerts.length})</span>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={triggerQuickTestAlert}
+                    className="text-[10px] bg-red-950 text-red-400 hover:bg-red-900 border border-red-800/40 px-2 py-0.5 rounded font-bold transition"
+                  >
+                    + Test Pop-up
+                  </button>
+                  <span className="text-[10px] text-slate-500 font-mono">({alerts.length})</span>
+                </div>
               </div>
               <div className="space-y-2 max-h-60 overflow-y-auto">
                 {alerts.length === 0 ? (

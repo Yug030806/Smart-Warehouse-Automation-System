@@ -13,6 +13,7 @@ export const metadata = {
 import { AuthProvider } from '@/lib/supabase/AuthProvider';
 import { ThemeProvider } from '@/lib/ThemeProvider';
 import MotionBackground from '@/components/MotionBackground';
+import AlertPopupModal from '@/components/AlertPopupModal';
 
 export default function RootLayout({
   children,
@@ -25,6 +26,7 @@ export default function RootLayout({
         <AuthProvider>
           <ThemeProvider>
             <MotionBackground />
+            <AlertPopupModal />
             <div className="relative z-10 min-h-screen">
               {children}
             </div>

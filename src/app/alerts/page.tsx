@@ -4,8 +4,9 @@ import { supabase } from '@/lib/supabase/client';
 import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
 import { useAuth } from '@/lib/supabase/AuthProvider';
-import { AlertCircle, CheckCircle, BellRing, Info, ShieldAlert } from 'lucide-react';
+import { AlertCircle, CheckCircle, BellRing, Info, ShieldAlert, Sparkles, AlertTriangle } from 'lucide-react';
 import { Alert } from '@/lib/database.types';
+import { triggerGlobalAlert } from '@/lib/alertService';
 
 export default function AlertsPage() {
   const { user } = useAuth();
@@ -37,6 +38,31 @@ export default function AlertsPage() {
     loadAlerts();
   };
 
+  const triggerTestAlert = (severity: 'CRITICAL' | 'WARNING' | 'INFO') => {
+    if (severity === 'CRITICAL') {
+      triggerGlobalAlert({
+        type: 'BOX_MISMATCH',
+        severity: 'CRITICAL',
+        message: 'Critical Security Alert: Scanned payload barcode mismatch detected at Sorting Lane A3!',
+        vehicle_id: 'v-04'
+      });
+    } else if (severity === 'WARNING') {
+      triggerGlobalAlert({
+        type: 'LOW_BATTERY',
+        severity: 'WARNING',
+        message: 'Battery Warning: Vehicle CART-02 battery depleted to 14%. Docking requested.',
+        vehicle_id: 'v-02'
+      });
+    } else {
+      triggerGlobalAlert({
+        type: 'SYSTEM_ERROR',
+        severity: 'INFO',
+        message: 'System Info: Autonomous floor 2 elevator calibration scheduled in 10 mins.',
+      });
+    }
+    loadAlerts();
+  };
+
   const filtered = alerts.filter(a => {
     if (filterSeverity === 'ALL') return true;
     return a.severity === filterSeverity;
@@ -51,17 +77,45 @@ export default function AlertsPage() {
         <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
 
         <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Active System Alerts</h1>
-              <p className="text-xs sm:text-sm text-slate-400">View active system warnings, hardware anomalies, scanner mismatches and low batteries.</p>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-100 flex items-center gap-2">
+                <span>Active System Alerts</span>
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-950 text-blue-400 border border-blue-800/40 font-mono">Pop-up Enabled</span>
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-400">View active system warnings, hardware anomalies, scanner mismatches and live pop-up alerts.</p>
             </div>
 
-            <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-900 border border-slate-800">
+                <span className="text-[10px] font-bold uppercase text-slate-400 px-2 flex items-center gap-1">
+                  <Sparkles className="h-3 w-3 text-yellow-400" />
+                  Test Pop-up:
+                </span>
+                <button
+                  onClick={() => triggerTestAlert('CRITICAL')}
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-red-950/80 text-red-300 border border-red-800/50 hover:bg-red-900 transition"
+                >
+                  Critical
+                </button>
+                <button
+                  onClick={() => triggerTestAlert('WARNING')}
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-950/80 text-amber-300 border border-amber-800/50 hover:bg-amber-900 transition"
+                >
+                  Warning
+                </button>
+                <button
+                  onClick={() => triggerTestAlert('INFO')}
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-800/50 hover:bg-cyan-900 transition"
+                >
+                  Info
+                </button>
+              </div>
+
               <select
                 value={filterSeverity}
                 onChange={e => setFilterSeverity(e.target.value)}
-                className="w-full sm:w-auto px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-xs text-slate-400 font-semibold"
+                className="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-xs text-slate-400 font-semibold"
               >
                 <option value="ALL">All Severities</option>
                 <option value="INFO">INFO</option>
