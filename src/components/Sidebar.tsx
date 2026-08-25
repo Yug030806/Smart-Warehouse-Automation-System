@@ -1,4 +1,5 @@
 'use client';
+import { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/supabase/AuthProvider';
@@ -28,6 +29,17 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const userRole = user?.user_metadata?.role || 'VIEWER';
+
+  useEffect(() => {
+    if (mobileOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [mobileOpen]);
 
   const menuItems = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['ADMIN', 'MANAGER', 'OPERATOR', 'VIEWER'] },
