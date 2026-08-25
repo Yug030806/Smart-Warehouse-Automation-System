@@ -67,7 +67,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
       )}
 
       <aside 
-        className={`fixed md:static inset-y-0 left-0 z-50 w-64 border-r border-slate-900 bg-slate-950 flex flex-col h-full min-h-screen transition-transform duration-300 ease-in-out md:translate-x-0 ${
+        className={`fixed md:static inset-y-0 left-0 z-50 w-64 border-r border-slate-900 bg-slate-950 flex flex-col h-screen md:h-full md:min-h-screen transition-transform duration-300 ease-in-out md:translate-x-0 ${
           mobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
         }`}
       >
