@@ -267,6 +267,122 @@ export default function TrackingPage() {
     );
   }, [selectedVehicle, ensureAssignedTask, locations, simSpeed, addLog]);
 
+  const handleStartCharging = useCallback(() => {
+    if (!selectedVehicle) return;
+
+    const charger = locations.find((l) => l.floor_id === selectedVehicle.current_floor_id && l.type === 'CHARGING')
+      || locations.find((l) => l.type === 'CHARGING');
+
+    if (!charger) {
+      addLog('Error: No charging station location found.', 'WARN');
+      return;
+    }
+
+    addLog(`Routing ${selectedVehicle.vehicle_code} to ⚡ Charging Station (${charger.name})...`, 'INFO');
+
+    const pts = calculateRoute(
+      selectedVehicle.current_floor_id,
+      selectedVehicle.x_position,
+      selectedVehicle.y_position,
+      charger.floor_id,
+      charger.x,
+      charger.y,
+      locations
+    );
+
+    setActiveRoutePts(pts);
+    const controller = new SimulatorVehicleController(selectedVehicle.id);
+    controller.connect();
+    controller.setSpeed(simSpeed);
+    simControllerRef.current = controller;
+    setIsSimulating(true);
+    setIsPaused(false);
+
+    const vCode = selectedVehicle.vehicle_code;
+    controller.sendMoveCommand(
+      pts,
+      (x, y, floorId, index) => {
+        setSelectedFloor(floorId);
+        const msg = `Navigating to ⚡ Charger: Step ${index + 1}/${pts.length} [X:${x}, Y:${y}]`;
+        setCurrentStepLabel(msg);
+        addLog(`${vCode} → ${msg}`, 'INFO');
+      },
+      () => {
+        const arrivalMsg = `Arrived at ⚡ Charging Station. Battery refueled to 100%.`;
+        setCurrentStepLabel(arrivalMsg);
+        addLog(`⚡ ${vCode}: ${arrivalMsg}`, 'SUCCESS');
+
+        supabase.from('vehicles').update({
+          status: 'CHARGING',
+          battery_percentage: 100,
+          current_location_id: charger.id,
+          x_position: charger.x,
+          y_position: charger.y,
+        }).eq('id', selectedVehicle.id);
+
+        loadData();
+        setIsSimulating(false);
+      }
+    );
+  }, [selectedVehicle, locations, simSpeed, addLog, loadData]);
+
+  const handleDriveToOut = useCallback(() => {
+    if (!selectedVehicle) return;
+
+    const outLoc = locations.find((l) => l.floor_id === selectedVehicle.current_floor_id && l.type === 'DELIVERY')
+      || locations.find((l) => l.type === 'DELIVERY');
+
+    if (!outLoc) {
+      addLog('Error: No Red Out location found.', 'WARN');
+      return;
+    }
+
+    addLog(`Routing ${selectedVehicle.vehicle_code} to 🔴 Red Out Station (${outLoc.name})...`, 'INFO');
+
+    const pts = calculateRoute(
+      selectedVehicle.current_floor_id,
+      selectedVehicle.x_position,
+      selectedVehicle.y_position,
+      outLoc.floor_id,
+      outLoc.x,
+      outLoc.y,
+      locations
+    );
+
+    setActiveRoutePts(pts);
+    const controller = new SimulatorVehicleController(selectedVehicle.id);
+    controller.connect();
+    controller.setSpeed(simSpeed);
+    simControllerRef.current = controller;
+    setIsSimulating(true);
+    setIsPaused(false);
+
+    const vCode = selectedVehicle.vehicle_code;
+    controller.sendMoveCommand(
+      pts,
+      (x, y, floorId, index) => {
+        setSelectedFloor(floorId);
+        const msg = `Routing to Red Out: Step ${index + 1}/${pts.length} [X:${x}, Y:${y}]`;
+        setCurrentStepLabel(msg);
+        addLog(`${vCode} → ${msg}`, 'INFO');
+      },
+      () => {
+        const arrivalMsg = `Arrived at 🔴 Red Out Station (${outLoc.name}). Ready for outbound dispatch.`;
+        setCurrentStepLabel(arrivalMsg);
+        addLog(`✓ ${vCode}: ${arrivalMsg}`, 'SUCCESS');
+
+        supabase.from('vehicles').update({
+          x_position: outLoc.x,
+          y_position: outLoc.y,
+          current_location_id: outLoc.id,
+        }).eq('id', selectedVehicle.id);
+
+        loadData();
+        setIsSimulating(false);
+      }
+    );
+  }, [selectedVehicle, locations, simSpeed, addLog, loadData]);
+
   const handlePauseResume = useCallback(() => {
     if (!simControllerRef.current) return;
     if (isPaused) {
@@ -387,14 +503,30 @@ export default function TrackingPage() {
                       )}
                     </div>
 
-                    <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
                       {!isSimulating && !isPaused ? (
-                        <button
-                          onClick={handleStartSimulation}
-                          className="flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-extrabold text-slate-50 shadow-lg shadow-blue-600/30 transition-all duration-200 active:scale-95"
-                        >
-                          <Play className="h-4 w-4" /> Start Drive
-                        </button>
+                        <>
+                          <button
+                            onClick={handleStartSimulation}
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-extrabold text-slate-50 shadow-lg shadow-blue-600/30 transition-all duration-200 active:scale-95"
+                          >
+                            <Play className="h-4 w-4" /> Start Drive
+                          </button>
+                          <button
+                            onClick={handleStartCharging}
+                            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-yellow-950/40 border border-yellow-700/60 hover:bg-yellow-900/50 text-xs font-bold text-yellow-400 transition duration-150 active:scale-95"
+                            title="Route cart to ⚡ Charging Station"
+                          >
+                            <Zap className="h-4 w-4 text-yellow-400" /> ⚡ Charge
+                          </button>
+                          <button
+                            onClick={handleDriveToOut}
+                            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-red-950/40 border border-red-800/60 hover:bg-red-900/50 text-xs font-bold text-red-400 transition duration-150 active:scale-95"
+                            title="Route cart to 🔴 Red Out Station"
+                          >
+                            <span className="h-2 w-2 rounded-full bg-red-500"></span> Red Out
+                          </button>
+                        </>
                       ) : (
                         <>
                           <button

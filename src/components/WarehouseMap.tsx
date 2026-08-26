@@ -63,7 +63,9 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
         <div className="flex flex-wrap items-center gap-3 text-[11px] sm:text-xs">
           <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-blue-500/20 border border-blue-500"></span><span className="text-slate-400">Rack</span></div>
           <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-green-500/20 border border-green-500"></span><span className="text-slate-400">Pickup</span></div>
+          <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-red-500/20 border border-red-500"></span><span className="text-slate-400">Out</span></div>
           <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-purple-500/20 border border-purple-500"></span><span className="text-slate-400">Elevator</span></div>
+          <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-yellow-500/20 border border-yellow-500 text-[9px] flex items-center justify-center text-yellow-400">⚡</span><span className="text-slate-400">Charging</span></div>
           <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-blue-600 border border-slate-500"></span><span className="text-slate-400">Cart</span></div>
         </div>
       </div>
