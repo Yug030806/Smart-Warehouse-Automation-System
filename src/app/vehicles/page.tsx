@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase/client';
 import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
 import { useAuth } from '@/lib/supabase/AuthProvider';
+import { usePreventScroll } from '@/lib/usePreventScroll';
 import { Search, MapPin, Truck, Plus, Trash2, BatteryCharging, AlertCircle, RefreshCw } from 'lucide-react';
 import { Vehicle, Floor, Location, Task } from '@/lib/database.types';
 
@@ -21,6 +22,13 @@ export default function VehiclesPage() {
   const [vName, setVName] = useState('');
   const [floorId, setFloorId] = useState('');
   const [startLocId, setStartLocId] = useState('');
+
+  // Edit Vehicle state
+  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+  const [editVName, setEditVName] = useState('');
+  const [editStatus, setEditStatus] = useState<string>('AVAILABLE');
+
+  usePreventScroll(Boolean(editingVehicle || showAddModal));
 
   const loadVehicles = () => {
     const list = supabase.from('vehicles').select().data || [];
@@ -119,10 +127,7 @@ export default function VehiclesPage() {
     loadVehicles();
   };
 
-  // Edit Vehicle state
-  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
-  const [editVName, setEditVName] = useState('');
-  const [editStatus, setEditStatus] = useState<string>('AVAILABLE');
+
 
   const handleEditVehicleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,12 +145,12 @@ export default function VehiclesPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen bg-slate-950">
+    <div className="flex h-screen w-full overflow-hidden bg-slate-950">
       <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
-      <div className="flex-grow flex flex-col min-w-0">
+      <div className="flex-grow flex flex-col min-w-0 h-screen overflow-hidden">
         <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
 
-        <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1">
+        <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1 overscroll-contain">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Vehicle Fleet Roster</h1>

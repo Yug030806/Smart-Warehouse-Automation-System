@@ -5,6 +5,7 @@ import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
 import RoleGuard from '@/components/RoleGuard';
 import { useAuth } from '@/lib/supabase/AuthProvider';
+import { usePreventScroll } from '@/lib/usePreventScroll';
 import { Plus, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, FileDown, Edit3, Trash2, Link2 } from 'lucide-react';
 import { Box, Location } from '@/lib/database.types';
 import Link from 'next/link';
@@ -110,6 +111,8 @@ export default function BoxesPage() {
   const [editWeight, setEditWeight] = useState(1);
   const [editPriority, setEditPriority] = useState<'NORMAL' | 'HIGH' | 'URGENT'>('NORMAL');
 
+  usePreventScroll(Boolean(editingBox || showAddModal));
+
   const handleDeleteBox = (id: string) => {
     supabase.from('boxes').delete().eq('id', id);
     loadBoxes();
@@ -169,12 +172,12 @@ export default function BoxesPage() {
 
   return (
     <RoleGuard allowedRoles={['ADMIN', 'MANAGER', 'OPERATOR']}>
-      <div className="flex min-h-screen bg-slate-950">
+      <div className="flex h-screen w-full overflow-hidden bg-slate-950">
         <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
-        <div className="flex-grow flex flex-col min-w-0">
+        <div className="flex-grow flex flex-col min-w-0 h-screen overflow-hidden">
           <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
 
-        <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1">
+        <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1 overscroll-contain">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Warehouse Cargo & Boxes</h1>

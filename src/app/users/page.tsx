@@ -5,6 +5,7 @@ import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
 import RoleGuard from '@/components/RoleGuard';
 import { useAuth } from '@/lib/supabase/AuthProvider';
+import { usePreventScroll } from '@/lib/usePreventScroll';
 import { Plus, Search, Shield, UserCheck, Trash2, ShieldAlert } from 'lucide-react';
 import { Profile } from '@/lib/database.types';
 
@@ -19,6 +20,13 @@ export default function UsersPage() {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [role, setRole] = useState<'ADMIN' | 'MANAGER' | 'OPERATOR'>('OPERATOR');
+
+  // Edit User states
+  const [editingUser, setEditingUser] = useState<Profile | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editRole, setEditRole] = useState<'ADMIN' | 'MANAGER' | 'OPERATOR'>('OPERATOR');
+
+  usePreventScroll(Boolean(editingUser || showAddModal));
 
   const loadUsers = () => {
     const list = supabase.from('profiles').select().data || [];
@@ -55,10 +63,7 @@ export default function UsersPage() {
     loadUsers();
   };
 
-  // Edit User states
-  const [editingUser, setEditingUser] = useState<Profile | null>(null);
-  const [editName, setEditName] = useState('');
-  const [editRole, setEditRole] = useState<'ADMIN' | 'MANAGER' | 'OPERATOR'>('OPERATOR');
+
 
   const handleEditUserSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,12 +92,12 @@ export default function UsersPage() {
 
   return (
     <RoleGuard allowedRoles={['ADMIN']}>
-      <div className="flex min-h-screen bg-slate-950">
+      <div className="flex h-screen w-full overflow-hidden bg-slate-950">
         <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
-        <div className="flex-grow flex flex-col min-w-0">
+        <div className="flex-grow flex flex-col min-w-0 h-screen overflow-hidden">
           <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
 
-        <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1">
+        <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1 overscroll-contain">
           {userRole !== 'ADMIN' ? (
             <div className="rounded-xl border border-red-900/30 bg-red-950/10 p-12 text-center text-slate-400 space-y-4 max-w-lg mx-auto mt-12">
               <ShieldAlert className="h-16 w-16 text-red-500 mx-auto" />

@@ -103,12 +103,12 @@ export default function BoxDetailsPage() {
   const destName = locations.find(l => l.id === box.destination_location_id)?.name || 'Outbound Dock';
 
   return (
-    <div className="flex min-h-screen bg-slate-950">
+    <div className="flex h-screen w-full overflow-hidden bg-slate-950">
       <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
-      <div className="flex-grow flex flex-col min-w-0">
+      <div className="flex-grow flex flex-col min-w-0 h-screen overflow-hidden">
         <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
 
-        <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1">
+        <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1 overscroll-contain">
           <div className="flex items-center gap-3">
             <button 
               onClick={() => router.push('/boxes')}

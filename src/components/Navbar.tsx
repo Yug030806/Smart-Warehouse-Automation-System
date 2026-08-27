@@ -126,7 +126,7 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
                   <span className="text-[10px] text-slate-500 font-mono">({alerts.length})</span>
                 </div>
               </div>
-              <div className="space-y-2 max-h-60 overflow-y-auto">
+              <div className="space-y-2 max-h-60 overflow-y-auto overscroll-contain">
                 {alerts.length === 0 ? (
                   <p className="text-xs text-slate-500 text-center py-4">No active alerts. All systems nominal.</p>
                 ) : (
@@ -181,7 +181,7 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
                   Clear All
                 </button>
               </div>
-              <div className="space-y-2 max-h-60 overflow-y-auto">
+              <div className="space-y-2 max-h-60 overflow-y-auto overscroll-contain">
                 {notifications.length === 0 ? (
                   <p className="text-xs text-slate-500 text-center py-4">No new notifications.</p>
                 ) : (

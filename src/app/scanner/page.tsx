@@ -182,12 +182,12 @@ export default function ScannerPage() {
 
   return (
     <RoleGuard allowedRoles={['ADMIN', 'MANAGER', 'OPERATOR']}>
-      <div className="flex min-h-screen bg-slate-950">
+      <div className="flex h-screen w-full overflow-hidden bg-slate-950">
         <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
-        <div className="flex-grow flex flex-col min-w-0">
+        <div className="flex-grow flex flex-col min-w-0 h-screen overflow-hidden">
           <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
 
-        <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1">
+        <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1 overscroll-contain">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-100">QR Scan Console & Verification</h1>
             <p className="text-xs sm:text-sm text-slate-400">Scan box identities at routing nodes to confirm pickups and finalise deliveries.</p>

@@ -239,12 +239,12 @@ export default function DemoPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-950">
+    <div className="flex h-screen w-full overflow-hidden bg-slate-950">
       <Sidebar />
-      <div className="flex-grow flex flex-col min-w-0">
+      <div className="flex-grow flex flex-col min-w-0 h-screen overflow-hidden">
         <Navbar />
 
-        <main className="p-8 space-y-8 overflow-y-auto flex-1">
+        <main className="p-8 space-y-8 overflow-y-auto flex-1 overscroll-contain">
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">

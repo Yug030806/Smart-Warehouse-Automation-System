@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/supabase/AuthProvider';
+import { usePreventScroll } from '@/lib/usePreventScroll';
 import { 
   LayoutDashboard, 
   Boxes, 
@@ -30,16 +31,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
   const { user, logout } = useAuth();
   const userRole = user?.user_metadata?.role || 'OPERATOR';
 
-  useEffect(() => {
-    if (mobileOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [mobileOpen]);
+  usePreventScroll(mobileOpen);
 
   const menuItems = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['ADMIN', 'MANAGER', 'OPERATOR'] },
@@ -61,13 +53,15 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
       {/* Mobile backdrop overlay */}
       {mobileOpen && (
         <div 
-          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40 md:hidden transition-opacity"
+          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40 md:hidden transition-opacity overscroll-none touch-none"
           onClick={onMobileClose}
+          onWheel={(e) => e.preventDefault()}
+          onTouchMove={(e) => e.preventDefault()}
         />
       )}
 
       <aside 
-        className={`fixed md:static inset-y-0 left-0 z-50 w-64 border-r border-slate-900 bg-slate-950 flex flex-col h-screen md:h-full md:min-h-screen transition-transform duration-300 ease-in-out md:translate-x-0 ${
+        className={`fixed md:static inset-y-0 left-0 z-50 w-64 shrink-0 border-r border-slate-900 bg-slate-950 flex flex-col h-screen transition-transform duration-300 ease-in-out md:translate-x-0 overscroll-contain ${
           mobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
         }`}
       >
@@ -92,7 +86,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
           </button>
         </div>
 
-        <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
+        <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto overscroll-contain">
           {menuItems.map((item) => {
             if (!item.roles.includes(userRole)) return null;
             const isActive = pathname.startsWith(item.href);

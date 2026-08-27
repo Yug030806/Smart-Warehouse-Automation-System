@@ -112,12 +112,14 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
                 }
               }
 
+              const roundedShape = cell?.type === 'vehicle' ? 'rounded-full' : 'rounded-lg';
+
               return (
                 <button
                   key={`${x}-${y}`}
                   onClick={() => onGridClick?.(x, y)}
                   title={cellLabel}
-                  className={`relative aspect-square flex flex-col items-center justify-center rounded-lg text-[10px] font-bold transition-all duration-150 active:scale-95 ${cellColor}`}
+                  className={`relative aspect-square flex flex-col items-center justify-center ${roundedShape} text-[10px] font-bold transition-all duration-150 active:scale-95 ${cellColor}`}
                 >
                   {text || <span className="text-[8px] text-slate-700 font-normal">{x},{y}</span>}
                   

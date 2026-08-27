@@ -15,6 +15,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { useAuth } from '@/lib/supabase/AuthProvider';
+import { usePreventScroll } from '@/lib/usePreventScroll';
 import { Task, Vehicle, Box, Location } from '@/lib/database.types';
 
 export default function TasksPage() {
@@ -29,6 +30,15 @@ export default function TasksPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [recommendedTask, setRecommendedTask] = useState<Task | null>(null);
   const [recReason, setRecReason] = useState('');
+
+  // Manual assignment state
+  const [manualAssignTask, setManualAssignTask] = useState<Task | null>(null);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>('');
+
+  // Create Task Modal state
+  const [showCreateTask, setShowCreateTask] = useState(false);
+
+  usePreventScroll(Boolean(manualAssignTask || showCreateTask));
 
   const loadTasksData = () => {
     const t = supabase.from('tasks').select().data || [];
@@ -202,26 +212,15 @@ export default function TasksPage() {
       status: 'CANCELLED'
     }).eq('id', taskId);
 
-    supabase.from('boxes').update({
-      status: 'WAITING'
-    }).eq('id', t.box_id);
-
     loadTasksData();
   };
 
-  // Manual assignment state
-  const [manualAssignTask, setManualAssignTask] = useState<Task | null>(null);
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string>('');
-
-  // Create Task Modal state
-  const [showCreateTask, setShowCreateTask] = useState(false);
   const [selectedBoxId, setSelectedBoxId] = useState<string>('');
   const [taskPriority, setTaskPriority] = useState<'NORMAL' | 'HIGH' | 'URGENT'>('NORMAL');
 
   const handleManualAssignSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualAssignTask || !selectedVehicleId) return;
-
     const chosen = vehicles.find(v => v.id === selectedVehicleId);
     const destLoc = locations.find(l => l.id === manualAssignTask.destination_location_id);
     if (!chosen || !destLoc) return;
@@ -302,12 +301,12 @@ export default function TasksPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen bg-slate-950">
+    <div className="flex h-screen w-full overflow-hidden bg-slate-950">
       <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
-      <div className="flex-grow flex flex-col min-w-0">
+      <div className="flex-grow flex flex-col min-w-0 h-screen overflow-hidden">
         <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
 
-        <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1">
+        <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1 overscroll-contain">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Transportation Tasks Console</h1>
