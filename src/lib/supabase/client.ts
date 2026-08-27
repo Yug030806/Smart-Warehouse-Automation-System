@@ -4,8 +4,16 @@ import mockDb from './mockDb';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-// If credentials are provided, use official client. Otherwise fallback to mock db proxy logic
-export const useSupabaseReal = !!(supabaseUrl && supabaseAnonKey);
+const isValidUrl = (url: string) => {
+  try {
+    return Boolean(new URL(url));
+  } catch {
+    return false;
+  }
+};
+
+// If valid credentials are provided, use official client. Otherwise fallback to mock db proxy logic
+export const useSupabaseReal = isValidUrl(supabaseUrl) && !!supabaseAnonKey && supabaseUrl !== 'your_supabase_project_url_here';
 
 export const supabaseReal = useSupabaseReal 
   ? createClient(supabaseUrl, supabaseAnonKey) 
