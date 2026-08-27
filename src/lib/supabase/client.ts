@@ -219,5 +219,5 @@ export const getSupabaseClient = () => {
   };
 };
 
-export const supabase = useSupabaseReal && supabaseReal ? (supabaseReal as any) : getSupabaseClient();
+export const supabase = getSupabaseClient();
 

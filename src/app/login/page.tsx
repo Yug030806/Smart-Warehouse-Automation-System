@@ -26,22 +26,26 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
 
-    // Check matching credentials
-    const matchingCred = credentials.find(c => c.email.toLowerCase() === email.toLowerCase());
-    if (matchingCred && password === matchingCred.pass) {
-      await login(email, matchingCred.role);
-    } else if (email.includes('@')) {
-      // Determine role from email or default to OPERATOR for custom logins
-      const role = email.toLowerCase().includes('admin')
-        ? 'ADMIN'
-        : email.toLowerCase().includes('manager')
-        ? 'MANAGER'
-        : 'OPERATOR';
-      await login(email, role);
-    } else {
-      setError('Invalid login credentials. Please check your email and password.');
+    try {
+      // Check matching credentials from predefined list first
+      const matchingCred = credentials.find(c => c.email.toLowerCase() === email.toLowerCase());
+      if (matchingCred && password === matchingCred.pass) {
+        await login(email, matchingCred.role, password);
+      } else if (email.includes('@')) {
+        const role = email.toLowerCase().includes('admin')
+          ? 'ADMIN'
+          : email.toLowerCase().includes('manager')
+          ? 'MANAGER'
+          : 'OPERATOR';
+        await login(email, role, password);
+      } else {
+        setError('Invalid login credentials. Please check your email and password.');
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Invalid login credentials. Please check your email and password.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -54,16 +58,29 @@ export default function LoginPage() {
 
       <div className="relative z-10 w-full max-w-md rounded-2xl border border-slate-800/80 bg-slate-900/70 p-8 shadow-2xl backdrop-blur-xl">
         <div className="flex flex-col items-center text-center">
-          <img src="/logo.png" alt="Smart Warehouse Logo" className="h-20 w-20 object-contain rounded-2xl" />
-          <h1 className="mt-5 text-2xl font-bold tracking-tight text-slate-100">
+          <img src="/logo.png" alt="Smart Warehouse Logo" className="h-16 w-16 object-contain rounded-2xl" />
+          <h1 className="mt-4 text-2xl font-bold tracking-tight text-slate-100">
             Smart Warehouse Logistics
           </h1>
-          <p className="mt-1.5 text-xs text-slate-400">
+          <p className="mt-1 text-xs text-slate-400">
             Autonomous fleet operation, route calculation, and tracking platform.
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+        {/* Navigation Tabs */}
+        <div className="mt-6 grid grid-cols-2 gap-1 rounded-xl bg-slate-950/60 p-1 border border-slate-800/60">
+          <div className="flex items-center justify-center py-2 text-xs font-semibold text-blue-400 bg-slate-800/90 rounded-lg shadow-sm">
+            Sign In
+          </div>
+          <a
+            href="/signup"
+            className="flex items-center justify-center py-2 text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors rounded-lg"
+          >
+            Sign Up
+          </a>
+        </div>
+
+        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           {error && (
             <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-xs font-medium text-red-400">
               {error}
@@ -110,12 +127,19 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-xs font-bold text-slate-100 shadow-lg shadow-blue-600/20 transition-all duration-200 hover:bg-blue-500 hover:shadow-xl hover:shadow-blue-500/25 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-xs font-bold text-slate-100 shadow-lg shadow-blue-600/20 transition-all duration-200 hover:bg-blue-500 hover:shadow-xl hover:shadow-blue-500/25 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 mt-2"
           >
             <KeyRound className="h-4 w-4" />
             {loading ? 'Authenticating...' : 'Sign In'}
           </button>
         </form>
+
+        <p className="mt-6 text-center text-xs text-slate-500">
+          New user?{' '}
+          <a href="/signup" className="font-semibold text-blue-400 hover:text-blue-300 transition-colors">
+            Create an account
+          </a>
+        </p>
       </div>
     </div>
   );

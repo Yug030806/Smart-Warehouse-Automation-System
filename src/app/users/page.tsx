@@ -29,6 +29,33 @@ export default function UsersPage() {
   usePreventScroll(Boolean(editingUser || showAddModal));
 
   const loadUsers = () => {
+    // Sync any registered users from localStorage into mockDb profiles
+    try {
+      const regUsersStr = localStorage.getItem('sih_registered_users');
+      if (regUsersStr) {
+        const regUsers = JSON.parse(regUsersStr) as Array<{ id: string; fullName: string; email: string; role: string }>;
+        const existingProfiles = supabase.from('profiles').select().data || [];
+        const existingIds = new Set((existingProfiles as Profile[]).map(p => p.id));
+        const existingEmails = new Set((existingProfiles as Profile[]).map(p => p.email.toLowerCase()));
+        
+        regUsers.forEach(ru => {
+          if (!existingIds.has(ru.id) && !existingEmails.has(ru.email.toLowerCase())) {
+            supabase.from('profiles').insert({
+              id: ru.id,
+              full_name: ru.fullName,
+              email: ru.email,
+              role: ru.role,
+              is_active: true,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+          }
+        });
+      }
+    } catch (e) {
+      // ignore sync errors
+    }
+
     const list = supabase.from('profiles').select().data || [];
     setUsers(list as Profile[]);
   };
@@ -79,7 +106,20 @@ export default function UsersPage() {
   };
 
   const handleDeleteUser = (id: string) => {
-    supabase.from('profiles').delete().eq('id', id);
+    // Delete from mockDb profiles
+    const mockDb = require('@/lib/supabase/mockDb').default;
+    mockDb.deleteProfile(id);
+
+    // Also remove from registered users localStorage
+    try {
+      const regUsersStr = localStorage.getItem('sih_registered_users');
+      if (regUsersStr) {
+        const regUsers = JSON.parse(regUsersStr);
+        const filtered = regUsers.filter((u: any) => u.id !== id);
+        localStorage.setItem('sih_registered_users', JSON.stringify(filtered));
+      }
+    } catch (e) { /* ignore */ }
+
     loadUsers();
   };
 

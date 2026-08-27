@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
+import { useAuth } from '@/lib/supabase/AuthProvider';
 import { Alert } from '@/lib/database.types';
+import mockDb from '@/lib/supabase/mockDb';
 import { 
   ShieldAlert, 
   AlertTriangle, 
@@ -75,27 +77,44 @@ function playAlertChime(severity: string) {
 
 export default function AlertPopupModal() {
   const router = useRouter();
+  const pathname = usePathname();
+  const { user } = useAuth();
+  
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [currentIndex, setCurrentIndex] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const lastAlertIdRef = useRef<string | null>(null);
 
-  // Fetch active unacknowledged alerts that have not been dismissed in current pop-up session
+  // Do not show popup modal on auth pages or when user is logged out
+  const isAuthPage = ['/login', '/signup'].includes(pathname) || !user;
+
+  // Fetch active unacknowledged alerts instantly
   const fetchActiveAlerts = useCallback(() => {
+    if (isAuthPage) return;
     try {
-      const res = supabase.from('alerts').select().eq('is_acknowledged', false).data || [];
-      const unackAlerts = (res as Alert[]).filter(a => !a.is_acknowledged);
-      
-      setAlerts(unackAlerts);
+      const res = mockDb.getAlerts().filter(a => !a.is_acknowledged);
+      setAlerts(res);
     } catch (e) {
       console.error('Error loading alerts for pop-up:', e);
     }
-  }, []);
+  }, [isAuthPage]);
 
   useEffect(() => {
+    if (isAuthPage) {
+      setAlerts([]);
+      return;
+    }
+
     fetchActiveAlerts();
-    const interval = setInterval(fetchActiveAlerts, 2000);
+    const interval = setInterval(fetchActiveAlerts, 1000);
+
+    // Subscribe to mockDb reactive events for instant popups without lag
+    const unsubscribe = mockDb.subscribe((table, ev, payload) => {
+      if (table === 'alerts') {
+        fetchActiveAlerts();
+      }
+    });
 
     // Listen for custom immediate pop-up trigger
     const handleNewAlertEvent = (e: Event) => {
@@ -119,9 +138,10 @@ export default function AlertPopupModal() {
 
     return () => {
       clearInterval(interval);
+      unsubscribe();
       window.removeEventListener('swl:new-alert-popup', handleNewAlertEvent);
     };
-  }, [fetchActiveAlerts, soundEnabled]);
+  }, [fetchActiveAlerts, soundEnabled, isAuthPage]);
 
   // Undismissed alerts list
   const activeAlerts = alerts.filter(a => !dismissedIds.has(a.id));

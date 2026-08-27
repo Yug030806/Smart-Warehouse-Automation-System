@@ -68,14 +68,17 @@ function solveSingleFloor(
   gridHeight: number,
   otherVehicles: any[] = []
 ): RouteSegment[] {
-  // Identify blocked coordinates (e.g. racks other than target, busy vehicles, etc.)
+  // Identify blocked coordinates (Racks, Chargers, and non-target stations)
   const obstacles = new Set<string>();
   allLocations.forEach(loc => {
-    // If it's on this floor, and it's a RACK (and NOT our destination or start)
     if (loc.floor_id === floorId) {
       const isTarget = loc.x === tx && loc.y === ty;
       const isStart = loc.x === sx && loc.y === sy;
-      if (loc.type === 'RACK' && !isTarget && !isStart) {
+      
+      // Only Racks and Charging Stations are obstacles; Elevators, Pickup, and Delivery points are passable
+      const isObstacleType = ['RACK', 'CHARGING'].includes(loc.type);
+      
+      if (isObstacleType && !isTarget && !isStart) {
         obstacles.add(`${loc.x},${loc.y}`);
       }
     }

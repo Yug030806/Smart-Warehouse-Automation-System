@@ -12,10 +12,19 @@ export interface UserSession {
   role: 'ADMIN' | 'MANAGER' | 'OPERATOR';
 }
 
+export interface RegisteredUser {
+  id: string;
+  fullName: string;
+  email: string;
+  password?: string;
+  role: 'ADMIN' | 'MANAGER' | 'OPERATOR';
+}
+
 interface AuthContextType {
   user: UserSession | null;
   loading: boolean;
-  login: (email: string, role: 'ADMIN' | 'MANAGER' | 'OPERATOR') => Promise<boolean>;
+  login: (email: string, role?: 'ADMIN' | 'MANAGER' | 'OPERATOR', password?: string) => Promise<boolean>;
+  signup: (fullName: string, email: string, password: string, role: 'ADMIN' | 'MANAGER' | 'OPERATOR') => Promise<boolean>;
   logout: () => void;
 }
 
@@ -23,6 +32,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   login: async () => false,
+  signup: async () => false,
   logout: () => {}
 });
 
@@ -47,7 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!loading) {
-      const publicRoutes = ['/login'];
+      const publicRoutes = ['/login', '/signup'];
       const isPublic = publicRoutes.includes(pathname);
       if (!user && !isPublic) {
         router.push('/login');
@@ -57,20 +67,99 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, loading, pathname, router]);
 
-  const login = async (email: string, role: 'ADMIN' | 'MANAGER' | 'OPERATOR'): Promise<boolean> => {
-    const names = {
-      ADMIN: 'Super Admin',
-      MANAGER: 'Warehouse Manager',
-      OPERATOR: 'Cart Operator',
-    };
+  const login = async (email: string, role?: 'ADMIN' | 'MANAGER' | 'OPERATOR', password?: string): Promise<boolean> => {
+    // Check registered users from localStorage
+    const regUsersStr = localStorage.getItem('sih_registered_users');
+    let registeredUsers: RegisteredUser[] = [];
+    if (regUsersStr) {
+      try {
+        registeredUsers = JSON.parse(regUsersStr);
+      } catch (e) {
+        registeredUsers = [];
+      }
+    }
+
+    const regUser = registeredUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+    let effectiveRole: 'ADMIN' | 'MANAGER' | 'OPERATOR' = role || 'OPERATOR';
+    let fullName = 'Warehouse User';
+
+    if (regUser) {
+      if (password && regUser.password && regUser.password !== password) {
+        throw new Error('Incorrect password');
+      }
+      effectiveRole = regUser.role;
+      fullName = regUser.fullName;
+    } else {
+      const names = {
+        ADMIN: 'Super Admin',
+        MANAGER: 'Warehouse Manager',
+        OPERATOR: 'Cart Operator',
+      };
+      fullName = names[effectiveRole];
+    }
+
     const sessionObj: UserSession = {
-      id: `u-${role.toLowerCase()}`,
+      id: regUser ? regUser.id : `u-${effectiveRole.toLowerCase()}`,
       email,
       user_metadata: {
-        full_name: names[role],
-        role
+        full_name: fullName,
+        role: effectiveRole
       },
+      role: effectiveRole
+    };
+    localStorage.setItem('sih_session', JSON.stringify(sessionObj));
+    setUser(sessionObj);
+    router.push('/dashboard');
+    return true;
+  };
+
+  const signup = async (fullName: string, email: string, password: string, role: 'ADMIN' | 'MANAGER' | 'OPERATOR'): Promise<boolean> => {
+    const regUsersStr = localStorage.getItem('sih_registered_users');
+    let registeredUsers: RegisteredUser[] = [];
+    if (regUsersStr) {
+      try {
+        registeredUsers = JSON.parse(regUsersStr);
+      } catch (e) {
+        registeredUsers = [];
+      }
+    }
+
+    const exists = registeredUsers.some(u => u.email.toLowerCase() === email.toLowerCase());
+    if (exists) {
+      throw new Error('An account with this email address already exists.');
+    }
+
+    const newUser: RegisteredUser = {
+      id: `usr-${Date.now()}`,
+      fullName,
+      email,
+      password,
       role
+    };
+
+    registeredUsers.push(newUser);
+    localStorage.setItem('sih_registered_users', JSON.stringify(registeredUsers));
+
+    // Also add to mock database profiles so the user appears on the Users page
+    const mockDb = (await import('@/lib/supabase/mockDb')).default;
+    mockDb.saveProfile({
+      id: newUser.id,
+      full_name: newUser.fullName,
+      email: newUser.email,
+      role: newUser.role,
+      is_active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    });
+
+    const sessionObj: UserSession = {
+      id: newUser.id,
+      email: newUser.email,
+      user_metadata: {
+        full_name: newUser.fullName,
+        role: newUser.role
+      },
+      role: newUser.role
     };
     localStorage.setItem('sih_session', JSON.stringify(sessionObj));
     setUser(sessionObj);
@@ -85,7 +174,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
       {children}
     </AuthContext.Provider>
   );
