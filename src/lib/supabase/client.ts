@@ -25,7 +25,7 @@ export const getSupabaseClient = () => {
     auth: {
       getUser: async () => {
         if (typeof window === 'undefined') return { data: { user: null }, error: null };
-        const sessionStr = localStorage.getItem('sih_session');
+        const sessionStr = sessionStorage.getItem('sih_session');
         if (!sessionStr) return { data: { user: null }, error: null };
         try {
           const user = JSON.parse(sessionStr);
@@ -44,7 +44,7 @@ export const getSupabaseClient = () => {
             user_metadata: { full_name: found.full_name, role: found.role },
             role: found.role
           };
-          localStorage.setItem('sih_session', JSON.stringify(session));
+          sessionStorage.setItem('sih_session', JSON.stringify(session));
           mockDb.addAuditLog({
             id: `log-${Date.now()}`,
             user_email: found.email,
@@ -60,7 +60,7 @@ export const getSupabaseClient = () => {
         return { data: null, error: { message: 'Invalid credentials' } };
       },
       signOut: async () => {
-        const sessionStr = localStorage.getItem('sih_session');
+        const sessionStr = sessionStorage.getItem('sih_session');
         if (sessionStr) {
           try {
             const user = JSON.parse(sessionStr);
@@ -76,7 +76,7 @@ export const getSupabaseClient = () => {
             });
           } catch {}
         }
-        localStorage.removeItem('sih_session');
+        sessionStorage.removeItem('sih_session');
         return { error: null };
       }
     },

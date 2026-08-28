@@ -96,7 +96,7 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
                     cellColor = 'bg-red-950/20 border border-red-900/60 text-red-400';
                     text = 'OUT';
                   } else if (loc.type === 'ELEVATOR') {
-                    cellColor = 'bg-purple-950/20 border border-purple-900/60 text-purple-400';
+                    cellColor = 'bg-purple-800/40 border-2 border-purple-500/70 text-purple-300 font-bold';
                     text = 'EL';
                   } else if (loc.type === 'CHARGING') {
                     cellColor = 'bg-yellow-950/20 border border-yellow-900/60 text-yellow-500';

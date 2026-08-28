@@ -175,3 +175,5 @@ export interface SystemSettings {
   floor_transition_duration: number; // in seconds
   updated_at: string;
 }
+
+

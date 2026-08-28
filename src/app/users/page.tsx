@@ -57,7 +57,7 @@ export default function UsersPage() {
     }
 
     const list = supabase.from('profiles').select().data || [];
-    setUsers(list as Profile[]);
+    setUsers((list as Profile[]).map(p => ({ ...p })));
   };
 
   useEffect(() => {
@@ -86,7 +86,23 @@ export default function UsersPage() {
   };
 
   const handleDeactivate = (id: string, currentStatus: boolean) => {
-    supabase.from('profiles').update({ is_active: !currentStatus }).eq('id', id);
+    // Directly update mockDb profile (same pattern as delete which works instantly)
+    const mockDb = require('@/lib/supabase/mockDb').default;
+    const profile = mockDb.getProfiles().find((p: any) => p.id === id);
+    if (profile) {
+      mockDb.saveProfile({ ...profile, is_active: !currentStatus });
+    }
+
+    // Also sync is_active back to sih_registered_users so login checks pick it up
+    try {
+      const regUsersStr = localStorage.getItem('sih_registered_users');
+      if (regUsersStr) {
+        const regUsers = JSON.parse(regUsersStr);
+        const updated = regUsers.map((u: any) => u.id === id ? { ...u, is_active: !currentStatus } : u);
+        localStorage.setItem('sih_registered_users', JSON.stringify(updated));
+      }
+    } catch (e) { /* ignore */ }
+
     loadUsers();
   };
 
@@ -194,8 +210,8 @@ export default function UsersPage() {
                       </td>
                       <td className="py-4">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          u.is_active ? 'bg-green-950 text-green-400' : 'bg-red-950 text-red-400'
-                        }`}>{u.is_active ? 'ACTIVE' : 'INACTIVE'}</span>
+                          u.is_active ? 'bg-green-950 text-green-400' : 'bg-orange-950 text-orange-400'
+                        }`}>{u.is_active ? 'ACTIVE' : 'PENDING APPROVAL'}</span>
                       </td>
                       <td className="py-4 text-right space-x-3">
                         <button
@@ -208,7 +224,7 @@ export default function UsersPage() {
                           onClick={() => handleDeactivate(u.id, u.is_active)}
                           className="text-xs text-blue-400 hover:text-blue-300 font-semibold"
                         >
-                          {u.is_active ? 'Deactivate' : 'Reactivate'}
+                          {u.is_active ? 'Deactivate' : 'Approve'}
                         </button>
                         <button
                           onClick={() => handleDeleteUser(u.id)}

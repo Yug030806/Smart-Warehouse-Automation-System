@@ -18,6 +18,7 @@ export interface RegisteredUser {
   email: string;
   password?: string;
   role: 'ADMIN' | 'MANAGER' | 'OPERATOR';
+  is_active: boolean;
 }
 
 interface AuthContextType {
@@ -43,13 +44,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    const sessionStr = localStorage.getItem('sih_session');
+    const sessionStr = sessionStorage.getItem('sih_session');
     if (sessionStr) {
       try {
         const sessionObj = JSON.parse(sessionStr);
         setUser(sessionObj);
       } catch (e) {
-        localStorage.removeItem('sih_session');
+        sessionStorage.removeItem('sih_session');
       }
     }
     setLoading(false);
@@ -87,6 +88,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (password && regUser.password && regUser.password !== password) {
         throw new Error('Incorrect password');
       }
+      
+      // Let's also check the actual mockDb in case an admin activated them there
+      const mockDb = (await import('@/lib/supabase/mockDb')).default;
+      const profile = mockDb.getProfiles().find(p => p.id === regUser.id);
+      
+      if (profile && !profile.is_active) {
+        throw new Error('Your account is pending admin approval.');
+      } else if (!profile && !regUser.is_active) {
+        throw new Error('Your account is pending admin approval.');
+      }
+      
       effectiveRole = regUser.role;
       fullName = regUser.fullName;
     } else {
@@ -107,7 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
       role: effectiveRole
     };
-    localStorage.setItem('sih_session', JSON.stringify(sessionObj));
+    sessionStorage.setItem('sih_session', JSON.stringify(sessionObj));
     setUser(sessionObj);
     router.push('/dashboard');
     return true;
@@ -134,7 +146,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       fullName,
       email,
       password,
-      role
+      role,
+      is_active: false
     };
 
     registeredUsers.push(newUser);
@@ -147,28 +160,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       full_name: newUser.fullName,
       email: newUser.email,
       role: newUser.role,
-      is_active: true,
+      is_active: false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     });
 
-    const sessionObj: UserSession = {
-      id: newUser.id,
-      email: newUser.email,
-      user_metadata: {
-        full_name: newUser.fullName,
-        role: newUser.role
-      },
-      role: newUser.role
-    };
-    localStorage.setItem('sih_session', JSON.stringify(sessionObj));
-    setUser(sessionObj);
-    router.push('/dashboard');
+    // Do NOT automatically log them in, just return true
     return true;
   };
 
   const logout = () => {
-    localStorage.removeItem('sih_session');
+    sessionStorage.removeItem('sih_session');
     setUser(null);
     router.push('/login');
   };

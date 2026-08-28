@@ -317,3 +317,5 @@ CREATE POLICY "Allow read settings" ON system_settings FOR SELECT TO authenticat
 CREATE POLICY "Allow update settings" ON system_settings FOR UPDATE TO authenticated USING (
   EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('ADMIN', 'MANAGER'))
 );
+
+

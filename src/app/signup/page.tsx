@@ -13,6 +13,7 @@ export default function SignupPage() {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [signupSuccess, setSignupSuccess] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,6 +30,7 @@ export default function SignupPage() {
 
     try {
       await signup(fullName, email, password, role);
+      setSignupSuccess(true);
     } catch (err: any) {
       setError(err?.message || 'Failed to create account. Please try again.');
     } finally {
@@ -75,7 +77,19 @@ export default function SignupPage() {
             </div>
           )}
 
-          <div>
+          {signupSuccess && (
+            <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-4 text-center">
+              <ShieldCheck className="h-8 w-8 text-blue-400 mx-auto mb-2" />
+              <h3 className="text-sm font-bold text-slate-100 mb-1">Registration Pending</h3>
+              <p className="text-xs text-slate-300">
+                Your account request has been submitted. An administrator must approve your account before you can log in.
+              </p>
+            </div>
+          )}
+
+          {!signupSuccess && (
+            <>
+              <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Full Name</label>
             <div className="relative">
               <User className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
@@ -138,7 +152,6 @@ export default function SignupPage() {
               >
                 <option value="OPERATOR">Cart / AGV Operator</option>
                 <option value="MANAGER">Warehouse Manager</option>
-                <option value="ADMIN">System Administrator</option>
               </select>
             </div>
           </div>
@@ -151,6 +164,8 @@ export default function SignupPage() {
             <UserPlus className="h-4 w-4" />
             {loading ? 'Registering Account...' : 'Sign Up & Continue'}
           </button>
+            </>
+          )}
         </form>
 
         <p className="mt-6 text-center text-xs text-slate-500">

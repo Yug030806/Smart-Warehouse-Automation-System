@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/supabase/AuthProvider';
 import Sidebar from '@/components/Sidebar';
@@ -14,13 +15,18 @@ import {
   Activity, 
   CheckCircle,
   Clock,
-  Navigation
+  Navigation,
+  UserCheck,
+  X
 } from 'lucide-react';
-import { Box, Vehicle, Task, Alert } from '@/lib/database.types';
+import { Box, Vehicle, Task, Alert, Profile } from '@/lib/database.types';
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showPendingPopup, setShowPendingPopup] = useState(false);
+  const [pendingUsers, setPendingUsers] = useState<Profile[]>([]);
   const [stats, setStats] = useState({
     totalBoxes: 0,
     pendingTasks: 0,
@@ -36,6 +42,18 @@ export default function Dashboard() {
   const [vehiclesList, setVehiclesList] = useState<Vehicle[]>([]);
   const [alertsList, setAlertsList] = useState<Alert[]>([]);
   const [selectedFloor, setSelectedFloor] = useState('f-01');
+
+  // Check for pending approval requests when admin logs in
+  useEffect(() => {
+    if (user?.role === 'ADMIN') {
+      const profiles = (supabase.from('profiles').select().data || []) as Profile[];
+      const pending = profiles.filter(p => !p.is_active);
+      if (pending.length > 0) {
+        setPendingUsers(pending);
+        setShowPendingPopup(true);
+      }
+    }
+  }, [user]);
 
   useEffect(() => {
     const fetchDashboardData = () => {
@@ -79,6 +97,72 @@ export default function Dashboard() {
       <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
+
+        {/* Pending Approvals Popup Modal */}
+        {showPendingPopup && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" onClick={() => setShowPendingPopup(false)} />
+            <div className="relative bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 pt-6 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+                    <UserCheck className="h-5 w-5 text-blue-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-100">Pending Approvals</h2>
+                    <p className="text-[11px] text-slate-400">{pendingUsers.length} user{pendingUsers.length !== 1 ? 's' : ''} awaiting approval</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowPendingPopup(false)}
+                  className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* User list */}
+              <div className="px-6 pb-4 max-h-60 overflow-y-auto space-y-2">
+                {pendingUsers.map(u => (
+                  <div key={u.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-800/50 border border-slate-700/50">
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-lg bg-slate-700 flex items-center justify-center text-xs font-bold text-blue-400">
+                        {u.full_name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-slate-200">{u.full_name}</p>
+                        <p className="text-[10px] text-slate-500">{u.email}</p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-orange-950/60 text-orange-400 border border-orange-500/20">
+                      {u.role}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Actions */}
+              <div className="px-6 pb-6 flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowPendingPopup(false);
+                    router.push('/users');
+                  }}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition-colors"
+                >
+                  Review Requests
+                </button>
+                <button
+                  onClick={() => setShowPendingPopup(false)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-300 transition-colors"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         
         <main className="flex-grow p-4 sm:p-6 md:p-8 overflow-y-auto space-y-6 md:space-y-8 overscroll-contain">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

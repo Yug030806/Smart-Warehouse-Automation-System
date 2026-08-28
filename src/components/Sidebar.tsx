@@ -18,7 +18,8 @@ import {
   Settings, 
   LogOut,
   Warehouse,
-  X
+  X,
+  ClipboardCheck
 } from 'lucide-react';
 
 interface SidebarProps {
