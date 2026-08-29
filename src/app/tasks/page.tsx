@@ -41,16 +41,32 @@ export default function TasksPage() {
   usePreventScroll(Boolean(manualAssignTask || showCreateTask));
 
   const loadTasksData = () => {
-    const t = supabase.from('tasks').select().data || [];
+    let t = supabase.from('tasks').select().data || [];
+    let v = supabase.from('vehicles').select().data || [];
+    let b = supabase.from('boxes').select().data || [];
+    let l = supabase.from('locations').select().data || [];
+
+    const pList = supabase.from('profiles').select().data || [];
+    const currentUserProfile = pList.find((p: any) => p.id === user?.id);
+    const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
+    const isRestricted = ['MANAGER', 'SUPERVISOR'].includes(userRole);
+
+    if (isRestricted && assignedWarehouses.length > 0) {
+        const fls = (supabase.from('floors').select().data || []) as any[];
+        const allowedF = fls.filter((f: any) => assignedWarehouses.includes(f.warehouse_id)).map((f: any) => f.id);
+        const allowedL = l.filter((loc: any) => allowedF.includes(loc.floor_id)).map((loc: any) => loc.id);
+
+        v = v.filter((vh: any) => allowedF.includes(vh.current_floor_id));
+        b = b.filter((bx: any) => allowedL.includes(bx.current_location_id));
+        t = t.filter((tsk: any) => allowedL.includes(tsk.source_location_id));
+        l = l.filter((loc: any) => allowedL.includes(loc.id));
+    } else if (isRestricted) {
+        t = []; v = []; b = []; l = [];
+    }
+
     setTasks(t as Task[]);
-
-    const v = supabase.from('vehicles').select().data || [];
     setVehicles(v as Vehicle[]);
-
-    const b = supabase.from('boxes').select().data || [];
     setBoxes(b as Box[]);
-
-    const l = supabase.from('locations').select().data || [];
     setLocations(l as Location[]);
   };
 

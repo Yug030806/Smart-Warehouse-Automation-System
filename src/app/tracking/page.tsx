@@ -375,6 +375,7 @@ export default function TrackingPage() {
           x_position: outLoc.x,
           y_position: outLoc.y,
           current_location_id: outLoc.id,
+          status: 'OFFLINE'
         }).eq('id', selectedVehicle.id);
 
         loadData();
@@ -589,8 +590,11 @@ export default function TrackingPage() {
                 {vehicles.map((v) => (
                   <button
                     key={v.id}
+                    disabled={v.status === 'OFFLINE'}
                     onClick={() => handleSelectVehicle(v)}
                     className={`w-full text-left p-4 rounded-xl border transition-all duration-200 ${
+                      v.status === 'OFFLINE' ? 'opacity-30 cursor-not-allowed' : ''
+                    } ${
                       selectedVehicleId === v.id
                         ? 'border-blue-500 bg-blue-600/10 text-slate-100 shadow-lg ring-1 ring-blue-500/50'
                         : 'border-slate-900 bg-slate-950/40 text-slate-400 hover:border-slate-700 hover:bg-slate-900/30'

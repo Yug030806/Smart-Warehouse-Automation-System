@@ -10,10 +10,22 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [bgStyle, setBgStyle] = useState({ transform: 'scale(1.05)', transition: 'transform 0.2s ease-out' });
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    const { clientX, clientY } = e;
+    const moveX = (clientX / window.innerWidth - 0.5) * 30; // 15px max movement
+    const moveY = (clientY / window.innerHeight - 0.5) * 30;
+    setBgStyle({
+      transform: `translate(${moveX}px, ${moveY}px) scale(1.05)`,
+      transition: 'transform 0.1s ease-out'
+    });
+  };
 
   const credentials = [
     { role: 'ADMIN' as const, email: 'admin@demo.com', pass: 'admin123' },
     { role: 'MANAGER' as const, email: 'manager@demo.com', pass: 'manager123' },
+    { role: 'SUPERVISOR' as const, email: 'supervisor@demo.com', pass: 'supervisor123' },
     { role: 'OPERATOR' as const, email: 'operator@demo.com', pass: 'operator123' },
   ];
 
@@ -36,6 +48,8 @@ export default function LoginPage() {
           ? 'ADMIN'
           : email.toLowerCase().includes('manager')
           ? 'MANAGER'
+          : email.toLowerCase().includes('supervisor')
+          ? 'SUPERVISOR'
           : 'OPERATOR';
         await login(email, role, password);
       } else {
@@ -49,11 +63,19 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-slate-950 px-4 py-12 overflow-hidden">
-      {/* Blurred logo background */}
-      <div className="absolute inset-0 z-0 flex items-center justify-center">
-        <img src="/logo.png" alt="" className="w-full h-full object-cover opacity-40 blur-sm scale-105" />
-        <div className="absolute inset-0 bg-slate-955/50"></div>
+    <div 
+      className="relative flex min-h-screen items-center justify-center bg-slate-950 px-4 py-12 overflow-hidden"
+      onMouseMove={handleMouseMove}
+    >
+      {/* Logo background */}
+      <div className="absolute inset-0 z-0 flex items-center justify-center pointer-events-none">
+        <img 
+          src="/logo.png" 
+          alt="" 
+          className="w-full h-full object-cover" 
+          style={bgStyle}
+        />
+        <div className="absolute inset-0 bg-slate-950/50"></div>
       </div>
 
       <div className="relative z-10 w-full max-w-md rounded-2xl border border-slate-800/80 bg-slate-900/70 p-8 shadow-2xl backdrop-blur-xl">

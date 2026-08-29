@@ -1,4 +1,4 @@
-export type UserRole = 'ADMIN' | 'MANAGER' | 'OPERATOR';
+export type UserRole = 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'OPERATOR';
 
 export interface ActionPermissions {
   canCreateTask: boolean;
@@ -33,7 +33,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, ActionPermissions> = {
     canManageBoxes: true,
     canManageVehicles: true,
     canManageWarehouses: true,
-    canManageUsers: false,
+    canManageUsers: true,
     canEditSettings: false, // Read-only access to settings
     canScanQR: true,
     canResolveAlerts: true,
@@ -50,20 +50,32 @@ export const ROLE_PERMISSIONS: Record<UserRole, ActionPermissions> = {
     canScanQR: true,
     canResolveAlerts: true,
   },
+  SUPERVISOR: {
+    canCreateTask: false,
+    canAssignTask: true,
+    canCancelTask: false,
+    canManageBoxes: true,
+    canManageVehicles: true,
+    canManageWarehouses: false,
+    canManageUsers: false,
+    canEditSettings: false,
+    canScanQR: true,
+    canResolveAlerts: true,
+  },
 };
 
 export const ROUTE_ALLOWED_ROLES: Record<string, UserRole[]> = {
-  '/dashboard': ['ADMIN', 'MANAGER', 'OPERATOR'],
-  '/warehouses': ['ADMIN', 'MANAGER'],
-  '/boxes': ['ADMIN', 'MANAGER', 'OPERATOR'],
-  '/vehicles': ['ADMIN', 'MANAGER', 'OPERATOR'],
-  '/tasks': ['ADMIN', 'MANAGER', 'OPERATOR'],
-  '/tracking': ['ADMIN', 'MANAGER', 'OPERATOR'],
-  '/scanner': ['ADMIN', 'MANAGER', 'OPERATOR'],
-  '/analytics': ['ADMIN', 'MANAGER', 'OPERATOR'],
-  '/alerts': ['ADMIN', 'MANAGER', 'OPERATOR'],
-  '/audit-log': ['ADMIN', 'MANAGER', 'OPERATOR'],
-  '/users': ['ADMIN'],
+  '/dashboard': ['ADMIN', 'MANAGER', 'SUPERVISOR', 'OPERATOR'],
+  '/warehouses': ['ADMIN', 'MANAGER', 'SUPERVISOR'],
+  '/boxes': ['ADMIN', 'MANAGER', 'SUPERVISOR', 'OPERATOR'],
+  '/vehicles': ['ADMIN', 'MANAGER', 'SUPERVISOR', 'OPERATOR'],
+  '/tasks': ['ADMIN', 'MANAGER', 'SUPERVISOR', 'OPERATOR'],
+  '/tracking': ['ADMIN', 'MANAGER', 'SUPERVISOR', 'OPERATOR'],
+  '/scanner': ['ADMIN', 'MANAGER', 'SUPERVISOR', 'OPERATOR'],
+  '/analytics': ['ADMIN', 'MANAGER', 'SUPERVISOR', 'OPERATOR'],
+  '/alerts': ['ADMIN', 'MANAGER', 'SUPERVISOR', 'OPERATOR'],
+  '/audit-log': ['ADMIN', 'MANAGER', 'SUPERVISOR', 'OPERATOR'],
+  '/users': ['ADMIN', 'MANAGER'],
   '/settings': ['ADMIN', 'MANAGER'],
 };
 

@@ -202,9 +202,10 @@ class MockDB {
 
     this.state = {
       profiles: [
-        { id: 'u-admin', full_name: 'Super Admin', email: 'admin@demo.com', role: 'ADMIN', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-        { id: 'u-manager', full_name: 'Warehouse Manager', email: 'manager@demo.com', role: 'MANAGER', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-        { id: 'u-operator', full_name: 'Cart Operator', email: 'operator@demo.com', role: 'OPERATOR', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'u-admin', full_name: 'Super Admin', email: 'admin@demo.com', role: 'ADMIN', assigned_warehouse_ids: [], is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'u-manager', full_name: 'Warehouse Manager', email: 'manager@demo.com', role: 'MANAGER', assigned_warehouse_ids: ['w-01'], is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'u-supervisor', full_name: 'Warehouse Supervisor', email: 'supervisor@demo.com', role: 'SUPERVISOR', assigned_warehouse_ids: ['w-01'], is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'u-operator', full_name: 'Cart Operator', email: 'operator@demo.com', role: 'OPERATOR', assigned_warehouse_ids: [], is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
       ],
       warehouses: initialWarehouses,
       floors: initialFloors,
@@ -223,7 +224,9 @@ class MockDB {
         { id: 'log-01', user_email: 'system', action: 'SEED_DATA', object_type: 'SYSTEM', object_id: 'sys', previous_state: null, new_state: { seeded: true }, timestamp: new Date().toISOString() }
       ],
       notifications: [
-        { id: 'notif-01', user_id: 'u-manager', title: 'New Urgent Task Created', message: 'Task TSK-1001 requires attention.', type: 'URGENT_TASK', is_read: false, related_id: 'task-1001', created_at: new Date().toISOString() }
+        { id: 'notif-01', user_id: 'u-manager', title: 'New Urgent Task Created', message: 'Task TSK-1001 requires attention.', type: 'URGENT_TASK', is_read: false, related_id: 'task-1001', created_at: new Date().toISOString() },
+        { id: 'notif-02', user_id: 'u-supervisor', title: 'Vehicle Maintenance Required', message: 'CART-03 battery is critically low and requires immediate maintenance.', type: 'SYSTEM_ALERT', is_read: false, related_id: 'v-03', created_at: new Date().toISOString() },
+        { id: 'notif-03', user_id: 'u-supervisor', title: 'New Task Pending', message: 'Task TSK-1001 is awaiting assignment.', type: 'INFO', is_read: false, related_id: 'task-1001', created_at: new Date().toISOString() }
       ],
       settings: initialSettings
     };
@@ -440,9 +443,10 @@ class MockDB {
     // Re-initialize class state
     this.state = {
       profiles: [
-        { id: 'u-admin', full_name: 'Super Admin', email: 'admin@demo.com', role: 'ADMIN', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-        { id: 'u-manager', full_name: 'Warehouse Manager', email: 'manager@demo.com', role: 'MANAGER', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-        { id: 'u-operator', full_name: 'Cart Operator', email: 'operator@demo.com', role: 'OPERATOR', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'u-admin', full_name: 'Super Admin', email: 'admin@demo.com', role: 'ADMIN', assigned_warehouse_ids: [], is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'u-manager', full_name: 'Warehouse Manager', email: 'manager@demo.com', role: 'MANAGER', assigned_warehouse_ids: ['w-01'], is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'u-supervisor', full_name: 'Warehouse Supervisor', email: 'supervisor@demo.com', role: 'SUPERVISOR', assigned_warehouse_ids: ['w-01'], is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'u-operator', full_name: 'Cart Operator', email: 'operator@demo.com', role: 'OPERATOR', assigned_warehouse_ids: [], is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
       ],
       warehouses: initialWarehouses,
       floors: initialFloors,
@@ -510,7 +514,9 @@ class MockDB {
         { id: 'log-01', user_email: 'system', action: 'RESET_DEMO', object_type: 'SYSTEM', object_id: 'sys', previous_state: null, new_state: { reset: true }, timestamp: new Date().toISOString() }
       ],
       notifications: [
-        { id: 'notif-01', user_id: 'u-manager', title: 'New Urgent Task Created', message: 'Task TSK-1001 requires attention.', type: 'URGENT_TASK', is_read: false, related_id: 'task-1001', created_at: new Date().toISOString() }
+        { id: 'notif-01', user_id: 'u-manager', title: 'New Urgent Task Created', message: 'Task TSK-1001 requires attention.', type: 'URGENT_TASK', is_read: false, related_id: 'task-1001', created_at: new Date().toISOString() },
+        { id: 'notif-02', user_id: 'u-supervisor', title: 'Vehicle Maintenance Required', message: 'CART-03 battery is critically low and requires immediate maintenance.', type: 'SYSTEM_ALERT', is_read: false, related_id: 'v-03', created_at: new Date().toISOString() },
+        { id: 'notif-03', user_id: 'u-supervisor', title: 'New Task Pending', message: 'Task TSK-1001 is awaiting assignment.', type: 'INFO', is_read: false, related_id: 'task-1001', created_at: new Date().toISOString() }
       ],
       settings: initialSettings
     };

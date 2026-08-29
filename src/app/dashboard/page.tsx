@@ -57,10 +57,31 @@ export default function Dashboard() {
 
   useEffect(() => {
     const fetchDashboardData = () => {
-      const boxes = (supabase.from('boxes').select().data || []) as Box[];
-      const vehicles = (supabase.from('vehicles').select().data || []) as Vehicle[];
-      const tasks = (supabase.from('tasks').select().data || []) as Task[];
-      const alerts = (supabase.from('alerts').select().eq('is_acknowledged', false).data || []) as Alert[];
+      let boxes = (supabase.from('boxes').select().data || []) as Box[];
+      let vehicles = (supabase.from('vehicles').select().data || []) as Vehicle[];
+      let tasks = (supabase.from('tasks').select().data || []) as Task[];
+      let alerts = (supabase.from('alerts').select().eq('is_acknowledged', false).data || []) as Alert[];
+
+      const pList = supabase.from('profiles').select().data || [];
+      const currentUserProfile = pList.find((p: any) => p.id === user?.id);
+      const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
+      const isRestricted = ['MANAGER', 'SUPERVISOR'].includes(user?.user_metadata?.role as string);
+
+      if (isRestricted && assignedWarehouses.length > 0) {
+        const fls = (supabase.from('floors').select().data || []) as any[];
+        const locs = (supabase.from('locations').select().data || []) as any[];
+        const allowedF = fls.filter((f: any) => assignedWarehouses.includes(f.warehouse_id)).map((f: any) => f.id);
+        const allowedL = locs.filter((l: any) => allowedF.includes(l.floor_id)).map((l: any) => l.id);
+
+        vehicles = vehicles.filter((v: any) => allowedF.includes(v.current_floor_id));
+        boxes = boxes.filter((b: any) => allowedL.includes(b.current_location_id));
+        tasks = tasks.filter((t: any) => allowedL.includes(t.source_location_id));
+      } else if (isRestricted) {
+        vehicles = [];
+        boxes = [];
+        tasks = [];
+        alerts = [];
+      }
 
       const totalBoxes = boxes.length;
       const pendingTasks = tasks.filter(t => t.status === 'PENDING').length;

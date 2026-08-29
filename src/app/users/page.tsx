@@ -7,29 +7,31 @@ import RoleGuard from '@/components/RoleGuard';
 import { useAuth } from '@/lib/supabase/AuthProvider';
 import { usePreventScroll } from '@/lib/usePreventScroll';
 import { Plus, Search, Shield, UserCheck, Trash2, ShieldAlert } from 'lucide-react';
-import { Profile } from '@/lib/database.types';
+import { Profile, Warehouse } from '@/lib/database.types';
 
 export default function UsersPage() {
   const { user } = useAuth();
   const userRole = user?.user_metadata?.role || 'OPERATOR';
   const [users, setUsers] = useState<Profile[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Add User states
   const [showAddModal, setShowAddModal] = useState(false);
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
-  const [role, setRole] = useState<'ADMIN' | 'MANAGER' | 'OPERATOR'>('OPERATOR');
+  const [role, setRole] = useState<'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'OPERATOR'>('OPERATOR');
+  const [assignedWarehouses, setAssignedWarehouses] = useState<string[]>([]);
 
   // Edit User states
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
   const [editName, setEditName] = useState('');
-  const [editRole, setEditRole] = useState<'ADMIN' | 'MANAGER' | 'OPERATOR'>('OPERATOR');
+  const [editRole, setEditRole] = useState<'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'OPERATOR'>('OPERATOR');
+  const [editAssignedWarehouses, setEditAssignedWarehouses] = useState<string[]>([]);
 
   usePreventScroll(Boolean(editingUser || showAddModal));
 
-  const loadUsers = () => {
-    // Sync any registered users from localStorage into mockDb profiles
+  const loadData = () => {
     try {
       const regUsersStr = localStorage.getItem('sih_registered_users');
       if (regUsersStr) {
@@ -45,23 +47,25 @@ export default function UsersPage() {
               full_name: ru.fullName,
               email: ru.email,
               role: ru.role,
-              is_active: true,
+              is_active: false,
+              assigned_warehouse_ids: [],
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString()
             });
           }
         });
       }
-    } catch (e) {
-      // ignore sync errors
-    }
+    } catch (e) {}
 
     const list = supabase.from('profiles').select().data || [];
     setUsers((list as Profile[]).map(p => ({ ...p })));
+
+    const wList = supabase.from('warehouses').select().data || [];
+    setWarehouses(wList as Warehouse[]);
   };
 
   useEffect(() => {
-    loadUsers();
+    loadData();
   }, []);
 
   const handleAddUserSubmit = (e: React.FormEvent) => {
@@ -73,6 +77,7 @@ export default function UsersPage() {
       full_name: name,
       email,
       role,
+      assigned_warehouse_ids: ['MANAGER', 'SUPERVISOR'].includes(role) ? assignedWarehouses : [],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       is_active: true
@@ -82,18 +87,29 @@ export default function UsersPage() {
     setShowAddModal(false);
     setEmail('');
     setName('');
-    loadUsers();
+    setAssignedWarehouses([]);
+    loadData();
   };
 
-  const handleDeactivate = (id: string, currentStatus: boolean) => {
-    // Directly update mockDb profile (same pattern as delete which works instantly)
+  const handleDeactivate = (id: string, currentStatus: boolean, profileRole: string) => {
+    if (!currentStatus && ['MANAGER', 'SUPERVISOR'].includes(profileRole)) {
+      // If approving a manager/supervisor, force them to go through the edit modal to assign warehouses
+      const u = users.find(x => x.id === id);
+      if (u) {
+        setEditingUser(u);
+        setEditName(u.full_name);
+        setEditRole(u.role as any);
+        setEditAssignedWarehouses(u.assigned_warehouse_ids || []);
+      }
+      return;
+    }
+
     const mockDb = require('@/lib/supabase/mockDb').default;
     const profile = mockDb.getProfiles().find((p: any) => p.id === id);
     if (profile) {
       mockDb.saveProfile({ ...profile, is_active: !currentStatus });
     }
 
-    // Also sync is_active back to sih_registered_users so login checks pick it up
     try {
       const regUsersStr = localStorage.getItem('sih_registered_users');
       if (regUsersStr) {
@@ -103,30 +119,46 @@ export default function UsersPage() {
       }
     } catch (e) { /* ignore */ }
 
-    loadUsers();
+    loadData();
   };
-
-
 
   const handleEditUserSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser || !editName) return;
 
-    supabase.from('profiles').update({
+    const updates: any = {
       full_name: editName,
-      role: editRole
-    }).eq('id', editingUser.id);
+      role: editRole,
+    };
+    
+    // Always activate if saving from edit modal when pending
+    if (!editingUser.is_active) {
+      updates.is_active = true;
+      try {
+        const regUsersStr = localStorage.getItem('sih_registered_users');
+        if (regUsersStr) {
+          const regUsers = JSON.parse(regUsersStr);
+          const updated = regUsers.map((u: any) => u.id === editingUser.id ? { ...u, is_active: true } : u);
+          localStorage.setItem('sih_registered_users', JSON.stringify(updated));
+        }
+      } catch (e) {}
+    }
+
+    if (['MANAGER', 'SUPERVISOR'].includes(editRole)) {
+      updates.assigned_warehouse_ids = editAssignedWarehouses;
+    } else {
+      updates.assigned_warehouse_ids = [];
+    }
+
+    supabase.from('profiles').update(updates).eq('id', editingUser.id);
 
     setEditingUser(null);
-    loadUsers();
+    loadData();
   };
 
   const handleDeleteUser = (id: string) => {
-    // Delete from mockDb profiles
     const mockDb = require('@/lib/supabase/mockDb').default;
     mockDb.deleteProfile(id);
-
-    // Also remove from registered users localStorage
     try {
       const regUsersStr = localStorage.getItem('sih_registered_users');
       if (regUsersStr) {
@@ -134,31 +166,36 @@ export default function UsersPage() {
         const filtered = regUsers.filter((u: any) => u.id !== id);
         localStorage.setItem('sih_registered_users', JSON.stringify(filtered));
       }
-    } catch (e) { /* ignore */ }
-
-    loadUsers();
+    } catch (e) {}
+    loadData();
   };
 
+  // Filter users based on search and roles
   const filtered = users.filter(u => {
     const term = searchQuery.toLowerCase();
-    return u.full_name.toLowerCase().includes(term) || u.email.toLowerCase().includes(term);
+    const matchesSearch = u.full_name.toLowerCase().includes(term) || u.email.toLowerCase().includes(term);
+    
+    // Managers can't see Admins
+    if (userRole === 'MANAGER' && u.role === 'ADMIN') return false;
+    
+    return matchesSearch;
   });
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <RoleGuard allowedRoles={['ADMIN']}>
+    <RoleGuard allowedRoles={['ADMIN', 'MANAGER']}>
       <div className="flex h-screen w-full overflow-hidden bg-slate-950">
         <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
         <div className="flex-grow flex flex-col min-w-0 h-screen overflow-hidden">
           <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
 
         <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1 overscroll-contain">
-          {userRole !== 'ADMIN' ? (
+          {!['ADMIN', 'MANAGER'].includes(userRole) ? (
             <div className="rounded-xl border border-red-900/30 bg-red-950/10 p-12 text-center text-slate-400 space-y-4 max-w-lg mx-auto mt-12">
               <ShieldAlert className="h-16 w-16 text-red-500 mx-auto" />
               <h2 className="text-xl font-bold text-slate-100">Access Restricted</h2>
-              <p className="text-xs text-slate-400">User Management & Role Permissions administration is strictly limited to System Administrators (ADMIN role).</p>
+              <p className="text-xs text-slate-400">User Management is limited to Admin and Manager roles.</p>
             </div>
           ) : (
             <>
@@ -215,13 +252,13 @@ export default function UsersPage() {
                       </td>
                       <td className="py-4 text-right space-x-3">
                         <button
-                          onClick={() => { setEditingUser(u); setEditName(u.full_name); setEditRole(u.role as any); }}
+                          onClick={() => { setEditingUser(u); setEditName(u.full_name); setEditRole(u.role as any); setEditAssignedWarehouses(u.assigned_warehouse_ids || []); }}
                           className="text-xs text-slate-300 hover:text-slate-100 font-semibold"
                         >
                           Edit
                         </button>
                         <button
-                          onClick={() => handleDeactivate(u.id, u.is_active)}
+                          onClick={() => handleDeactivate(u.id, u.is_active, u.role)}
                           className="text-xs text-blue-400 hover:text-blue-300 font-semibold"
                         >
                           {u.is_active ? 'Deactivate' : 'Approve'}
@@ -258,7 +295,7 @@ export default function UsersPage() {
                   required
                   value={editName}
                   onChange={e => setEditName(e.target.value)}
-                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-100"
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-100 outline-none"
                 />
               </div>
 
@@ -267,18 +304,42 @@ export default function UsersPage() {
                 <select
                   value={editRole}
                   onChange={e => setEditRole(e.target.value as any)}
-                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-400"
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-400 outline-none"
                 >
-                  <option value="ADMIN">ADMIN</option>
+                  {userRole === 'ADMIN' && <option value="ADMIN">ADMIN</option>}
                   <option value="MANAGER">MANAGER</option>
+                  <option value="SUPERVISOR">SUPERVISOR</option>
                   <option value="OPERATOR">OPERATOR</option>
                 </select>
               </div>
+
+              {['MANAGER', 'SUPERVISOR'].includes(editRole) && (
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Assigned Warehouses</label>
+                  <div className="space-y-1 mt-1 max-h-32 overflow-y-auto border border-slate-800 rounded-lg p-2 bg-slate-950/50">
+                    {warehouses.map(w => (
+                      <label key={w.id} className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer p-1 hover:bg-slate-800 rounded">
+                        <input
+                          type="checkbox"
+                          checked={editAssignedWarehouses.includes(w.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) setEditAssignedWarehouses([...editAssignedWarehouses, w.id]);
+                            else setEditAssignedWarehouses(editAssignedWarehouses.filter(id => id !== w.id));
+                          }}
+                          className="rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-600"
+                        />
+                        {w.name}
+                      </label>
+                    ))}
+                    {warehouses.length === 0 && <span className="text-slate-500 text-xs italic">No warehouses available.</span>}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
               <button type="button" onClick={() => setEditingUser(null)} className="px-4 py-2 text-xs font-semibold text-slate-400">Cancel</button>
-              <button type="submit" className="px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 rounded-lg">Update Profile</button>
+              <button type="submit" className="px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 rounded-lg">{!editingUser.is_active ? 'Approve & Save' : 'Update Profile'}</button>
             </div>
           </form>
         </div>
@@ -299,7 +360,7 @@ export default function UsersPage() {
                   placeholder="e.g. John Doe"
                   value={name}
                   onChange={e => setName(e.target.value)}
-                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-100"
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-100 outline-none"
                 />
               </div>
 
@@ -311,7 +372,7 @@ export default function UsersPage() {
                   placeholder="e.g. user@demo.com"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-100"
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-100 outline-none"
                 />
               </div>
 
@@ -320,13 +381,37 @@ export default function UsersPage() {
                 <select
                   value={role}
                   onChange={e => setRole(e.target.value as any)}
-                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-400"
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-400 outline-none"
                 >
-                  <option value="ADMIN">ADMIN</option>
+                  {userRole === 'ADMIN' && <option value="ADMIN">ADMIN</option>}
                   <option value="MANAGER">MANAGER</option>
+                  <option value="SUPERVISOR">SUPERVISOR</option>
                   <option value="OPERATOR">OPERATOR</option>
                 </select>
               </div>
+
+              {['MANAGER', 'SUPERVISOR'].includes(role) && (
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Assigned Warehouses</label>
+                  <div className="space-y-1 mt-1 max-h-32 overflow-y-auto border border-slate-800 rounded-lg p-2 bg-slate-950/50">
+                    {warehouses.map(w => (
+                      <label key={w.id} className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer p-1 hover:bg-slate-800 rounded">
+                        <input
+                          type="checkbox"
+                          checked={assignedWarehouses.includes(w.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) setAssignedWarehouses([...assignedWarehouses, w.id]);
+                            else setAssignedWarehouses(assignedWarehouses.filter(id => id !== w.id));
+                          }}
+                          className="rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-600"
+                        />
+                        {w.name}
+                      </label>
+                    ))}
+                    {warehouses.length === 0 && <span className="text-slate-500 text-xs italic">No warehouses available.</span>}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">

@@ -162,7 +162,7 @@ export default function WarehousesPage() {
   const handleAddLocSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFloor || !locName) return;
-    const zList = supabase.from('zones').select().eq('floor_id', selectedFloor.id).data || [];
+    let zList = supabase.from('zones').select().eq('floor_id', selectedFloor.id).data || [];
     const zoneId = zList.length > 0 ? zList[0].id : 'z-1a';
 
     const newLoc = {

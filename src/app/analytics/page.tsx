@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
+import { useAuth } from '@/lib/supabase/AuthProvider';
 import { 
   BarChart, 
   Bar, 
@@ -21,19 +22,55 @@ export default function AnalyticsPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [boxes, setBoxes] = useState<Box[]>([]);
+  const { user } = useAuth();
+  const userRole = user?.user_metadata?.role || 'OPERATOR';
 
   // Filters state
   const [filterFloor, setFilterFloor] = useState('ALL');
   const [filterPriority, setFilterPriority] = useState('ALL');
 
   useEffect(() => {
-    const list = supabase.from('tasks').select().data || [];
+    let list = (supabase.from('tasks').select().data || []) as any[];
+    const pList = supabase.from('profiles').select().data || [];
+    const currentUserProfile = pList.find((p: any) => p.id === user?.id);
+    const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
+    const isRestricted = ['MANAGER', 'SUPERVISOR'].includes(userRole as string);
+    
+    if (isRestricted) {
+      if (typeof wList !== 'undefined') wList = wList.filter((w: any) => assignedWarehouses.includes(w.id));
+      if (typeof list !== 'undefined' && list.length > 0 && list[0].name && list[0].address) list = list.filter((w: any) => assignedWarehouses.includes(w.id));
+      
+      const allowedW = typeof wList !== 'undefined' ? wList.map((w: any) => w.id) : (typeof list !== 'undefined' && list[0]?.name && list[0]?.address ? list.map((w: any) => w.id) : assignedWarehouses);
+      
+      if (typeof fList !== 'undefined') fList = fList.filter((f: any) => allowedW.includes(f.warehouse_id));
+      if (typeof fls !== 'undefined') fls = fls.filter((f: any) => allowedW.includes(f.warehouse_id));
+      
+      const allowedF = typeof fList !== 'undefined' ? fList.map((f: any) => f.id) : (typeof fls !== 'undefined' ? fls.map((f: any) => f.id) : []);
+      
+      if (typeof zList !== 'undefined') zList = zList.filter((z: any) => allowedF.includes(z.floor_id));
+      
+      if (typeof lList !== 'undefined') lList = lList.filter((l: any) => allowedF.includes(l.floor_id));
+      if (typeof locs !== 'undefined') locs = locs.filter((l: any) => allowedF.includes(l.floor_id));
+      
+      const allowedL = typeof lList !== 'undefined' ? lList.map((l: any) => l.id) : (typeof locs !== 'undefined' ? locs.map((l: any) => l.id) : []);
+
+      if (typeof vList !== 'undefined') vList = vList.filter((v: any) => allowedF.includes(v.current_floor_id));
+      if (typeof list !== 'undefined' && list.length > 0 && list[0].vehicle_code) list = list.filter((v: any) => allowedF.includes(v.current_floor_id));
+
+      if (typeof bList !== 'undefined') bList = bList.filter((b: any) => allowedL.includes(b.current_location_id));
+      if (typeof list !== 'undefined' && list.length > 0 && list[0].box_code) list = list.filter((b: any) => allowedL.includes(b.current_location_id));
+
+      if (typeof tList !== 'undefined') tList = tList.filter((t: any) => allowedL.includes(t.source_location_id));
+      if (typeof tsk !== 'undefined') tsk = tsk.filter((t: any) => allowedL.includes(t.source_location_id));
+      if (typeof list !== 'undefined' && list.length > 0 && list[0].task_code) list = list.filter((t: any) => allowedL.includes(t.source_location_id));
+    }
+
     setTasks(list as Task[]);
 
-    const vList = supabase.from('vehicles').select().data || [];
+    let vList = supabase.from('vehicles').select().data || [];
     setVehicles(vList as Vehicle[]);
 
-    const bList = supabase.from('boxes').select().data || [];
+    let bList = supabase.from('boxes').select().data || [];
     setBoxes(bList as Box[]);
   }, []);
 

@@ -7,9 +7,9 @@ export interface UserSession {
   email: string;
   user_metadata: {
     full_name: string;
-    role: 'ADMIN' | 'MANAGER' | 'OPERATOR';
+    role: 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'OPERATOR';
   };
-  role: 'ADMIN' | 'MANAGER' | 'OPERATOR';
+  role: 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'OPERATOR';
 }
 
 export interface RegisteredUser {
@@ -17,15 +17,15 @@ export interface RegisteredUser {
   fullName: string;
   email: string;
   password?: string;
-  role: 'ADMIN' | 'MANAGER' | 'OPERATOR';
+  role: 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'OPERATOR';
   is_active: boolean;
 }
 
 interface AuthContextType {
   user: UserSession | null;
   loading: boolean;
-  login: (email: string, role?: 'ADMIN' | 'MANAGER' | 'OPERATOR', password?: string) => Promise<boolean>;
-  signup: (fullName: string, email: string, password: string, role: 'ADMIN' | 'MANAGER' | 'OPERATOR') => Promise<boolean>;
+  login: (email: string, role?: 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'OPERATOR', password?: string) => Promise<boolean>;
+  signup: (fullName: string, email: string, password: string, role: 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'OPERATOR') => Promise<boolean>;
   logout: () => void;
 }
 
@@ -81,7 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const regUser = registeredUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
-    let effectiveRole: 'ADMIN' | 'MANAGER' | 'OPERATOR' = role || 'OPERATOR';
+    let effectiveRole: 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'OPERATOR' = role || 'OPERATOR';
     let fullName = 'Warehouse User';
 
     if (regUser) {
@@ -105,6 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const names = {
         ADMIN: 'Super Admin',
         MANAGER: 'Warehouse Manager',
+        SUPERVISOR: 'Warehouse Supervisor',
         OPERATOR: 'Cart Operator',
       };
       fullName = names[effectiveRole];
@@ -125,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return true;
   };
 
-  const signup = async (fullName: string, email: string, password: string, role: 'ADMIN' | 'MANAGER' | 'OPERATOR'): Promise<boolean> => {
+  const signup = async (fullName: string, email: string, password: string, role: 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'OPERATOR'): Promise<boolean> => {
     const regUsersStr = localStorage.getItem('sih_registered_users');
     let registeredUsers: RegisteredUser[] = [];
     if (regUsersStr) {
@@ -160,6 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       full_name: newUser.fullName,
       email: newUser.email,
       role: newUser.role,
+      assigned_warehouse_ids: [],
       is_active: false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()

@@ -2,7 +2,8 @@ export interface Profile {
   id: string;
   full_name: string;
   email: string;
-  role: 'ADMIN' | 'MANAGER' | 'OPERATOR';
+  role: 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'OPERATOR';
+  assigned_warehouse_ids?: string[];
   avatar_url?: string;
   created_at: string;
   updated_at: string;

@@ -9,11 +9,22 @@ export default function SignupPage() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'ADMIN' | 'MANAGER' | 'OPERATOR'>('OPERATOR');
+  const [role, setRole] = useState<'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'OPERATOR'>('OPERATOR');
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [signupSuccess, setSignupSuccess] = useState(false);
+  const [bgStyle, setBgStyle] = useState({ transform: 'scale(1.05)', transition: 'transform 0.2s ease-out' });
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    const { clientX, clientY } = e;
+    const moveX = (clientX / window.innerWidth - 0.5) * 30; // 15px max movement
+    const moveY = (clientY / window.innerHeight - 0.5) * 30;
+    setBgStyle({
+      transform: `translate(${moveX}px, ${moveY}px) scale(1.05)`,
+      transition: 'transform 0.1s ease-out'
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,10 +50,18 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-slate-950 px-4 py-12 overflow-hidden">
+    <div 
+      className="relative flex min-h-screen items-center justify-center bg-slate-950 px-4 py-12 overflow-hidden"
+      onMouseMove={handleMouseMove}
+    >
       {/* Blurred logo background */}
-      <div className="absolute inset-0 z-0 flex items-center justify-center">
-        <img src="/logo.png" alt="" className="w-full h-full object-cover opacity-40 blur-sm scale-105" />
+      <div className="absolute inset-0 z-0 flex items-center justify-center pointer-events-none">
+        <img 
+          src="/logo.png" 
+          alt="" 
+          className="w-full h-full object-cover" 
+          style={bgStyle}
+        />
         <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"></div>
       </div>
 
@@ -147,10 +166,11 @@ export default function SignupPage() {
               <ShieldCheck className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
               <select
                 value={role}
-                onChange={(e) => setRole(e.target.value as 'ADMIN' | 'MANAGER' | 'OPERATOR')}
+                onChange={(e) => setRole(e.target.value as 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'OPERATOR')}
                 className="w-full rounded-xl border border-slate-800 bg-slate-950/80 pl-10 pr-4 py-2.5 text-xs text-slate-100 outline-none transition duration-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 appearance-none cursor-pointer"
               >
                 <option value="OPERATOR">Cart / AGV Operator</option>
+                <option value="SUPERVISOR">Warehouse Supervisor</option>
                 <option value="MANAGER">Warehouse Manager</option>
               </select>
             </div>
