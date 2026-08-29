@@ -51,13 +51,13 @@ export const ROLE_PERMISSIONS: Record<UserRole, ActionPermissions> = {
     canResolveAlerts: true,
   },
   SUPERVISOR: {
-    canCreateTask: false,
+    canCreateTask: true,
     canAssignTask: true,
-    canCancelTask: false,
+    canCancelTask: true,
     canManageBoxes: true,
     canManageVehicles: true,
-    canManageWarehouses: false,
-    canManageUsers: false,
+    canManageWarehouses: true,
+    canManageUsers: true,
     canEditSettings: false,
     canScanQR: true,
     canResolveAlerts: true,
@@ -75,8 +75,8 @@ export const ROUTE_ALLOWED_ROLES: Record<string, UserRole[]> = {
   '/analytics': ['ADMIN', 'MANAGER', 'SUPERVISOR', 'OPERATOR'],
   '/alerts': ['ADMIN', 'MANAGER', 'SUPERVISOR', 'OPERATOR'],
   '/audit-log': ['ADMIN', 'MANAGER', 'SUPERVISOR', 'OPERATOR'],
-  '/users': ['ADMIN', 'MANAGER'],
-  '/settings': ['ADMIN', 'MANAGER'],
+  '/users': ['ADMIN', 'MANAGER', 'SUPERVISOR'],
+  '/settings': ['ADMIN', 'MANAGER', 'SUPERVISOR'],
 };
 
 export function getPermissions(role?: string): ActionPermissions {

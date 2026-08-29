@@ -4,10 +4,13 @@ import { supabase } from '@/lib/supabase/client';
 import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
 import RoleGuard from '@/components/RoleGuard';
+import { useAuth } from '@/lib/supabase/AuthProvider';
 import { Plus, Edit2, Trash2, MapPin, Layers, Network } from 'lucide-react';
 import { Warehouse, Floor, Location } from '@/lib/database.types';
 
 export default function WarehousesPage() {
+  const { user } = useAuth();
+  const userRole = user?.user_metadata?.role || 'OPERATOR';
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [selectedWarehouse, setSelectedWarehouse] = useState<Warehouse | null>(null);
   const [floors, setFloors] = useState<Floor[]>([]);
@@ -52,7 +55,19 @@ export default function WarehousesPage() {
   const [zoneColor, setZoneColor] = useState('#3b82f6');
 
   const loadData = () => {
-    const w = supabase.from('warehouses').select().data || [];
+    let w = supabase.from('warehouses').select().data || [];
+    
+    const pList = supabase.from('profiles').select().data || [];
+    const currentUserProfile = pList.find((p: any) => p.id === user?.id);
+    const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
+    const isRestricted = ['MANAGER', 'SUPERVISOR'].includes(userRole);
+
+    if (isRestricted && assignedWarehouses.length > 0) {
+      w = w.filter((warehouse: any) => assignedWarehouses.includes(warehouse.id));
+    } else if (isRestricted) {
+      w = [];
+    }
+
     setWarehouses(w as Warehouse[]);
     if (w.length > 0 && !selectedWarehouse) {
       setSelectedWarehouse(w[0] as Warehouse);
