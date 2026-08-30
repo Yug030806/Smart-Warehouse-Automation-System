@@ -35,7 +35,7 @@ export default function VehiclesPage() {
     const pList = supabase.from('profiles').select().data || [];
     const currentUserProfile = pList.find((p: any) => p.id === user?.id);
     const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
-    const isRestricted = ['MANAGER', 'SUPERVISOR'].includes(userRole as string);
+    const isRestricted = ['MANAGER'].includes(userRole as string);
 
     let fls = supabase.from('floors').select().data || [];
     let locs = supabase.from('locations').select().data || [];

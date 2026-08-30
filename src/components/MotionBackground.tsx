@@ -7,16 +7,12 @@ import { usePathname } from 'next/navigation';
 export default function MotionBackground() {
   const { theme } = useTheme();
   const pathname = usePathname();
-
-  // Don't render on login page
-  if (pathname === '/login') return null;
-
-  // Keep light mode clean & minimal
-  if (theme === 'light') return null;
-
-  const isAesthetic = theme === 'aesthetic';
-
+  const [mounted, setMounted] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -34,6 +30,16 @@ export default function MotionBackground() {
     window.addEventListener('mousemove', handleMouseMove);
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
+
+  if (!mounted) return null;
+
+  // Don't render on login page
+  if (pathname === '/login') return null;
+
+  // Keep light mode clean & minimal
+  if (theme === 'light') return null;
+
+  const isAesthetic = theme === 'aesthetic';
 
   return (
     <div className="motion-bg-container pointer-events-none fixed inset-0 z-0 overflow-hidden">

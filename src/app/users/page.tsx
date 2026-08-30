@@ -20,13 +20,13 @@ export default function UsersPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
-  const [role, setRole] = useState<'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'OPERATOR'>('OPERATOR');
+  const [role, setRole] = useState<'ADMIN' | 'MANAGER' | 'OPERATOR'>('OPERATOR');
   const [assignedWarehouses, setAssignedWarehouses] = useState<string[]>([]);
 
   // Edit User states
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
   const [editName, setEditName] = useState('');
-  const [editRole, setEditRole] = useState<'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'OPERATOR'>('OPERATOR');
+  const [editRole, setEditRole] = useState<'ADMIN' | 'MANAGER' | 'OPERATOR'>('OPERATOR');
   const [editAssignedWarehouses, setEditAssignedWarehouses] = useState<string[]>([]);
 
   usePreventScroll(Boolean(editingUser || showAddModal));
@@ -77,7 +77,7 @@ export default function UsersPage() {
       full_name: name,
       email,
       role,
-      assigned_warehouse_ids: ['MANAGER', 'SUPERVISOR'].includes(role) ? assignedWarehouses : [],
+      assigned_warehouse_ids: ['MANAGER'].includes(role) ? assignedWarehouses : [],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       is_active: true
@@ -92,8 +92,8 @@ export default function UsersPage() {
   };
 
   const handleDeactivate = (id: string, currentStatus: boolean, profileRole: string) => {
-    if (!currentStatus && ['MANAGER', 'SUPERVISOR'].includes(profileRole)) {
-      // If approving a manager/supervisor, force them to go through the edit modal to assign warehouses
+    if (!currentStatus && ['MANAGER'].includes(profileRole)) {
+      // If approving a manager, force them to go through the edit modal to assign warehouses
       const u = users.find(x => x.id === id);
       if (u) {
         setEditingUser(u);
@@ -144,7 +144,7 @@ export default function UsersPage() {
       } catch (e) {}
     }
 
-    if (['MANAGER', 'SUPERVISOR'].includes(editRole)) {
+    if (['MANAGER'].includes(editRole)) {
       updates.assigned_warehouse_ids = editAssignedWarehouses;
     } else {
       updates.assigned_warehouse_ids = [];
@@ -308,12 +308,12 @@ export default function UsersPage() {
                 >
                   {userRole === 'ADMIN' && <option value="ADMIN">ADMIN</option>}
                   <option value="MANAGER">MANAGER</option>
-                  <option value="SUPERVISOR">SUPERVISOR</option>
+
                   <option value="OPERATOR">OPERATOR</option>
                 </select>
               </div>
 
-              {['MANAGER', 'SUPERVISOR'].includes(editRole) && (
+              {['MANAGER'].includes(editRole) && (
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Assigned Warehouses</label>
                   <div className="space-y-1 mt-1 max-h-32 overflow-y-auto border border-slate-800 rounded-lg p-2 bg-slate-950/50">
@@ -385,12 +385,12 @@ export default function UsersPage() {
                 >
                   {userRole === 'ADMIN' && <option value="ADMIN">ADMIN</option>}
                   <option value="MANAGER">MANAGER</option>
-                  <option value="SUPERVISOR">SUPERVISOR</option>
+
                   <option value="OPERATOR">OPERATOR</option>
                 </select>
               </div>
 
-              {['MANAGER', 'SUPERVISOR'].includes(role) && (
+              {['MANAGER'].includes(role) && (
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Assigned Warehouses</label>
                   <div className="space-y-1 mt-1 max-h-32 overflow-y-auto border border-slate-800 rounded-lg p-2 bg-slate-950/50">

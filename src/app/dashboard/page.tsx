@@ -65,7 +65,7 @@ export default function Dashboard() {
       const pList = supabase.from('profiles').select().data || [];
       const currentUserProfile = pList.find((p: any) => p.id === user?.id);
       const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
-      const isRestricted = ['MANAGER', 'SUPERVISOR'].includes(user?.user_metadata?.role as string);
+      const isRestricted = ['MANAGER'].includes(user?.user_metadata?.role as string);
 
       if (isRestricted && assignedWarehouses.length > 0) {
         const fls = (supabase.from('floors').select().data || []) as any[];

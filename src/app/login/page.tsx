@@ -25,7 +25,7 @@ export default function LoginPage() {
   const credentials = [
     { role: 'ADMIN' as const, email: 'admin@demo.com', pass: 'admin123' },
     { role: 'MANAGER' as const, email: 'manager@demo.com', pass: 'manager123' },
-    { role: 'SUPERVISOR' as const, email: 'supervisor@demo.com', pass: 'supervisor123' },
+    
     { role: 'OPERATOR' as const, email: 'operator@demo.com', pass: 'operator123' },
   ];
 
@@ -48,8 +48,6 @@ export default function LoginPage() {
           ? 'ADMIN'
           : email.toLowerCase().includes('manager')
           ? 'MANAGER'
-          : email.toLowerCase().includes('supervisor')
-          ? 'SUPERVISOR'
           : 'OPERATOR';
         await login(email, role, password);
       } else {

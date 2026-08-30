@@ -60,7 +60,7 @@ export default function WarehousesPage() {
     const pList = supabase.from('profiles').select().data || [];
     const currentUserProfile = pList.find((p: any) => p.id === user?.id);
     const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
-    const isRestricted = ['MANAGER', 'SUPERVISOR'].includes(userRole);
+    const isRestricted = ['MANAGER'].includes(userRole);
 
     if (isRestricted && assignedWarehouses.length > 0) {
       w = w.filter((warehouse: any) => assignedWarehouses.includes(warehouse.id));

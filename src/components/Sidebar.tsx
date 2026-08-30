@@ -35,18 +35,18 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
   usePreventScroll(mobileOpen);
 
   const menuItems = [
-    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['ADMIN', 'MANAGER', 'SUPERVISOR', 'OPERATOR'] },
-    { name: 'Warehouses', href: '/warehouses', icon: Warehouse, roles: ['ADMIN', 'MANAGER', 'SUPERVISOR'] },
-    { name: 'Boxes Management', href: '/boxes', icon: Boxes, roles: ['ADMIN', 'MANAGER', 'SUPERVISOR', 'OPERATOR'] },
-    { name: 'Vehicles', href: '/vehicles', icon: Truck, roles: ['ADMIN', 'MANAGER', 'SUPERVISOR', 'OPERATOR'] },
-    { name: 'Transportation Tasks', href: '/tasks', icon: ClipboardList, roles: ['ADMIN', 'MANAGER', 'SUPERVISOR', 'OPERATOR'] },
-    { name: 'Live Map Tracking', href: '/tracking', icon: Map, roles: ['ADMIN', 'MANAGER', 'SUPERVISOR', 'OPERATOR'] },
-    { name: 'QR Scan Console', href: '/scanner', icon: ScanQrCode, roles: ['ADMIN', 'MANAGER', 'SUPERVISOR', 'OPERATOR'] },
-    { name: 'System Analytics', href: '/analytics', icon: BarChart3, roles: ['ADMIN', 'MANAGER', 'SUPERVISOR', 'OPERATOR'] },
-    { name: 'Active Alerts', href: '/alerts', icon: AlertTriangle, roles: ['ADMIN', 'MANAGER', 'SUPERVISOR', 'OPERATOR'] },
-    { name: 'Audit Logs', href: '/audit-log', icon: History, roles: ['ADMIN', 'MANAGER', 'SUPERVISOR', 'OPERATOR'] },
+    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['ADMIN', 'MANAGER', 'OPERATOR'] },
+    { name: 'Warehouses', href: '/warehouses', icon: Warehouse, roles: ['ADMIN', 'MANAGER'] },
+    { name: 'Boxes Management', href: '/boxes', icon: Boxes, roles: ['ADMIN', 'MANAGER', 'OPERATOR'] },
+    { name: 'Vehicles', href: '/vehicles', icon: Truck, roles: ['ADMIN', 'MANAGER', 'OPERATOR'] },
+    { name: 'Transportation Tasks', href: '/tasks', icon: ClipboardList, roles: ['ADMIN', 'MANAGER', 'OPERATOR'] },
+    { name: 'Live Map Tracking', href: '/tracking', icon: Map, roles: ['ADMIN', 'MANAGER', 'OPERATOR'] },
+    { name: 'QR Scan Console', href: '/scanner', icon: ScanQrCode, roles: ['ADMIN', 'MANAGER', 'OPERATOR'] },
+    { name: 'System Analytics', href: '/analytics', icon: BarChart3, roles: ['ADMIN', 'MANAGER', 'OPERATOR'] },
+    { name: 'Active Alerts', href: '/alerts', icon: AlertTriangle, roles: ['ADMIN', 'MANAGER', 'OPERATOR'] },
+    { name: 'Audit Logs', href: '/audit-log', icon: History, roles: ['ADMIN', 'MANAGER', 'OPERATOR'] },
     { name: 'User Management', href: '/users', icon: Users, roles: ['ADMIN'] },
-    { name: 'System Settings', href: '/settings', icon: Settings, roles: ['ADMIN', 'MANAGER', 'SUPERVISOR'] },
+    { name: 'System Settings', href: '/settings', icon: Settings, roles: ['ADMIN', 'MANAGER'] },
   ];
 
   return (

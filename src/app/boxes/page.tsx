@@ -40,7 +40,7 @@ export default function BoxesPage() {
     const pList = supabase.from('profiles').select().data || [];
     const currentUserProfile = pList.find((p: any) => p.id === user?.id);
     const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
-    const isRestricted = ['MANAGER', 'SUPERVISOR'].includes(userRole as string);
+    const isRestricted = ['MANAGER'].includes(userRole as string);
     let locs = supabase.from('locations').select().data || [];
 
     if (isRestricted && assignedWarehouses.length > 0) {
@@ -188,7 +188,7 @@ export default function BoxesPage() {
   };
 
   return (
-    <RoleGuard allowedRoles={['ADMIN', 'MANAGER', 'SUPERVISOR', 'OPERATOR']}>
+    <RoleGuard allowedRoles={['ADMIN', 'MANAGER', 'OPERATOR']}>
       <div className="flex h-screen w-full overflow-hidden bg-slate-950">
         <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
         <div className="flex-grow flex flex-col min-w-0 h-screen overflow-hidden">
