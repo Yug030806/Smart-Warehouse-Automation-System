@@ -70,17 +70,17 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
           <Link 
             href="/dashboard" 
             onClick={onMobileClose}
-            className="flex items-center gap-3 font-bold text-slate-100 text-base tracking-wider"
+            className="flex items-center gap-3 font-bold text-slate-100 text-base tracking-wider flex-1 min-w-0 pr-2"
           >
             <img src="/logo.png" alt="Smart Warehouse Logo" className="h-10 w-10 object-contain rounded-lg shrink-0" />
-            <div className="flex flex-col leading-tight">
+            <div className="flex flex-col leading-tight min-w-0">
               <span className="text-sm font-extrabold truncate">Smart Warehouse</span>
               <span className="text-[9px] text-slate-500 font-semibold tracking-widest uppercase truncate">Logistics Platform</span>
             </div>
           </Link>
           <button 
             onClick={onMobileClose}
-            className="md:hidden p-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-900"
+            className="md:hidden p-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-900 shrink-0"
             aria-label="Close Sidebar"
           >
             <X className="h-5 w-5" />

@@ -166,6 +166,19 @@ export default function AlertPopupModal() {
     }
   }, [activeAlerts.length, currentIndex]);
 
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (activeAlerts.length > 0) {
+        const modal = document.getElementById('alert-popup-modal-content');
+        if (modal && !modal.contains(e.target as Node)) {
+          handleDismissCurrent(activeAlerts[0].id);
+        }
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [activeAlerts, currentIndex]);
+
   if (activeAlerts.length === 0) return null;
 
   const currentAlert = activeAlerts[currentIndex] || activeAlerts[0];
@@ -218,6 +231,7 @@ export default function AlertPopupModal() {
     // Corner Floating Toast Container (Non-blocking background overlay so user can interact with page)
     <div className="fixed top-4 right-4 sm:top-5 sm:right-5 z-[100] w-full max-w-sm sm:max-w-md pointer-events-none p-2 sm:p-0">
       <div 
+        id="alert-popup-modal-content"
         className={`pointer-events-auto relative w-full rounded-2xl border p-4 text-slate-100 backdrop-blur-xl transition-all duration-300 shadow-2xl animate-in slide-in-from-top-4 fade-in ${modalContainerClass}`}
         role="dialog"
         aria-label="Alert Notification"

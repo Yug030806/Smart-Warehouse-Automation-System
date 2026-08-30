@@ -58,7 +58,7 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
 
   return (
     <header className="h-16 border-b border-slate-900 bg-slate-950 flex items-center justify-between px-4 md:px-8 relative z-30">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-1 min-w-0 pr-4">
         {onMenuClick && (
           <button
             onClick={onMenuClick}
@@ -73,7 +73,15 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
         </h2>
       </div>
 
-      <div className="flex items-center gap-2 md:gap-3 relative">
+      <div className="flex items-center gap-2 md:gap-3 relative shrink-0">
+        {/* Background overlay to close menus when clicking outside */}
+        {(showAlertsMenu || showNotifMenu) && (
+          <div 
+            className="fixed inset-0 z-40"
+            onClick={() => { setShowAlertsMenu(false); setShowNotifMenu(false); }}
+          />
+        )}
+        
         {/* Theme Switcher */}
         <div className="flex items-center gap-1 p-1 rounded-xl border border-slate-800 bg-slate-900">
           {themeOptions.map(({ mode, icon: Icon, label }) => (

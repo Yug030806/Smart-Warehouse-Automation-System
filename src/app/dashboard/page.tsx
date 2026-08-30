@@ -164,7 +164,7 @@ export default function Dashboard() {
               </div>
 
               {/* Actions */}
-              <div className="px-6 pb-6 flex gap-3">
+              <div className="px-6 pb-6 flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={() => {
                     setShowPendingPopup(false);
@@ -191,7 +191,7 @@ export default function Dashboard() {
               <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Logistics Master Console</h1>
               <p className="text-xs sm:text-sm text-slate-400">Real-time status overview of vehicles, tasks, and system payloads.</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button 
                 onClick={() => setSelectedFloor('f-01')}
                 className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-semibold border transition duration-150 ${selectedFloor === 'f-01' ? 'bg-blue-600 border-blue-500 text-slate-100' : 'bg-slate-950 border-slate-900 text-slate-400 hover:text-slate-200'}`}
