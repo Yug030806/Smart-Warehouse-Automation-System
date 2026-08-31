@@ -87,11 +87,11 @@ const initialLocations: Location[] = [
 ];
 
 const initialVehicles: Vehicle[] = [
-  { id: 'v-patel', vehicle_code: 'CART-PATEL', name: 'Patel Demo Cart', status: 'AVAILABLE', battery_percentage: 100, current_location_id: 'loc-f1-pickup', current_floor_id: F1_ID, x_position: 1, y_position: 1, speed: 1, current_task_id: null, last_seen: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), edge_ai_status: 'ONLINE', sensor_suite_active: true, last_decision_id: null, obstacle_count: 0 },
-  { id: 'v-01', vehicle_code: 'CART-01', name: 'Standard Lifter Alpha', status: 'AVAILABLE', battery_percentage: 95, current_location_id: 'loc-f1-charging', current_floor_id: F1_ID, x_position: 5, y_position: 1, speed: 1, current_task_id: null, last_seen: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), edge_ai_status: 'ONLINE', sensor_suite_active: true, last_decision_id: null, obstacle_count: 0 },
-  { id: 'v-02', vehicle_code: 'CART-02', name: 'Pallet Runner Beta', status: 'AVAILABLE', battery_percentage: 80, current_location_id: 'loc-f2-charging', current_floor_id: F2_ID, x_position: 5, y_position: 1, speed: 1, current_task_id: null, last_seen: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), edge_ai_status: 'ONLINE', sensor_suite_active: true, last_decision_id: null, obstacle_count: 0 },
-  { id: 'v-03', vehicle_code: 'CART-03', name: 'Mini Shuttle Gamma', status: 'MAINTENANCE', battery_percentage: 42, current_location_id: 'loc-f3-charging', current_floor_id: F3_ID, x_position: 5, y_position: 1, speed: 1, current_task_id: null, last_seen: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), edge_ai_status: 'OFFLINE', sensor_suite_active: false, last_decision_id: null, obstacle_count: 0 },
-  { id: 'v-04', vehicle_code: 'CART-04', name: 'High-Speed Rover Delta', status: 'AVAILABLE', battery_percentage: 12, current_location_id: 'loc-f1-pickup', current_floor_id: F1_ID, x_position: 1, y_position: 1, speed: 1, current_task_id: null, last_seen: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), edge_ai_status: 'ONLINE', sensor_suite_active: true, last_decision_id: null, obstacle_count: 0 }
+  { id: 'v-patel', vehicle_code: 'AMR-PATEL', name: 'Patel Demo AMR', status: 'AVAILABLE', battery_percentage: 100, current_location_id: 'loc-f1-pickup', current_floor_id: F1_ID, x_position: 1, y_position: 1, speed: 1, current_task_id: null, last_seen: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), edge_ai_status: 'ONLINE', sensor_suite_active: true, last_decision_id: null, obstacle_count: 0 },
+  { id: 'v-01', vehicle_code: 'AMR-01', name: 'Standard Lifter Alpha', status: 'AVAILABLE', battery_percentage: 95, current_location_id: 'loc-f1-charging', current_floor_id: F1_ID, x_position: 5, y_position: 1, speed: 1, current_task_id: null, last_seen: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), edge_ai_status: 'ONLINE', sensor_suite_active: true, last_decision_id: null, obstacle_count: 0 },
+  { id: 'v-02', vehicle_code: 'AMR-02', name: 'Pallet Runner Beta', status: 'AVAILABLE', battery_percentage: 80, current_location_id: 'loc-f2-charging', current_floor_id: F2_ID, x_position: 5, y_position: 1, speed: 1, current_task_id: null, last_seen: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), edge_ai_status: 'ONLINE', sensor_suite_active: true, last_decision_id: null, obstacle_count: 0 },
+  { id: 'v-03', vehicle_code: 'AMR-03', name: 'Mini Shuttle Gamma', status: 'MAINTENANCE', battery_percentage: 42, current_location_id: 'loc-f3-charging', current_floor_id: F3_ID, x_position: 5, y_position: 1, speed: 1, current_task_id: null, last_seen: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), edge_ai_status: 'OFFLINE', sensor_suite_active: false, last_decision_id: null, obstacle_count: 0 },
+  { id: 'v-04', vehicle_code: 'AMR-04', name: 'High-Speed Rover Delta', status: 'AVAILABLE', battery_percentage: 12, current_location_id: 'loc-f1-pickup', current_floor_id: F1_ID, x_position: 1, y_position: 1, speed: 1, current_task_id: null, last_seen: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), edge_ai_status: 'ONLINE', sensor_suite_active: true, last_decision_id: null, obstacle_count: 0 }
 ];
 
 // Generate 30 boxes seed data
@@ -209,7 +209,7 @@ class MockDB {
         { id: 'u-admin', full_name: 'Super Admin', email: 'admin@demo.com', role: 'ADMIN', assigned_warehouse_ids: [], is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
         { id: 'u-manager', full_name: 'Warehouse Manager', email: 'manager@demo.com', role: 'MANAGER', assigned_warehouse_ids: ['w-01'], is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
         
-        { id: 'u-operator', full_name: 'Cart Operator', email: 'operator@demo.com', role: 'OPERATOR', assigned_warehouse_ids: [], is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'u-operator', full_name: 'AMR Operator', email: 'operator@demo.com', role: 'OPERATOR', assigned_warehouse_ids: [], is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
       ],
       warehouses: initialWarehouses,
       floors: initialFloors,
@@ -222,7 +222,7 @@ class MockDB {
       routes: [],
       scanEvents: [],
       alerts: [
-        { id: 'alert-01', type: 'LOW_BATTERY', severity: 'WARNING', message: 'Vehicle CART-04 has low battery (12%) and requires docking soon.', vehicle_id: 'v-04', is_acknowledged: false, resolved_at: null, created_at: new Date().toISOString() }
+        { id: 'alert-01', type: 'LOW_BATTERY', severity: 'WARNING', message: 'Vehicle AMR-04 has low battery (12%) and requires docking soon.', vehicle_id: 'v-04', is_acknowledged: false, resolved_at: null, created_at: new Date().toISOString() }
       ],
       auditLogs: [
         { id: 'log-01', user_email: 'system', action: 'SEED_DATA', object_type: 'SYSTEM', object_id: 'sys', previous_state: null, new_state: { seeded: true }, timestamp: new Date().toISOString() }
@@ -502,7 +502,7 @@ class MockDB {
         { id: 'u-admin', full_name: 'Super Admin', email: 'admin@demo.com', role: 'ADMIN', assigned_warehouse_ids: [], is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
         { id: 'u-manager', full_name: 'Warehouse Manager', email: 'manager@demo.com', role: 'MANAGER', assigned_warehouse_ids: ['w-01'], is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
         
-        { id: 'u-operator', full_name: 'Cart Operator', email: 'operator@demo.com', role: 'OPERATOR', assigned_warehouse_ids: [], is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'u-operator', full_name: 'AMR Operator', email: 'operator@demo.com', role: 'OPERATOR', assigned_warehouse_ids: [], is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
       ],
       warehouses: initialWarehouses,
       floors: initialFloors,
@@ -510,11 +510,11 @@ class MockDB {
       locations: initialLocations,
       paths: [],
       vehicles: [
-        { id: 'v-patel', vehicle_code: 'CART-PATEL', name: 'Patel Demo Cart', status: 'AVAILABLE', battery_percentage: 100, current_location_id: 'loc-f1-pickup', current_floor_id: F1_ID, x_position: 1, y_position: 1, speed: 1, current_task_id: null, last_seen: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), edge_ai_status: 'ONLINE', sensor_suite_active: true, last_decision_id: null, obstacle_count: 0 },
-        { id: 'v-01', vehicle_code: 'CART-01', name: 'Standard Lifter Alpha', status: 'AVAILABLE', battery_percentage: 95, current_location_id: 'loc-f1-charging', current_floor_id: F1_ID, x_position: 5, y_position: 1, speed: 1, current_task_id: null, last_seen: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), edge_ai_status: 'ONLINE', sensor_suite_active: true, last_decision_id: null, obstacle_count: 0 },
-        { id: 'v-02', vehicle_code: 'CART-02', name: 'Pallet Runner Beta', status: 'AVAILABLE', battery_percentage: 80, current_location_id: 'loc-f2-charging', current_floor_id: F2_ID, x_position: 5, y_position: 1, speed: 1, current_task_id: null, last_seen: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), edge_ai_status: 'ONLINE', sensor_suite_active: true, last_decision_id: null, obstacle_count: 0 },
-        { id: 'v-03', vehicle_code: 'CART-03', name: 'Mini Shuttle Gamma', status: 'MAINTENANCE', battery_percentage: 42, current_location_id: 'loc-f3-charging', current_floor_id: F3_ID, x_position: 5, y_position: 1, speed: 1, current_task_id: null, last_seen: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), edge_ai_status: 'OFFLINE', sensor_suite_active: false, last_decision_id: null, obstacle_count: 0 },
-        { id: 'v-04', vehicle_code: 'CART-04', name: 'High-Speed Rover Delta', status: 'AVAILABLE', battery_percentage: 12, current_location_id: 'loc-f1-pickup', current_floor_id: F1_ID, x_position: 1, y_position: 1, speed: 1, current_task_id: null, last_seen: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), edge_ai_status: 'ONLINE', sensor_suite_active: true, last_decision_id: null, obstacle_count: 0 }
+        { id: 'v-patel', vehicle_code: 'AMR-PATEL', name: 'Patel Demo AMR', status: 'AVAILABLE', battery_percentage: 100, current_location_id: 'loc-f1-pickup', current_floor_id: F1_ID, x_position: 1, y_position: 1, speed: 1, current_task_id: null, last_seen: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), edge_ai_status: 'ONLINE', sensor_suite_active: true, last_decision_id: null, obstacle_count: 0 },
+        { id: 'v-01', vehicle_code: 'AMR-01', name: 'Standard Lifter Alpha', status: 'AVAILABLE', battery_percentage: 95, current_location_id: 'loc-f1-charging', current_floor_id: F1_ID, x_position: 5, y_position: 1, speed: 1, current_task_id: null, last_seen: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), edge_ai_status: 'ONLINE', sensor_suite_active: true, last_decision_id: null, obstacle_count: 0 },
+        { id: 'v-02', vehicle_code: 'AMR-02', name: 'Pallet Runner Beta', status: 'AVAILABLE', battery_percentage: 80, current_location_id: 'loc-f2-charging', current_floor_id: F2_ID, x_position: 5, y_position: 1, speed: 1, current_task_id: null, last_seen: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), edge_ai_status: 'ONLINE', sensor_suite_active: true, last_decision_id: null, obstacle_count: 0 },
+        { id: 'v-03', vehicle_code: 'AMR-03', name: 'Mini Shuttle Gamma', status: 'MAINTENANCE', battery_percentage: 42, current_location_id: 'loc-f3-charging', current_floor_id: F3_ID, x_position: 5, y_position: 1, speed: 1, current_task_id: null, last_seen: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), edge_ai_status: 'OFFLINE', sensor_suite_active: false, last_decision_id: null, obstacle_count: 0 },
+        { id: 'v-04', vehicle_code: 'AMR-04', name: 'High-Speed Rover Delta', status: 'AVAILABLE', battery_percentage: 12, current_location_id: 'loc-f1-pickup', current_floor_id: F1_ID, x_position: 1, y_position: 1, speed: 1, current_task_id: null, last_seen: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), edge_ai_status: 'ONLINE', sensor_suite_active: true, last_decision_id: null, obstacle_count: 0 }
       ],
       boxes: Array.from({ length: 30 }, (_, index) => {
         const boxNum = index + 1001;
@@ -565,7 +565,7 @@ class MockDB {
       routes: [],
       scanEvents: [],
       alerts: [
-        { id: 'alert-01', type: 'LOW_BATTERY', severity: 'WARNING', message: 'Vehicle CART-04 has low battery (12%) and requires docking soon.', vehicle_id: 'v-04', is_acknowledged: false, resolved_at: null, created_at: new Date().toISOString() }
+        { id: 'alert-01', type: 'LOW_BATTERY', severity: 'WARNING', message: 'Vehicle AMR-04 has low battery (12%) and requires docking soon.', vehicle_id: 'v-04', is_acknowledged: false, resolved_at: null, created_at: new Date().toISOString() }
       ],
       auditLogs: [
         { id: 'log-01', user_email: 'system', action: 'RESET_DEMO', object_type: 'SYSTEM', object_id: 'sys', previous_state: null, new_state: { reset: true }, timestamp: new Date().toISOString() }

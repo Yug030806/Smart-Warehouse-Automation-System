@@ -106,7 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ADMIN: 'Super Admin',
         MANAGER: 'Warehouse Manager',
         
-        OPERATOR: 'Cart Operator',
+        OPERATOR: 'AMR Operator',
       };
       fullName = names[effectiveRole];
     }

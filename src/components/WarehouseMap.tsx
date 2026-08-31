@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { Location, Vehicle, RouteSegment, EdgeAIDecision, FleetMessage } from '@/lib/database.types';
 import { ObstacleCell } from '@/lib/simulator/edgeAIEngine';
+import { Bot } from 'lucide-react';
 
 interface WarehouseMapProps {
   floorId: string;
@@ -71,7 +72,7 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
           <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-orange-500/20 border border-orange-500"></span><span className="text-slate-400">Out</span></div>
           <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-purple-500/20 border border-purple-500"></span><span className="text-slate-400">Elevator</span></div>
           <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-yellow-500/20 border border-yellow-500 text-[9px] flex items-center justify-center text-yellow-400">⚡</span><span className="text-slate-400">Charging</span></div>
-          <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-blue-600 border border-slate-500"></span><span className="text-slate-400">Cart</span></div>
+          <div className="flex items-center gap-1.5"><span className="h-4 w-4 rounded-lg bg-blue-600 border border-slate-500 flex items-center justify-center"><Bot size={10} className="text-slate-100" /></span><span className="text-slate-400">AMR</span></div>
           <div className="flex items-center gap-1.5 ml-4 pl-4 border-l border-slate-800"><span className="h-3 w-3 rounded bg-red-950 border border-red-500 text-red-500 text-[8px] flex items-center justify-center font-bold">⚠</span><span className="text-slate-400">Obstacle</span></div>
         </div>
       </div>
@@ -140,21 +141,27 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
                       ? 'bg-red-600 border border-slate-500 text-slate-100 font-semibold'
                       : (isSlow ? 'bg-amber-600 border border-slate-500 text-slate-100 font-semibold' : 'bg-blue-600 border border-slate-500 text-slate-100 font-semibold');
                   }
-                  text = veh.vehicle_code.substring(5); // e.g. '01'
                   
-                  if (recentDecision) {
-                    vehicleBadge = (
-                      <div className={`absolute -top-3 -right-2 px-1 rounded text-[8px] font-black z-20 ${
-                        isStopped ? 'bg-red-500 text-black animate-pulse' : (isSlow ? 'bg-amber-500 text-black' : 'bg-green-500 text-black')
-                      }`}>
-                        {isStopped ? 'STOP' : (isSlow ? 'SLOW' : 'OK')}
-                      </div>
-                    );
-                  }
+                  text = '' as any;
+                  vehicleBadge = (
+                    <>
+                      <Bot size={12} className={isStopped ? 'text-slate-900' : 'text-slate-100'} />
+                      <span className={`text-[7px] font-black leading-none ${isStopped ? 'text-slate-900' : 'text-slate-100'}`}>
+                        {veh.vehicle_code.substring(4)}
+                      </span>
+                      {recentDecision && (
+                        <div className={`absolute -top-3 -right-2 px-1 rounded text-[8px] font-black z-20 ${
+                          isStopped ? 'bg-red-500 text-black animate-pulse' : (isSlow ? 'bg-amber-500 text-black' : 'bg-green-500 text-black')
+                        }`}>
+                          {isStopped ? 'STOP' : (isSlow ? 'SLOW' : 'OK')}
+                        </div>
+                      )}
+                    </>
+                  );
                 }
               }
 
-              const roundedShape = cell?.type === 'vehicle' ? 'rounded-full' : 'rounded-lg';
+              const roundedShape = cell?.type === 'vehicle' ? 'rounded-lg' : 'rounded-lg';
 
               return (
                 <button

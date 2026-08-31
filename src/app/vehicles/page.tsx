@@ -179,17 +179,17 @@ export default function VehiclesPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Vehicle Fleet Roster</h1>
-              <p className="text-xs sm:text-sm text-slate-400">Manage autonomous carts, view battery charges, assign locations and monitor tasks.</p>
+              <p className="text-xs sm:text-sm text-slate-400">Manage autonomous AMRs, view battery charges, assign locations and monitor tasks.</p>
             </div>
             {['ADMIN', 'MANAGER'].includes(userRole) && (
               <button
                 onClick={() => {
-                  setVCode(`CART-${Math.floor(Math.random() * 900 + 100)}`);
+                  setVCode(`AMR-${Math.floor(Math.random() * 900 + 100)}`);
                   setShowAddModal(true);
                 }}
                 className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-semibold text-slate-50 transition duration-150 shrink-0"
               >
-                <Plus className="h-4 w-4" /> Commission Cart
+                <Plus className="h-4 w-4" /> Commission AMR
               </button>
             )}
           </div>
@@ -202,7 +202,7 @@ export default function VehiclesPage() {
                   <table className="w-full text-left text-xs">
                     <thead>
                       <tr className="border-b border-slate-900 text-slate-500 font-bold uppercase tracking-wider">
-                        <th className="pb-3">Cart Code</th>
+                        <th className="pb-3">AMR Code</th>
                         <th className="pb-3">Name</th>
                         <th className="pb-3">Position</th>
                         <th className="pb-3">Battery</th>
@@ -271,7 +271,7 @@ export default function VehiclesPage() {
                                     </button>
                                     <button
                                       onClick={() => handleResetVehicle(v.id)}
-                                      title="Reset Cart State"
+                                      title="Reset AMR State"
                                       className="p-1.5 rounded border border-slate-800 bg-slate-950 text-blue-400 hover:bg-slate-900"
                                     >
                                       <RefreshCw className="h-4.5 w-4.5" />

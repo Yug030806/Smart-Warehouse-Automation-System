@@ -50,7 +50,7 @@ export default function AlertsPage() {
       triggerGlobalAlert({
         type: 'LOW_BATTERY',
         severity: 'WARNING',
-        message: 'Battery Warning: Vehicle CART-02 battery depleted to 14%. Docking requested.',
+        message: 'Battery Warning: Vehicle AMR-02 battery depleted to 14%. Docking requested.',
         vehicle_id: 'v-02'
       });
     } else {

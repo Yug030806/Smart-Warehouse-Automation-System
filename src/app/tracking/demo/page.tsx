@@ -44,9 +44,9 @@ export default function DemoPage() {
     { label: 'Step 1: Select Box Payload', desc: 'Identify packet BX-1001 on Floor 1, Rack A3.' },
     { label: 'Step 2: Assign Destination target', desc: 'Assign destination Floor 3, Rack C5.' },
     { label: 'Step 3: Create Urgent Dispatch task', desc: 'Generate task order with URGENT priority.' },
-    { label: 'Step 4: Auto-select available Cart', desc: 'Assign available vehicle close to Floor 1.' },
+    { label: 'Step 4: Auto-select available AMR', desc: 'Assign available vehicle close to Floor 1.' },
     { label: 'Step 5: Pathfinding Route', desc: 'Calculate shortest path grid coordinates using A*.' },
-    { label: 'Step 6: Cart Transit & Elevators', desc: 'Animate vehicle coordinates including elevator shifts.' },
+    { label: 'Step 6: AMR Transit & Elevators', desc: 'Animate vehicle coordinates including elevator shifts.' },
     { label: 'Step 7: Pickup QR scanning', desc: 'Operator scans box code to verify expected payload.' },
     { label: 'Step 8: Delivery QR scanning', desc: 'Operator scans box code to confirm final delivery.' },
     { label: 'Step 9: Complete Dispatch Order', desc: 'Finalise task completed status and release vehicle.' }
@@ -94,9 +94,9 @@ export default function DemoPage() {
         setStepStatus(`Urgent dispatch task ${task.task_code} scheduled with high priority recommendation score.`);
       }
     } else if (nextIdx === 4) {
-      // Step 4: Auto-select available Cart
+      // Step 4: Auto-select available AMR
       const candidates = mockDb.getVehicles().filter(v => v.status === 'AVAILABLE' && v.battery_percentage > 15);
-      const chosen = candidates[0]; // CART-01
+      const chosen = candidates[0]; // AMR-01
       if (chosen && task) {
         setVehicle(chosen);
         mockDb.saveVehicle({ ...chosen, status: 'BUSY', current_task_id: task.id });
@@ -128,7 +128,7 @@ export default function DemoPage() {
         }
       }
     } else if (nextIdx === 6) {
-      // Step 6: Cart Transit & Elevators
+      // Step 6: AMR Transit & Elevators
       if (vehicle && routePts.length > 0) {
         setStepStatus('Vehicle traveling across grid coordinates. Moving floors...');
         const controller = new SimulatorVehicleController(vehicle.id);
@@ -142,7 +142,7 @@ export default function DemoPage() {
             setSelectedFloor(floorId);
           },
           () => {
-            setStepStatus('Cart arrived at Floor 3 Rack C5 target. Pending operator QR scanning.');
+            setStepStatus('AMR arrived at Floor 3 Rack C5 target. Pending operator QR scanning.');
             controller.stop();
           }
         );
@@ -231,7 +231,7 @@ export default function DemoPage() {
           timestamp: new Date().toISOString()
         });
 
-        setStepStatus('Transport Task Completed. Cargo marked DELIVERED, Cart released to charging base.');
+        setStepStatus('Transport Task Completed. Cargo marked DELIVERED, AMR released to charging base.');
         setRecentLogs(mockDb.getAuditLogs().slice(0, 5) as AuditLog[]);
         confetti({ particleCount: 150, spread: 80 });
       }

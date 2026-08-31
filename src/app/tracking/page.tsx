@@ -46,7 +46,7 @@ export default function TrackingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showSensorRanges, setShowSensorRanges] = useState(true);
 
-  // --- Single Cart State ---
+  // --- Single AMR State ---
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const hasAutoSelected = useRef(false);
   const [activeRoutePts, setActiveRoutePts] = useState<any[]>([]);
@@ -162,7 +162,7 @@ export default function TrackingPage() {
 
   const selectedVehicle = vehicles.find((v) => v.id === selectedVehicleId) || null;
 
-  // --- SINGLE CART LOGIC ---
+  // --- SINGLE AMR LOGIC ---
   const stopCurrentSimulation = useCallback(() => {
     if (simControllerRef.current) {
       simControllerRef.current.stop();
@@ -391,7 +391,7 @@ export default function TrackingPage() {
 
         <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1 overscroll-contain">
           
-          {/* Header & Mode Toggle */}
+          {/* Header & Modes */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-slate-100 flex items-center gap-3">
@@ -415,7 +415,7 @@ export default function TrackingPage() {
                   simMode === 'SINGLE' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
                 }`}
               >
-                Single Cart
+                Single AMR
               </button>
               <button
                 onClick={() => setSimMode('FLEET')}
@@ -475,7 +475,7 @@ export default function TrackingPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setShowSensorRanges(!showSensorRanges)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5 ${showSensorRanges ? 'bg-blue-900/40 text-blue-400 border-blue-500/50' : 'bg-slate-900 text-slate-400 border-slate-800'}`} title="Show edge-AI detection radius around each cart">
+                  <button onClick={() => setShowSensorRanges(!showSensorRanges)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5 ${showSensorRanges ? 'bg-blue-900/40 text-blue-400 border-blue-500/50' : 'bg-slate-900 text-slate-400 border-slate-800'}`} title="Show edge-AI detection radius around each AMR">
                     <Radio className="h-3.5 w-3.5" /> 
                     {showSensorRanges ? 'Sensors Active' : 'Show Sensors'}
                   </button>
@@ -620,7 +620,7 @@ export default function TrackingPage() {
               {/* Vehicle Roster (Always visible) */}
               <div className="rounded-xl border border-slate-900 bg-slate-950 p-6 space-y-4">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-widest block">
-                  {simMode === 'FLEET' ? 'Active Fleet' : 'Select Cart'}
+                  {simMode === 'FLEET' ? 'Active Fleet' : 'Select AMR'}
                 </span>
                 <div className="space-y-3">
                   {vehicles.map((v) => (

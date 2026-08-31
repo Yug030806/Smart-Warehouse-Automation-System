@@ -169,7 +169,7 @@ export default function SignupPage() {
                 onChange={(e) => setRole(e.target.value as 'ADMIN' | 'MANAGER'  | 'OPERATOR')}
                 className="w-full rounded-xl border border-slate-800 bg-slate-950/80 pl-10 pr-4 py-2.5 text-xs text-slate-100 outline-none transition duration-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 appearance-none cursor-pointer"
               >
-                <option value="OPERATOR">Cart / AGV Operator</option>
+                <option value="OPERATOR">AMR Operator</option>
 
                 <option value="MANAGER">Warehouse Manager</option>
               </select>

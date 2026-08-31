@@ -7,7 +7,7 @@ const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
   title: 'Smart Warehouse Autonomous Logistics Platform',
-  description: 'AI-assisted routing, autonomous cart simulation, QR scanner verification, and live tracking dashboard.',
+  description: 'AI-assisted routing, autonomous AMR simulation, QR scanner verification, and live tracking dashboard.',
 };
 
 import { AuthProvider } from '@/lib/supabase/AuthProvider';

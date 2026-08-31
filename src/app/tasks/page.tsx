@@ -385,7 +385,7 @@ export default function TasksPage() {
                       const box = boxes.find(b => b.id === task.box_id);
                       const src = locations.find(l => l.id === task.source_location_id)?.name || 'Pickup';
                       const dest = locations.find(l => l.id === task.destination_location_id)?.name || 'Destination';
-                      const assignedCart = vehicles.find(v => v.id === task.vehicle_id);
+                      const assignedAmr = vehicles.find(v => v.id === task.vehicle_id);
 
                       return (
                         <tr key={task.id}>
@@ -411,8 +411,8 @@ export default function TasksPage() {
                               <span className={`font-bold text-[10px] uppercase ${
                                 task.status === 'COMPLETED' ? 'text-green-400' : (task.status === 'PENDING' ? 'text-slate-500' : 'text-blue-400')
                               }`}>{task.status}</span>
-                              {assignedCart && (
-                                <span className="text-[9px] text-slate-500 font-mono">Cart: {assignedCart.vehicle_code}</span>
+                              {assignedAmr && (
+                                <span className="text-[9px] text-slate-500 font-mono">AMR: {assignedAmr.vehicle_code}</span>
                               )}
                             </div>
                           </td>
@@ -480,7 +480,7 @@ export default function TasksPage() {
 
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
               <button type="button" onClick={() => setManualAssignTask(null)} className="px-4 py-2 text-xs font-semibold text-slate-400">Cancel</button>
-              <button type="submit" className="px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 rounded-lg">Assign Selected Cart</button>
+              <button type="submit" className="px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 rounded-lg">Assign Selected AMR</button>
             </div>
           </form>
         </div>

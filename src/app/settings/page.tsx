@@ -119,14 +119,14 @@ export default function SettingsPage() {
                     )}
                   </div>
 
-                  {/* Default Cart Speed */}
+                  {/* Default AMR Speed */}
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <Gauge className="h-4 w-4 text-blue-400" />
-                      <label className="text-xs text-slate-300 font-bold uppercase tracking-wider">Default Cart Speed Multiplier</label>
+                      <label className="text-xs text-slate-300 font-bold uppercase tracking-wider">Default AMR Speed Multiplier</label>
                     </div>
                     <p className="text-[11px] text-slate-500 -mt-1">
-                      Sets the initial speed multiplier when starting a new drive simulation on the Live Fleet Tracking page. A value of 2 means carts move at 2x the base speed.
+                      Sets the initial speed multiplier when starting a new drive simulation on the Live Fleet Tracking page. A value of 2 means AMRs move at 2x the base speed.
                     </p>
                     <div className="flex items-center gap-3">
                       {[1, 2, 5, 10].map((s) => (
@@ -188,7 +188,7 @@ export default function SettingsPage() {
                       <label className="text-xs text-slate-300 font-bold uppercase tracking-wider">Floor Elevator Transit Duration</label>
                     </div>
                     <p className="text-[11px] text-slate-500 -mt-1">
-                      How many seconds a cart pauses at the elevator when transitioning between floors. Simulates real-world elevator travel time.
+                      How many seconds an AMR pauses at the elevator when transitioning between floors. Simulates real-world elevator travel time.
                     </p>
                     <div className="flex items-center gap-3">
                       {[1, 2, 3, 5, 10].map((d) => (
@@ -217,7 +217,7 @@ export default function SettingsPage() {
                     <div className="space-y-3">
                       <label className="text-xs text-slate-300 font-bold uppercase tracking-wider block">Auto-Start Next Task</label>
                       <p className="text-[11px] text-slate-500 -mt-1">
-                        When enabled, carts automatically begin the next queued task after completing their current delivery.
+                        When enabled, AMRs automatically begin the next queued task after completing their current delivery.
                       </p>
                       <button
                         type="button"
@@ -237,7 +237,7 @@ export default function SettingsPage() {
                     <div className="space-y-3">
                       <label className="text-xs text-slate-300 font-bold uppercase tracking-wider block">Simulation Mode</label>
                       <p className="text-[11px] text-slate-500 -mt-1">
-                        AUTO assigns carts to tasks automatically. MANUAL requires clicking &quot;Start Drive&quot; for each task.
+                        AUTO assigns AMRs to tasks automatically. MANUAL requires clicking &quot;Start Drive&quot; for each task.
                       </p>
                       <div className="flex gap-3">
                         {(['AUTO', 'MANUAL'] as const).map((mode) => (
@@ -279,7 +279,7 @@ export default function SettingsPage() {
                   <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Active Configuration</h3>
                   <div className="space-y-3 text-xs">
                     <div className="flex justify-between items-center p-3 rounded-lg bg-slate-900/40 border border-slate-900">
-                      <span className="text-slate-400">Cart Speed</span>
+                      <span className="text-slate-400">AMR Speed</span>
                       <span className="text-blue-400 font-bold font-mono">{settings?.default_speed || 1}x</span>
                     </div>
                     <div className="flex justify-between items-center p-3 rounded-lg bg-slate-900/40 border border-slate-900">
