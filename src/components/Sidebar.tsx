@@ -19,7 +19,8 @@ import {
   LogOut,
   Warehouse,
   X,
-  ClipboardCheck
+  ClipboardCheck,
+  Brain
 } from 'lucide-react';
 
 interface SidebarProps {

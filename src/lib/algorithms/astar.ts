@@ -11,8 +11,16 @@ interface AStarNode {
   parent: AStarNode | null;
 }
 
+// Dynamic obstacle type from Edge-AI system
+export interface DynamicObstacle {
+  x: number;
+  y: number;
+  floor_id: string;
+}
+
 // Calculate route on 2D grid taking obstacles into account
 // Multi-floor paths transition automatically via elevators (coordinates [10, 4])
+// dynamicObstacles: transient obstacles detected by Edge-AI sensors
 export function calculateRoute(
   startFloorId: string,
   startX: number,
@@ -22,7 +30,8 @@ export function calculateRoute(
   targetY: number,
   allLocations: any[], // To determine layout types and positions
   gridWidth = 12,
-  gridHeight = 8
+  gridHeight = 8,
+  dynamicObstacles: DynamicObstacle[] = []
 ): RouteSegment[] {
   
   // If start floor is different from target floor, we must route:
@@ -34,7 +43,7 @@ export function calculateRoute(
     const elevX = startElevator ? startElevator.x : 10;
     const elevY = startElevator ? startElevator.y : 4;
 
-    const segment1 = solveSingleFloor(startFloorId, startX, startY, elevX, elevY, allLocations, gridWidth, gridHeight);
+    const segment1 = solveSingleFloor(startFloorId, startX, startY, elevX, elevY, allLocations, gridWidth, gridHeight, [], dynamicObstacles);
     
     // Elevator exit event
     const transitSegment: RouteSegment = {
@@ -44,7 +53,7 @@ export function calculateRoute(
       action: 'ELEVATOR_EXIT'
     };
     
-    const segment2 = solveSingleFloor(targetFloorId, elevX, elevY, targetX, targetY, allLocations, gridWidth, gridHeight);
+    const segment2 = solveSingleFloor(targetFloorId, elevX, elevY, targetX, targetY, allLocations, gridWidth, gridHeight, [], dynamicObstacles);
     
     // Add actions
     if (segment1.length > 0) {
@@ -54,7 +63,7 @@ export function calculateRoute(
     return [...segment1, transitSegment, ...segment2];
   }
 
-  return solveSingleFloor(startFloorId, startX, startY, targetX, targetY, allLocations, gridWidth, gridHeight);
+  return solveSingleFloor(startFloorId, startX, startY, targetX, targetY, allLocations, gridWidth, gridHeight, [], dynamicObstacles);
 }
 
 function solveSingleFloor(
@@ -66,7 +75,8 @@ function solveSingleFloor(
   allLocations: any[],
   gridWidth: number,
   gridHeight: number,
-  otherVehicles: any[] = []
+  otherVehicles: any[] = [],
+  dynamicObstacles: DynamicObstacle[] = []
 ): RouteSegment[] {
   // Identify blocked coordinates (Racks, Chargers, and non-target stations)
   const obstacles = new Set<string>();
@@ -91,6 +101,17 @@ function solveSingleFloor(
       const isStart = v.x_position === sx && v.y_position === sy;
       if (!isTarget && !isStart) {
         obstacles.add(`${v.x_position},${v.y_position}`);
+      }
+    }
+  });
+
+  // Add dynamic obstacles from Edge-AI
+  dynamicObstacles.forEach(obs => {
+    if (obs.floor_id === floorId) {
+      const isTarget = obs.x === tx && obs.y === ty;
+      const isStart = obs.x === sx && obs.y === sy;
+      if (!isTarget && !isStart) {
+        obstacles.add(`${obs.x},${obs.y}`);
       }
     }
   });

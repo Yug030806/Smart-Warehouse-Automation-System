@@ -67,6 +67,11 @@ export interface Vehicle {
   last_seen: string;
   created_at: string;
   updated_at: string;
+  // Edge-AI fields
+  edge_ai_status: 'ONLINE' | 'DEGRADED' | 'OFFLINE';
+  sensor_suite_active: boolean;
+  last_decision_id: string | null;
+  obstacle_count: number; // lifetime obstacles detected
 }
 
 export interface Box {
@@ -110,7 +115,7 @@ export interface RouteSegment {
   floor_id: string;
   x: number;
   y: number;
-  action?: 'PICKUP' | 'DELIVER' | 'ELEVATOR_ENTER' | 'ELEVATOR_EXIT' | 'MOVE';
+  action?: 'PICKUP' | 'DELIVER' | 'ELEVATOR_ENTER' | 'ELEVATOR_EXIT' | 'MOVE' | 'STOP' | 'SLOW_DOWN' | 'REROUTE';
 }
 
 export interface Route {
@@ -135,7 +140,7 @@ export interface ScanEvent {
 
 export interface Alert {
   id: string;
-  type: 'URGENT_TASK' | 'LOW_BATTERY' | 'VEHICLE_OFFLINE' | 'ROUTE_BLOCKED' | 'BOX_MISMATCH' | 'DELIVERY_MISMATCH' | 'TASK_FAILED' | 'SYSTEM_ERROR';
+  type: 'URGENT_TASK' | 'LOW_BATTERY' | 'VEHICLE_OFFLINE' | 'ROUTE_BLOCKED' | 'BOX_MISMATCH' | 'DELIVERY_MISMATCH' | 'TASK_FAILED' | 'SYSTEM_ERROR' | 'OBSTACLE_DETECTED' | 'EDGE_AI_DECISION' | 'FLEET_CONFLICT';
   severity: 'INFO' | 'WARNING' | 'CRITICAL';
   message: string;
   vehicle_id?: string;
@@ -177,4 +182,35 @@ export interface SystemSettings {
   updated_at: string;
 }
 
+// Edge-AI: Sensor reading from a simulated onboard sensor
+export interface SensorReading {
+  id: string;
+  vehicle_id: string;
+  sensor_type: 'CAMERA' | 'LIDAR' | 'PROXIMITY' | 'IMU';
+  reading_value: number;        // normalized 0-100
+  detection_type: 'CLEAR' | 'OBSTACLE' | 'HUMAN' | 'VEHICLE' | 'LOW_CLEARANCE';
+  confidence: number;           // 0.0 - 1.0
+  timestamp: string;
+}
 
+// Edge-AI: Local autonomous decision made by per-vehicle Edge-AI
+export interface EdgeAIDecision {
+  id: string;
+  vehicle_id: string;
+  trigger_sensor_id: string;
+  decision_type: 'STOP' | 'SLOW_DOWN' | 'REROUTE' | 'CONTINUE' | 'EMERGENCY_STOP';
+  reason: string;
+  latency_ms: number;           // simulated edge processing time (5-50ms)
+  was_overridden: boolean;
+  created_at: string;
+}
+
+// Fleet Coordinator: Inter-vehicle coordination message
+export interface FleetMessage {
+  id: string;
+  from_vehicle_id: string;
+  to_vehicle_id: string | null;   // null = broadcast
+  message_type: 'POSITION_UPDATE' | 'OBSTACLE_REPORT' | 'LANE_REQUEST' | 'LANE_GRANT' | 'YIELD' | 'EMERGENCY';
+  payload: any;
+  created_at: string;
+}

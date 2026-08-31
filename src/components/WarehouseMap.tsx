@@ -1,16 +1,21 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
-import { Location, Vehicle, RouteSegment } from '@/lib/database.types';
+import { Location, Vehicle, RouteSegment, EdgeAIDecision, FleetMessage } from '@/lib/database.types';
+import { ObstacleCell } from '@/lib/simulator/edgeAIEngine';
 
 interface WarehouseMapProps {
   floorId: string;
   selectedVehicle?: Vehicle | null;
   activeRoute?: RouteSegment[] | null;
   onGridClick?: (x: number, y: number) => void;
+  obstacles?: ObstacleCell[];
+  showSensorRange?: boolean;
+  edgeDecisions?: EdgeAIDecision[];
+  fleetMessages?: FleetMessage[];
 }
 
-export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, onGridClick }: WarehouseMapProps) {
+export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, onGridClick, obstacles = [], showSensorRange = false, edgeDecisions = [], fleetMessages = [] }: WarehouseMapProps) {
   const [locations, setLocations] = useState<Location[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
 
@@ -63,10 +68,11 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
         <div className="flex flex-wrap items-center gap-3 text-[11px] sm:text-xs">
           <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-blue-500/20 border border-blue-500"></span><span className="text-slate-400">Rack</span></div>
           <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-green-500/20 border border-green-500"></span><span className="text-slate-400">Pickup</span></div>
-          <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-red-500/20 border border-red-500"></span><span className="text-slate-400">Out</span></div>
+          <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-orange-500/20 border border-orange-500"></span><span className="text-slate-400">Out</span></div>
           <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-purple-500/20 border border-purple-500"></span><span className="text-slate-400">Elevator</span></div>
           <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-yellow-500/20 border border-yellow-500 text-[9px] flex items-center justify-center text-yellow-400">⚡</span><span className="text-slate-400">Charging</span></div>
           <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-blue-600 border border-slate-500"></span><span className="text-slate-400">Cart</span></div>
+          <div className="flex items-center gap-1.5 ml-4 pl-4 border-l border-slate-800"><span className="h-3 w-3 rounded bg-red-950 border border-red-500 text-red-500 text-[8px] flex items-center justify-center font-bold">⚠</span><span className="text-slate-400">Obstacle</span></div>
         </div>
       </div>
 
@@ -81,6 +87,20 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
               let cellColor = 'bg-slate-900/30 border border-slate-900 hover:border-slate-800';
               let text = '';
               let cellLabel = `${x},${y}`;
+              
+              // Edge-AI visualizations
+              const isObstacle = obstacles.find(o => o.x === x && o.y === y && o.floor_id === floorId);
+              
+              // Sensor range: show for ALL vehicles on this floor (2-cell radius around each)
+              let isSensorRange = false;
+              if (showSensorRange) {
+                for (const veh of vehicles) {
+                  const dist = Math.max(Math.abs(veh.x_position - x), Math.abs(veh.y_position - y));
+                  if (dist > 0 && dist <= 2) { isSensorRange = true; break; }
+                }
+              }
+
+              let vehicleBadge = null;
 
               if (cell) {
                 if (cell.type === 'location') {
@@ -93,7 +113,7 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
                     cellColor = 'bg-green-950/20 border border-green-900/60 text-green-400';
                     text = 'IN';
                   } else if (loc.type === 'DELIVERY') {
-                    cellColor = 'bg-red-950/20 border border-red-900/60 text-red-400';
+                    cellColor = 'bg-orange-950/20 border border-orange-900/60 text-orange-400';
                     text = 'OUT';
                   } else if (loc.type === 'ELEVATOR') {
                     cellColor = 'bg-purple-800/40 border-2 border-purple-500/70 text-purple-300 font-bold';
@@ -105,10 +125,32 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
                 } else if (cell.type === 'vehicle') {
                   const veh = cell.data as Vehicle;
                   cellLabel = `${veh.vehicle_code} (${veh.status})`;
-                  cellColor = isSelectedVehicleCoord 
-                    ? 'bg-blue-500 border border-slate-100 text-slate-950 font-bold scale-105 shadow-lg shadow-blue-500/30' 
-                    : 'bg-blue-600 border border-slate-500 text-slate-100 font-semibold';
+                  
+                  // Need to get the NEWEST decision (from the end of the array)
+                  const recentDecision = [...edgeDecisions].reverse().find(d => d.vehicle_id === veh.id);
+                  const isStopped = recentDecision?.decision_type === 'STOP' || recentDecision?.decision_type === 'EMERGENCY_STOP';
+                  const isSlow = recentDecision?.decision_type === 'SLOW_DOWN';
+                  
+                  if (isSelectedVehicleCoord) {
+                    cellColor = isStopped 
+                      ? 'bg-red-500 border border-slate-100 text-slate-950 font-bold scale-105 shadow-lg shadow-red-500/30' 
+                      : (isSlow ? 'bg-amber-500 border border-slate-100 text-slate-950 font-bold scale-105 shadow-lg shadow-amber-500/30' : 'bg-blue-500 border border-slate-100 text-slate-950 font-bold scale-105 shadow-lg shadow-blue-500/30');
+                  } else {
+                    cellColor = isStopped 
+                      ? 'bg-red-600 border border-slate-500 text-slate-100 font-semibold'
+                      : (isSlow ? 'bg-amber-600 border border-slate-500 text-slate-100 font-semibold' : 'bg-blue-600 border border-slate-500 text-slate-100 font-semibold');
+                  }
                   text = veh.vehicle_code.substring(5); // e.g. '01'
+                  
+                  if (recentDecision) {
+                    vehicleBadge = (
+                      <div className={`absolute -top-3 -right-2 px-1 rounded text-[8px] font-black z-20 ${
+                        isStopped ? 'bg-red-500 text-black animate-pulse' : (isSlow ? 'bg-amber-500 text-black' : 'bg-green-500 text-black')
+                      }`}>
+                        {isStopped ? 'STOP' : (isSlow ? 'SLOW' : 'OK')}
+                      </div>
+                    );
+                  }
                 }
               }
 
@@ -121,7 +163,21 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
                   title={cellLabel}
                   className={`relative aspect-square flex flex-col items-center justify-center ${roundedShape} text-[10px] font-bold transition-all duration-150 active:scale-95 ${cellColor}`}
                 >
-                  {text || <span className="text-[8px] text-slate-700 font-normal">{x},{y}</span>}
+                  {/* Sensor range visualization layer */}
+                  {isSensorRange && !cell && !isObstacle && (
+                    <div className="absolute inset-0 bg-blue-500/10 border-blue-500/20 rounded-lg pointer-events-none" />
+                  )}
+
+                  {/* Obstacle overlay */}
+                  {isObstacle && (
+                    <div className="absolute inset-0 bg-red-950/80 border border-red-500 rounded-lg flex items-center justify-center z-10 animate-pulse">
+                      <span className="text-red-500 font-bold text-xs">⚠</span>
+                    </div>
+                  )}
+
+                  {vehicleBadge}
+
+                  <span className="z-10">{text || <span className="text-[8px] text-slate-700 font-normal">{x},{y}</span>}</span>
                   
                   {/* Route marker overlay */}
                   {hasRoute && cell?.type !== 'vehicle' && (

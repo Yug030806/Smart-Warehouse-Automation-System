@@ -100,6 +100,9 @@ export const getSupabaseClient = () => {
             case 'audit_logs': data = mockDb.getAuditLogs(); break;
             case 'notifications': data = mockDb.getNotifications(); break;
             case 'system_settings': data = [mockDb.getSettings()]; break;
+            case 'sensor_readings': data = mockDb.getSensorReadings(); break;
+            case 'edge_ai_decisions': data = mockDb.getEdgeAIDecisions(); break;
+            case 'fleet_messages': data = mockDb.getFleetMessages(); break;
             default: data = [];
           }
           
@@ -133,6 +136,9 @@ export const getSupabaseClient = () => {
             case 'alerts': mockDb.saveAlert(item); break;
             case 'audit_logs': mockDb.addAuditLog(item); break;
             case 'notifications': mockDb.saveNotification(item); break;
+            case 'sensor_readings': mockDb.addSensorReading(item); break;
+            case 'edge_ai_decisions': mockDb.addEdgeAIDecision(item); break;
+            case 'fleet_messages': mockDb.addFleetMessage(item); break;
           }
           return { data: [item], error: null };
         },

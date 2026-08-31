@@ -94,7 +94,11 @@ export default function VehiclesPage() {
       current_task_id: null,
       last_seen: new Date().toISOString(),
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      edge_ai_status: 'ONLINE',
+      sensor_suite_active: true,
+      last_decision_id: null,
+      obstacle_count: 0
     };
 
     supabase.from('vehicles').insert(newVehicle);

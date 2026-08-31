@@ -17,7 +17,9 @@ import {
   Clock,
   Navigation,
   UserCheck,
-  X
+  X,
+  Brain,
+  ShieldCheck
 } from 'lucide-react';
 import { Box, Vehicle, Task, Alert, Profile } from '@/lib/database.types';
 
@@ -35,7 +37,9 @@ export default function Dashboard() {
     availableVehicles: 0,
     busyVehicles: 0,
     urgentTasks: 0,
-    activeAlerts: 0
+    activeAlerts: 0,
+    edgeAiActive: 0,
+    obstaclesToday: 0
   });
 
   const [activeTasksList, setActiveTasksList] = useState<Task[]>([]);
@@ -91,6 +95,8 @@ export default function Dashboard() {
       const busyVehicles = vehicles.filter(v => v.status === 'BUSY').length;
       const urgentTasks = tasks.filter(t => t.priority === 'URGENT' && t.status !== 'COMPLETED').length;
       const activeAlerts = alerts.length;
+      const edgeAiActive = vehicles.filter(v => v.sensor_suite_active).length;
+      const obstaclesToday = vehicles.reduce((sum, v) => sum + (v.obstacle_count || 0), 0);
 
       setStats({
         totalBoxes,
@@ -100,7 +106,9 @@ export default function Dashboard() {
         availableVehicles,
         busyVehicles,
         urgentTasks,
-        activeAlerts
+        activeAlerts,
+        edgeAiActive,
+        obstaclesToday
       });
 
       setActiveTasksList(tasks.filter(t => t.status !== 'COMPLETED' && t.status !== 'CANCELLED').slice(0, 5) as Task[]);
@@ -188,8 +196,14 @@ export default function Dashboard() {
         <main className="flex-grow p-4 sm:p-6 md:p-8 overflow-y-auto space-y-6 md:space-y-8 overscroll-contain">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Logistics Master Console</h1>
-              <p className="text-xs sm:text-sm text-slate-400">Real-time status overview of vehicles, tasks, and system payloads.</p>
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Logistics Master Console</h1>
+                <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-green-950/30 border border-green-900/50">
+                  <ShieldCheck className="h-3.5 w-3.5 text-green-400" />
+                  <span className="text-[10px] font-bold text-green-400 uppercase tracking-widest">Fleet Health: Optimal</span>
+                </div>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-400 mt-1">Real-time status overview of vehicles, tasks, and system payloads.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button 
@@ -214,11 +228,13 @@ export default function Dashboard() {
           </div>
 
           {/* KPI Dashboard Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
             <KpiCard title="Total Packets" value={stats.totalBoxes} icon={Boxes} colorClass="text-blue-400" />
             <KpiCard title="Pending Tasks" value={stats.pendingTasks} icon={Clock} colorClass="text-yellow-500" />
             <KpiCard title="Active Transport" value={stats.activeTasks} icon={Activity} colorClass="text-emerald-400" />
             <KpiCard title="Active Warnings" value={stats.activeAlerts} icon={AlertTriangle} colorClass={stats.activeAlerts > 0 ? 'text-red-500' : 'text-slate-600'} />
+            <KpiCard title="Edge-AI Active" value={stats.edgeAiActive} icon={Brain} colorClass="text-purple-400" />
+            <KpiCard title="Obstacles Today" value={stats.obstaclesToday} icon={AlertTriangle} colorClass="text-amber-500" />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

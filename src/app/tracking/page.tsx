@@ -7,23 +7,32 @@ import WarehouseMap from '@/components/WarehouseMap';
 import { SimulatorVehicleController } from '@/lib/simulator/vehicleController';
 import mockDb from '@/lib/supabase/mockDb';
 import { calculateRoute } from '@/lib/algorithms/astar';
+import { fleetCoordinator, FleetMetrics, FleetConflict } from '@/lib/simulator/fleetCoordinator';
 import { 
   Play, 
   Pause, 
   RotateCcw, 
   Terminal,
   Zap,
+  Brain,
+  AlertTriangle,
+  ShieldAlert,
+  Radio,
+  Target
 } from 'lucide-react';
-import { Vehicle, Task, Route, Location, Box } from '@/lib/database.types';
+import { Vehicle, Task, Location, Box, EdgeAIDecision } from '@/lib/database.types';
+import { ObstacleCell } from '@/lib/simulator/edgeAIEngine';
 
 interface LogEntry {
   id: string;
   time: string;
   message: string;
-  type: 'INFO' | 'SUCCESS' | 'WARN';
+  type: 'INFO' | 'SUCCESS' | 'WARN' | 'ERROR';
 }
 
 const floorLabel = (fId: string) => fId === 'f-01' ? '1' : fId === 'f-02' ? '2' : '3';
+
+type SimMode = 'SINGLE' | 'FLEET';
 
 export default function TrackingPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -31,25 +40,39 @@ export default function TrackingPage() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [boxes, setBoxes] = useState<Box[]>([]);
 
-  // Use refs for selected vehicle ID to avoid stale closure issues
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+  // View & Mode State
+  const [simMode, setSimMode] = useState<SimMode>('SINGLE');
   const [selectedFloor, setSelectedFloor] = useState('f-01');
-  const hasAutoSelected = useRef(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showSensorRanges, setShowSensorRanges] = useState(true);
 
-  // Simulator state
+  // --- Single Cart State ---
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+  const hasAutoSelected = useRef(false);
   const [activeRoutePts, setActiveRoutePts] = useState<any[]>([]);
   const [simSpeed, setSimSpeed] = useState(1);
   const simControllerRef = useRef<SimulatorVehicleController | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [currentStepLabel, setCurrentStepLabel] = useState('Ready for drive simulation');
+
+  // --- Fleet Mode State ---
+  const [isSimulatingAll, setIsSimulatingAll] = useState(false);
+  const fleetControllersRef = useRef<{ [vehicleId: string]: SimulatorVehicleController }>({});
+  const [fleetMetrics, setFleetMetrics] = useState<FleetMetrics | null>(null);
+
+  // --- Shared Edge-AI State ---
+  const [obstacles, setObstacles] = useState<ObstacleCell[]>([]);
+  const [edgeDecisions, setEdgeDecisions] = useState<EdgeAIDecision[]>([]);
+  
+  // Console
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const logContainerRef = useRef<HTMLDivElement>(null);
 
-  const addLog = useCallback((message: string, type: 'INFO' | 'SUCCESS' | 'WARN' = 'INFO') => {
+  const addLog = useCallback((message: string, type: 'INFO' | 'SUCCESS' | 'WARN' | 'ERROR' = 'INFO') => {
     const time = new Date().toLocaleTimeString();
     setLogs((prev) => [
-      ...prev.slice(-40),
+      ...prev.slice(-49),
       { id: `log-${Date.now()}-${Math.random()}`, time, message, type }
     ]);
   }, []);
@@ -60,7 +83,19 @@ export default function TrackingPage() {
     }
   }, [logs]);
 
-  // Data loading — does NOT touch selectedVehicleId or selectedFloor
+  // Handle fleet events
+  useEffect(() => {
+    const unsubscribe = fleetCoordinator.onEvent((event) => {
+      let type: LogEntry['type'] = 'INFO';
+      if (event.type === 'CONFLICT_RESOLVED') type = 'WARN';
+      if (event.type === 'OBSTACLE_BROADCAST') type = 'ERROR';
+      if (event.type === 'LANE_GRANTED') type = 'SUCCESS';
+      
+      addLog(`[FLEET] ${event.message}`, type);
+    });
+    return () => unsubscribe();
+  }, [addLog]);
+
   const loadData = useCallback(() => {
     const v = (supabase.from('vehicles').select().data || []) as Vehicle[];
     setVehicles(v);
@@ -71,13 +106,15 @@ export default function TrackingPage() {
     const b = (supabase.from('boxes').select().data || []) as Box[];
     setBoxes(b);
 
-    // Read system settings and apply default speed if not currently simulating
+    setObstacles(fleetCoordinator.getGlobalObstacles());
+    setEdgeDecisions(mockDb.getEdgeAIDecisions());
+    setFleetMetrics(fleetCoordinator.getMetrics());
+
     const sysSettings = mockDb.getSettings();
     if (!simControllerRef.current) {
       setSimSpeed(sysSettings.default_speed || 1);
     }
 
-    // Auto-select first vehicle only on first load
     if (!hasAutoSelected.current && v.length > 0) {
       hasAutoSelected.current = true;
       setSelectedVehicleId(v[0].id);
@@ -91,9 +128,41 @@ export default function TrackingPage() {
     return () => clearInterval(interval);
   }, [loadData]);
 
-  // Derive the selected vehicle object from the current vehicles list
+  const handleMapClick = (x: number, y: number) => {
+    // Check if obstacle already exists here
+    const existingIndex = obstacles.findIndex(o => o.x === x && o.y === y && o.floor_id === selectedFloor);
+    
+    if (existingIndex !== -1) {
+      // Remove obstacle
+      fleetCoordinator.removeGlobalObstacle(x, y, selectedFloor);
+      if (simMode === 'FLEET') {
+        Object.values(fleetControllersRef.current).forEach(c => (c as any).getEdgeAIEngine?.().removeManualObstacle(x, y, selectedFloor));
+      } else if (simControllerRef.current) {
+        (simControllerRef.current as any).getEdgeAIEngine?.().removeManualObstacle(x, y, selectedFloor);
+      }
+      addLog(`Removed obstacle at [${x},${y}].`, 'INFO');
+    } else {
+      // Add obstacle globally so it appears immediately
+      const obstacle: ObstacleCell = {
+        x, y, floor_id: selectedFloor,
+        detected_by: 'USER', timestamp: Date.now(), ttl: 30000
+      };
+      fleetCoordinator.addGlobalObstacle(obstacle);
+      
+      // Also notify active edge engines so they react instantly
+      if (simMode === 'FLEET') {
+        Object.values(fleetControllersRef.current).forEach(c => (c as any).getEdgeAIEngine?.().addManualObstacle(x, y, selectedFloor));
+      } else if (simControllerRef.current) {
+        (simControllerRef.current as any).getEdgeAIEngine?.().addManualObstacle(x, y, selectedFloor);
+      }
+      
+      addLog(`Dropped manual obstacle at [${x},${y}]. AMRs will reroute if they encounter it.`, 'WARN');
+    }
+  };
+
   const selectedVehicle = vehicles.find((v) => v.id === selectedVehicleId) || null;
 
+  // --- SINGLE CART LOGIC ---
   const stopCurrentSimulation = useCallback(() => {
     if (simControllerRef.current) {
       simControllerRef.current.stop();
@@ -105,27 +174,25 @@ export default function TrackingPage() {
   }, []);
 
   const handleSelectVehicle = useCallback((v: Vehicle) => {
+    if (isSimulatingAll) {
+      addLog('Cannot select individual vehicles while Fleet Mode is running.', 'WARN');
+      return;
+    }
     stopCurrentSimulation();
     setSelectedVehicleId(v.id);
     setSelectedFloor(v.current_floor_id);
     setCurrentStepLabel(`Selected ${v.vehicle_code}. Ready for simulation.`);
     addLog(`Selected ${v.vehicle_code} (${v.name}) on Floor ${floorLabel(v.current_floor_id)}.`, 'INFO');
-  }, [stopCurrentSimulation, addLog]);
+  }, [stopCurrentSimulation, addLog, isSimulatingAll]);
 
-  // Ensure a task is assigned, picking destinations on the SAME floor as the vehicle
   const ensureAssignedTask = useCallback((veh: Vehicle): { task: Task; box: Box } | null => {
     if (veh.current_task_id) {
       const existingTask = tasks.find((t) => t.id === veh.current_task_id);
       const existingBox = existingTask ? boxes.find((b) => b.id === existingTask.box_id) : null;
-      if (existingTask && existingBox) {
-        return { task: existingTask, box: existingBox };
-      }
+      if (existingTask && existingBox) return { task: existingTask, box: existingBox };
     }
-
-    // Pick a pending task that has a destination on the vehicle's floor first, then any
     const pending = tasks.filter((t) => t.status === 'PENDING');
     let targetTask: Task;
-
     const sameFloorPending = pending.find((t) => {
       const destLoc = locations.find((l) => l.id === t.destination_location_id);
       return destLoc && destLoc.floor_id === veh.current_floor_id;
@@ -136,18 +203,10 @@ export default function TrackingPage() {
     } else if (pending.length > 0) {
       targetTask = pending[0];
     } else {
-      // Create a test task — pick destination on the vehicle's current floor
       const availableBox = boxes.find((b) => b.status === 'WAITING') || boxes[0];
       if (!availableBox) return null;
-
-      // Find a destination location on the SAME floor as the vehicle
-      const sameFloorDest = locations.find(
-        (l) => l.floor_id === veh.current_floor_id && (l.type === 'DELIVERY' || l.type === 'RACK') && !(l.x === veh.x_position && l.y === veh.y_position)
-      );
-      // Fallback: any location on same floor that isn't the vehicle's current position
-      const fallbackDest = locations.find(
-        (l) => l.floor_id === veh.current_floor_id && !(l.x === veh.x_position && l.y === veh.y_position)
-      );
+      const sameFloorDest = locations.find(l => l.floor_id === veh.current_floor_id && (l.type === 'DELIVERY' || l.type === 'RACK') && !(l.x === veh.x_position && l.y === veh.y_position));
+      const fallbackDest = locations.find(l => l.floor_id === veh.current_floor_id && !(l.x === veh.x_position && l.y === veh.y_position));
       const destLocation = sameFloorDest || fallbackDest;
       if (!destLocation) return null;
 
@@ -173,53 +232,28 @@ export default function TrackingPage() {
       };
       supabase.from('tasks').insert(targetTask);
     }
-
-    // Assign vehicle to task
-    supabase.from('vehicles').update({
-      status: 'BUSY',
-      current_task_id: targetTask.id,
-    }).eq('id', veh.id);
-
-    supabase.from('tasks').update({
-      status: 'ASSIGNED',
-      vehicle_id: veh.id,
-      assigned_at: new Date().toISOString(),
-    }).eq('id', targetTask.id);
-
+    supabase.from('vehicles').update({ status: 'BUSY', current_task_id: targetTask.id }).eq('id', veh.id);
+    supabase.from('tasks').update({ status: 'ASSIGNED', vehicle_id: veh.id, assigned_at: new Date().toISOString() }).eq('id', targetTask.id);
     const targetBox = boxes.find((b) => b.id === targetTask.box_id) || boxes[0];
     return { task: targetTask, box: targetBox };
   }, [tasks, boxes, locations]);
 
   const handleStartSimulation = useCallback(() => {
     if (!selectedVehicle) return;
-
     const assignment = ensureAssignedTask(selectedVehicle);
     if (!assignment) {
       addLog('Error: Unable to assign task or route for simulation.', 'WARN');
       return;
     }
-
     const { task, box } = assignment;
     addLog(`Dispatching ${selectedVehicle.vehicle_code} on Task ${task.task_code} (Box ${box.box_code})...`, 'INFO');
 
     const destLoc = locations.find((l) => l.id === task.destination_location_id);
-    if (!destLoc) {
-      addLog('Error: Destination location coordinates not found.', 'WARN');
-      return;
-    }
+    if (!destLoc) return;
 
-    const pts = calculateRoute(
-      selectedVehicle.current_floor_id,
-      selectedVehicle.x_position,
-      selectedVehicle.y_position,
-      destLoc.floor_id,
-      destLoc.x,
-      destLoc.y,
-      locations
-    );
-
+    const pts = calculateRoute(selectedVehicle.current_floor_id, selectedVehicle.x_position, selectedVehicle.y_position, destLoc.floor_id, destLoc.x, destLoc.y, locations);
     setActiveRoutePts(pts);
-    addLog(`Calculated A* route: ${pts.length} steps. From Floor ${floorLabel(selectedVehicle.current_floor_id)} to ${destLoc.name} (Floor ${floorLabel(destLoc.floor_id)}).`, 'INFO');
+    addLog(`Calculated route: ${pts.length} steps to ${destLoc.name}.`, 'INFO');
 
     const controller = new SimulatorVehicleController(selectedVehicle.id);
     controller.connect();
@@ -228,38 +262,19 @@ export default function TrackingPage() {
     setIsSimulating(true);
     setIsPaused(false);
 
-    supabase.from('tasks').update({
-      status: 'IN_PROGRESS',
-      started_at: new Date().toISOString(),
-    }).eq('id', task.id);
-
-    supabase.from('boxes').update({
-      status: 'IN_TRANSIT',
-    }).eq('id', box.id);
+    supabase.from('tasks').update({ status: 'IN_PROGRESS', started_at: new Date().toISOString() }).eq('id', task.id);
+    supabase.from('boxes').update({ status: 'IN_TRANSIT' }).eq('id', box.id);
 
     const vCode = selectedVehicle.vehicle_code;
     controller.sendMoveCommand(
       pts,
       (x, y, floorId, index) => {
-        // Only auto-switch floor during active simulation to follow the cart
         setSelectedFloor(floorId);
-        const node = pts[index];
-        let msg = '';
-        if (node.action === 'ELEVATOR_ENTER') {
-          msg = `Entering Elevator A (Floor transition)...`;
-        } else if (node.action === 'ELEVATOR_EXIT') {
-          msg = `Exited Elevator onto Floor ${floorLabel(floorId)}.`;
-        } else {
-          msg = `Step ${index + 1}/${pts.length}: [X:${x}, Y:${y}] Floor ${floorLabel(floorId)}`;
-        }
-        setCurrentStepLabel(msg);
-        addLog(`${vCode} → ${msg}`, 'INFO');
+        setCurrentStepLabel(`Step ${index + 1}/${pts.length}: [X:${x}, Y:${y}] Floor ${floorLabel(floorId)}`);
       },
       () => {
-        const arrivalMsg = `Arrived at ${destLoc.name}. Pending QR verification.`;
-        setCurrentStepLabel(arrivalMsg);
-        addLog(`✓ ${vCode}: ${arrivalMsg}`, 'SUCCESS');
-
+        setCurrentStepLabel(`Arrived at ${destLoc.name}.`);
+        addLog(`✓ ${vCode} Arrived at destination.`, 'SUCCESS');
         supabase.from('tasks').update({ status: 'PICKUP_PENDING' }).eq('id', task.id);
         supabase.from('boxes').update({ status: 'PICKUP_PENDING' }).eq('id', box.id);
         setIsSimulating(false);
@@ -269,27 +284,9 @@ export default function TrackingPage() {
 
   const handleStartCharging = useCallback(() => {
     if (!selectedVehicle) return;
-
-    const charger = locations.find((l) => l.floor_id === selectedVehicle.current_floor_id && l.type === 'CHARGING')
-      || locations.find((l) => l.type === 'CHARGING');
-
-    if (!charger) {
-      addLog('Error: No charging station location found.', 'WARN');
-      return;
-    }
-
-    addLog(`Routing ${selectedVehicle.vehicle_code} to ⚡ Charging Station (${charger.name})...`, 'INFO');
-
-    const pts = calculateRoute(
-      selectedVehicle.current_floor_id,
-      selectedVehicle.x_position,
-      selectedVehicle.y_position,
-      charger.floor_id,
-      charger.x,
-      charger.y,
-      locations
-    );
-
+    const charger = locations.find((l) => l.floor_id === selectedVehicle.current_floor_id && l.type === 'CHARGING') || locations.find((l) => l.type === 'CHARGING');
+    if (!charger) return;
+    const pts = calculateRoute(selectedVehicle.current_floor_id, selectedVehicle.x_position, selectedVehicle.y_position, charger.floor_id, charger.x, charger.y, locations);
     setActiveRoutePts(pts);
     const controller = new SimulatorVehicleController(selectedVehicle.id);
     controller.connect();
@@ -298,124 +295,93 @@ export default function TrackingPage() {
     setIsSimulating(true);
     setIsPaused(false);
 
-    const vCode = selectedVehicle.vehicle_code;
     controller.sendMoveCommand(
       pts,
       (x, y, floorId, index) => {
         setSelectedFloor(floorId);
-        const msg = `Navigating to ⚡ Charger: Step ${index + 1}/${pts.length} [X:${x}, Y:${y}]`;
-        setCurrentStepLabel(msg);
-        addLog(`${vCode} → ${msg}`, 'INFO');
+        setCurrentStepLabel(`Navigating to ⚡ Charger: Step ${index + 1}/${pts.length}`);
       },
       () => {
-        const arrivalMsg = `Arrived at ⚡ Charging Station. Battery refueled to 100%.`;
-        setCurrentStepLabel(arrivalMsg);
-        addLog(`⚡ ${vCode}: ${arrivalMsg}`, 'SUCCESS');
-
-        supabase.from('vehicles').update({
-          status: 'CHARGING',
-          battery_percentage: 100,
-          current_location_id: charger.id,
-          x_position: charger.x,
-          y_position: charger.y,
-        }).eq('id', selectedVehicle.id);
-
+        setCurrentStepLabel(`Battery refueled to 100%.`);
+        supabase.from('vehicles').update({ status: 'CHARGING', battery_percentage: 100, current_location_id: charger.id, x_position: charger.x, y_position: charger.y }).eq('id', selectedVehicle.id);
         loadData();
         setIsSimulating(false);
       }
     );
   }, [selectedVehicle, locations, simSpeed, addLog, loadData]);
 
-  const handleDriveToOut = useCallback(() => {
-    if (!selectedVehicle) return;
-
-    const outLoc = locations.find((l) => l.floor_id === selectedVehicle.current_floor_id && l.type === 'DELIVERY')
-      || locations.find((l) => l.type === 'DELIVERY');
-
-    if (!outLoc) {
-      addLog('Error: No Red Out location found.', 'WARN');
+  // --- FLEET MODE LOGIC ---
+  const startFleetAll = () => {
+    if (isSimulatingAll) return;
+    if (isSimulating) {
+      addLog('Stop single vehicle simulation before starting fleet mode.', 'WARN');
       return;
     }
-
-    addLog(`Routing ${selectedVehicle.vehicle_code} to 🔴 Red Out Station (${outLoc.name})...`, 'INFO');
-
-    const pts = calculateRoute(
-      selectedVehicle.current_floor_id,
-      selectedVehicle.x_position,
-      selectedVehicle.y_position,
-      outLoc.floor_id,
-      outLoc.x,
-      outLoc.y,
-      locations
-    );
-
-    setActiveRoutePts(pts);
-    const controller = new SimulatorVehicleController(selectedVehicle.id);
-    controller.connect();
-    controller.setSpeed(simSpeed);
-    simControllerRef.current = controller;
-    setIsSimulating(true);
-    setIsPaused(false);
-
-    const vCode = selectedVehicle.vehicle_code;
-    controller.sendMoveCommand(
-      pts,
-      (x, y, floorId, index) => {
-        setSelectedFloor(floorId);
-        const msg = `Routing to Red Out: Step ${index + 1}/${pts.length} [X:${x}, Y:${y}]`;
-        setCurrentStepLabel(msg);
-        addLog(`${vCode} → ${msg}`, 'INFO');
-      },
-      () => {
-        const arrivalMsg = `Arrived at 🔴 Red Out Station (${outLoc.name}). Ready for outbound dispatch.`;
-        setCurrentStepLabel(arrivalMsg);
-        addLog(`✓ ${vCode}: ${arrivalMsg}`, 'SUCCESS');
-
-        supabase.from('vehicles').update({
-          x_position: outLoc.x,
-          y_position: outLoc.y,
-          current_location_id: outLoc.id,
-          status: 'OFFLINE'
-        }).eq('id', selectedVehicle.id);
-
-        loadData();
-        setIsSimulating(false);
+    
+    addLog('Starting multi-vehicle fleet simulation...', 'SUCCESS');
+    
+    let available = vehicles.filter(v => v.current_floor_id === selectedFloor && v.status === 'AVAILABLE').slice(0, 3);
+    if (available.length === 0) {
+      const busy = vehicles.filter(v => v.current_floor_id === selectedFloor && v.status !== 'OFFLINE').slice(0, 3);
+      if (busy.length === 0) {
+        addLog('No vehicles found on this floor.', 'WARN');
+        return;
       }
-    );
-  }, [selectedVehicle, locations, simSpeed, addLog, loadData]);
-
-  const handlePauseResume = useCallback(() => {
-    if (!simControllerRef.current) return;
-    if (isPaused) {
-      simControllerRef.current.resume();
-      setIsPaused(false);
-      addLog(`Resumed drive for ${selectedVehicle?.vehicle_code}.`, 'INFO');
-    } else {
-      simControllerRef.current.pause();
-      setIsPaused(true);
-      addLog(`Paused drive for ${selectedVehicle?.vehicle_code}.`, 'WARN');
+      available = busy;
+      addLog('Forced reset of BUSY vehicles to start simulation.', 'WARN');
     }
-  }, [isPaused, selectedVehicle, addLog]);
 
-  const handleResetSim = useCallback(() => {
-    stopCurrentSimulation();
-    setCurrentStepLabel('Simulation reset. Ready for new drive.');
-    addLog('Simulation state reset.', 'WARN');
+    available.forEach(v => {
+      const possibleDests = locations.filter(l => l.floor_id === selectedFloor && (l.type === 'RACK' || l.type === 'DELIVERY') && !(l.x === v.x_position && l.y === v.y_position));
+      const destLoc = possibleDests[Math.floor(Math.random() * possibleDests.length)];
+      
+      if (destLoc) {
+        const pts = calculateRoute(v.current_floor_id, v.x_position, v.y_position, destLoc.floor_id, destLoc.x, destLoc.y, locations);
+        if (pts.length > 0) {
+          const controller = new SimulatorVehicleController(v.id, 0.30);
+          controller.connect();
+          controller.setSpeed(3);
+          fleetControllersRef.current[v.id] = controller;
+          
+          supabase.from('vehicles').update({ status: 'BUSY' }).eq('id', v.id);
+          
+          controller.sendMoveCommand(
+            pts,
+            () => {},
+            () => {
+              addLog(`✓ ${v.vehicle_code} reached destination.`, 'SUCCESS');
+              supabase.from('vehicles').update({ status: 'AVAILABLE' }).eq('id', v.id);
+              delete fleetControllersRef.current[v.id];
+              if (Object.keys(fleetControllersRef.current).length === 0) setIsSimulatingAll(false);
+            }
+          );
+        }
+      }
+    });
+    setIsSimulatingAll(true);
+  };
+
+  const stopFleetAll = () => {
+    Object.values(fleetControllersRef.current).forEach(c => c.stop());
+    fleetControllersRef.current = {};
+    setIsSimulatingAll(false);
+    vehicles.forEach(v => {
+      if (v.status === 'BUSY') supabase.from('vehicles').update({ status: 'AVAILABLE' }).eq('id', v.id);
+    });
+    addLog('Stopped fleet simulation.', 'WARN');
     loadData();
-  }, [stopCurrentSimulation, addLog, loadData]);
+  };
 
-  const handleSpeedChange = useCallback((mult: number) => {
-    setSimSpeed(mult);
-    if (simControllerRef.current) {
-      simControllerRef.current.setSpeed(mult);
+  const resetEdgeAI = () => {
+    fleetCoordinator.reset();
+    if (simMode === 'FLEET') {
+      Object.values(fleetControllersRef.current).forEach(c => (c as any).getEdgeAIEngine?.().reset());
+    } else if (simControllerRef.current) {
+      (simControllerRef.current as any).getEdgeAIEngine?.().reset();
     }
-    addLog(`Speed set to ${mult}x.`, 'INFO');
-  }, [addLog]);
-
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const activeTask = selectedVehicle?.current_task_id
-    ? tasks.find((t) => t.id === selectedVehicle.current_task_id)
-    : null;
+    addLog('Edge-AI state and obstacles reset.', 'WARN');
+    loadData();
+  };
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-slate-950">
@@ -424,210 +390,266 @@ export default function TrackingPage() {
         <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
 
         <main className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8 overflow-y-auto flex-1 overscroll-contain">
+          
+          {/* Header & Mode Toggle */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Live Fleet Tracking & Simulation</h1>
-              <p className="text-xs sm:text-sm text-slate-400">Select any cart, pick a floor, and run real-time drive simulations with adjustable speed.</p>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-100 flex items-center gap-3">
+                Live Tracking & Coordination
+                {simMode === 'FLEET' && (
+                  <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-950/40 border border-purple-500/50">
+                    <Brain className="h-4 w-4 text-purple-400 animate-pulse" />
+                    <span className="text-[10px] font-bold text-purple-400 uppercase tracking-widest">Distributed AI</span>
+                  </div>
+                )}
+              </h1>
+              <p className="text-[10px] sm:text-xs text-blue-400 font-bold mt-2 bg-blue-950/30 p-2 rounded-lg border border-blue-900/50 inline-block">
+                💡 Tip: Click anywhere on the map grid below to manually drop an obstacle and watch the AMRs react!
+              </p>
             </div>
 
-            {/* Speed control */}
             <div className="flex items-center gap-2 bg-slate-900/80 p-1.5 rounded-xl border border-slate-800">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 flex items-center gap-1">
-                <Zap className="h-3 w-3 text-yellow-500" /> Speed:
-              </span>
-              {[1, 2, 5, 10].map((mult) => (
-                <button
-                  key={mult}
-                  onClick={() => handleSpeedChange(mult)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition duration-150 ${
-                    simSpeed === mult
-                      ? 'bg-blue-600 text-slate-50 shadow-md shadow-blue-600/30'
-                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                  }`}
-                >
-                  {mult}x
-                </button>
-              ))}
+              <button
+                onClick={() => setSimMode('SINGLE')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition duration-150 ${
+                  simMode === 'SINGLE' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Single Cart
+              </button>
+              <button
+                onClick={() => setSimMode('FLEET')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition duration-150 ${
+                  simMode === 'FLEET' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Fleet Mode
+              </button>
             </div>
           </div>
+
+          {/* Fleet Metrics (Only shown in FLEET mode) */}
+          {simMode === 'FLEET' && (
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex flex-col justify-center">
+                <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> Obstacles</span>
+                <span className="text-2xl font-black text-amber-500 mt-1">{fleetMetrics?.totalObstaclesReported || 0}</span>
+              </div>
+              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex flex-col justify-center">
+                <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1"><ShieldAlert className="h-3 w-3" /> Conflicts Resolved</span>
+                <span className="text-2xl font-black text-red-400 mt-1">{fleetMetrics?.totalConflictsResolved || 0}</span>
+              </div>
+              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex flex-col justify-center">
+                <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1"><Radio className="h-3 w-3" /> Broadcasts</span>
+                <span className="text-2xl font-black text-blue-400 mt-1">{fleetMetrics?.totalBroadcasts || 0}</span>
+              </div>
+              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex flex-col justify-center">
+                <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1"><Target className="h-3 w-3" /> Yields</span>
+                <span className="text-2xl font-black text-green-400 mt-1">{fleetMetrics?.totalYields || 0}</span>
+              </div>
+              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex flex-col justify-center">
+                <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1"><Brain className="h-3 w-3" /> AI Agents</span>
+                <span className="text-2xl font-black text-purple-400 mt-1">{fleetMetrics?.vehiclesWithSensors || 0}</span>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
             {/* Map and controls */}
             <div className="lg:col-span-3 space-y-6">
-              {/* Floor tabs */}
-              <div className="flex items-center gap-2 border-b border-slate-900 pb-3">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-2">Floor View:</span>
-                {['f-01', 'f-02', 'f-03'].map((fId, idx) => (
-                  <button
-                    key={fId}
-                    onClick={() => setSelectedFloor(fId)}
-                    className={`px-4 py-2 rounded-xl text-xs font-semibold transition ${
-                      selectedFloor === fId
-                        ? 'bg-blue-600 text-slate-50 shadow-md'
-                        : 'bg-slate-900 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    Floor {idx + 1}
+              
+              <div className="flex items-center justify-between border-b border-slate-900 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-2">Floor View:</span>
+                  {['f-01', 'f-02', 'f-03'].map((fId, idx) => (
+                    <button
+                      key={fId}
+                      onClick={() => setSelectedFloor(fId)}
+                      className={`px-4 py-2 rounded-xl text-xs font-semibold transition ${
+                        selectedFloor === fId ? 'bg-blue-600 text-slate-50 shadow-md' : 'bg-slate-900 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Floor {idx + 1}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setShowSensorRanges(!showSensorRanges)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5 ${showSensorRanges ? 'bg-blue-900/40 text-blue-400 border-blue-500/50' : 'bg-slate-900 text-slate-400 border-slate-800'}`} title="Show edge-AI detection radius around each cart">
+                    <Radio className="h-3.5 w-3.5" /> 
+                    {showSensorRanges ? 'Sensors Active' : 'Show Sensors'}
                   </button>
-                ))}
+                  <button onClick={resetEdgeAI} className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-slate-200 transition" title="Clear Obstacles & AI Data">
+                    <RotateCcw className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
 
-              <WarehouseMap
-                floorId={selectedFloor}
-                selectedVehicle={selectedVehicle}
-                activeRoute={activeRoutePts}
-              />
+              <div className="bg-slate-900/50 rounded-xl border border-slate-800 p-2">
+                <WarehouseMap
+                  floorId={selectedFloor}
+                  selectedVehicle={simMode === 'SINGLE' ? selectedVehicle : null}
+                  activeRoute={simMode === 'SINGLE' ? activeRoutePts : []}
+                  obstacles={obstacles}
+                  showSensorRange={showSensorRanges}
+                  edgeDecisions={edgeDecisions}
+                  onGridClick={handleMapClick}
+                />
+              </div>
 
-              {/* Drive Sim Console */}
-              {selectedVehicle && (
-                <div className="rounded-xl border border-slate-900 bg-slate-950 p-6 space-y-6 shadow-xl">
+              {/* Console & Controls Container */}
+              <div className="rounded-xl border border-slate-900 bg-slate-950 p-6 shadow-xl space-y-4">
+                
+                {/* Fleet Controls (If in FLEET mode) */}
+                {simMode === 'FLEET' && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-4 border-b border-slate-900">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-200">Fleet Chaos Testing</h3>
+                      <p className="text-xs text-slate-400 mt-1">Start multiple vehicles to observe their Edge-AI communication.</p>
+                    </div>
+                    <div>
+                      {!isSimulatingAll ? (
+                        <button onClick={startFleetAll} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-extrabold text-white transition shadow-lg shadow-emerald-600/20">
+                          <Play className="h-4 w-4" /> Start Fleet Sim
+                        </button>
+                      ) : (
+                        <button onClick={stopFleetAll} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-xs font-extrabold text-white transition shadow-lg shadow-red-600/20">
+                          <Pause className="h-4 w-4" /> Stop Sim
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Single Drive Console (If in SINGLE mode) */}
+                {simMode === 'SINGLE' && selectedVehicle && (
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-900 pb-4">
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-[10px] font-black uppercase text-blue-400 font-mono tracking-widest">
                           Drive Console — {selectedVehicle.vehicle_code}
                         </span>
-                        <span className="text-[10px] font-mono bg-blue-950 text-blue-400 px-2 py-0.5 rounded font-bold">
-                          {simSpeed}x
-                        </span>
-                        <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
-                          isSimulating ? (isPaused ? 'bg-amber-950 text-amber-400' : 'bg-green-950 text-green-400') : 'bg-slate-800 text-slate-400'
-                        }`}>
+                        <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${isSimulating ? (isPaused ? 'bg-amber-950 text-amber-400' : 'bg-green-950 text-green-400') : 'bg-slate-800 text-slate-400'}`}>
                           {isSimulating ? (isPaused ? 'PAUSED' : 'RUNNING') : 'IDLE'}
                         </span>
+                        {selectedVehicle?.sensor_suite_active && (
+                           <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold flex items-center gap-1 bg-purple-950 text-purple-400">
+                             <Brain className="h-3 w-3" /> EDGE AI {selectedVehicle.edge_ai_status}
+                           </span>
+                        )}
                       </div>
                       <p className="text-sm text-slate-200 font-bold mt-1">{currentStepLabel}</p>
-                      {activeTask && (
-                        <p className="text-xs text-slate-400 mt-0.5 font-mono">
-                          Task: <span className="text-blue-400 font-bold">{activeTask.task_code}</span> ({activeTask.status})
-                        </p>
-                      )}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 shrink-0">
                       {!isSimulating && !isPaused ? (
                         <>
-                          <button
-                            onClick={handleStartSimulation}
-                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-extrabold text-slate-50 shadow-lg shadow-blue-600/30 transition-all duration-200 active:scale-95"
-                          >
-                            <Play className="h-4 w-4" /> Start Drive
+                          <button onClick={handleStartSimulation} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-slate-50 transition-all">
+                            <Play className="h-3.5 w-3.5" /> Start Drive
                           </button>
-                          <button
-                            onClick={handleStartCharging}
-                            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-yellow-950/40 border border-yellow-700/60 hover:bg-yellow-900/50 text-xs font-bold text-yellow-400 transition duration-150 active:scale-95"
-                            title="Route cart to ⚡ Charging Station"
-                          >
-                            <Zap className="h-4 w-4 text-yellow-400" /> ⚡ Charge
-                          </button>
-                          <button
-                            onClick={handleDriveToOut}
-                            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-red-950/40 border border-red-800/60 hover:bg-red-900/50 text-xs font-bold text-red-400 transition duration-150 active:scale-95"
-                            title="Route cart to 🔴 Red Out Station"
-                          >
-                            <span className="h-2 w-2 rounded-full bg-red-500"></span> Red Out
+                          <button onClick={handleStartCharging} className="flex items-center gap-1 px-4 py-2 rounded-xl bg-yellow-950/40 border border-yellow-700/60 text-yellow-400 text-xs font-bold hover:bg-yellow-900/50 transition">
+                            <Zap className="h-3.5 w-3.5" /> Charge
                           </button>
                         </>
                       ) : (
-                        <>
-                          <button
-                            onClick={handlePauseResume}
-                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-bold text-slate-200 hover:bg-slate-800 transition"
-                          >
-                            <Pause className="h-4 w-4" /> {isPaused ? 'Resume' : 'Pause'}
-                          </button>
-                          <button
-                            onClick={handleResetSim}
-                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-950/20 border border-red-900/40 text-xs font-bold text-red-400 hover:bg-red-950/40 transition"
-                          >
-                            <RotateCcw className="h-4 w-4" /> Reset
-                          </button>
-                        </>
+                        <button onClick={stopCurrentSimulation} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-950/40 border border-red-900/40 text-red-400 text-xs font-bold hover:bg-red-900/60 transition">
+                          <RotateCcw className="h-3.5 w-3.5" /> Stop
+                        </button>
                       )}
                     </div>
                   </div>
+                )}
 
-                  {/* Console Activity Log */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                        <Terminal className="h-3.5 w-3.5 text-blue-400" /> Console Log
-                      </span>
-                      <button
-                        onClick={() => setLogs([])}
-                        className="text-[10px] text-slate-500 hover:text-slate-300 font-mono"
-                      >
-                        Clear
-                      </button>
+                {/* Shared Activity Log */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Terminal className="h-3.5 w-3.5 text-blue-400" /> Activity Log
+                    </span>
+                    <button onClick={() => setLogs([])} className="text-[10px] text-slate-500 hover:text-slate-300 font-mono">
+                      Clear
+                    </button>
+                  </div>
+                  <div ref={logContainerRef} className="h-36 overflow-y-auto rounded-xl border border-slate-900 bg-slate-950/90 p-3.5 font-mono text-[11px] space-y-1 text-slate-300">
+                    {logs.length === 0 ? (
+                      <p className="text-slate-600 italic">No activity yet.</p>
+                    ) : (
+                      logs.map((log) => (
+                        <div key={log.id} className="flex items-start gap-2">
+                          <span className="text-slate-600 shrink-0">[{log.time}]</span>
+                          <span className={log.type === 'SUCCESS' ? 'text-green-400 font-bold' : log.type === 'WARN' ? 'text-amber-400 font-bold' : log.type === 'ERROR' ? 'text-red-400 font-bold' : 'text-slate-300'}>
+                            {log.message}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Panel */}
+            <div className="space-y-6">
+              
+              {simMode === 'FLEET' && (
+                // Fleet How It Works
+                <div className="rounded-xl border border-slate-900 bg-slate-950 p-5 shadow-xl space-y-4">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-widest block">How Fleet Coordination Works</span>
+                  <div className="text-sm text-slate-300 leading-relaxed space-y-3">
+                    <p>
+                      <strong>Fleet Coordination</strong> simply means the robots talk to each other.
+                    </p>
+                    <p className="text-slate-400 text-xs">
+                      When one robot detects an obstacle and stops, it instantly broadcasts the location to the rest of the fleet so they can recalculate their paths and avoid a traffic jam.
+                    </p>
+                  </div>
+                  <div className="pt-3 border-t border-slate-900 space-y-2">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-2">Map Legend</span>
+                    <div className="flex items-center gap-2 text-[10px] text-slate-300">
+                      <span className="bg-red-500 text-black px-1.5 py-0.5 rounded font-bold text-[8px]">STOP</span>
+                      <span>Edge AI detected obstacle (Halt)</span>
                     </div>
-
-                    <div
-                      ref={logContainerRef}
-                      className="h-36 overflow-y-auto rounded-xl border border-slate-900 bg-slate-950/90 p-3.5 font-mono text-[11px] space-y-1 text-slate-300"
-                    >
-                      {logs.length === 0 ? (
-                        <p className="text-slate-600 italic">No activity yet. Click &apos;Start Drive&apos; to begin simulation.</p>
-                      ) : (
-                        logs.map((log) => (
-                          <div key={log.id} className="flex items-start gap-2">
-                            <span className="text-slate-600 shrink-0">[{log.time}]</span>
-                            <span className={log.type === 'SUCCESS' ? 'text-green-400 font-bold' : log.type === 'WARN' ? 'text-amber-400 font-bold' : 'text-slate-300'}>
-                              {log.message}
-                            </span>
-                          </div>
-                        ))
-                      )}
+                    <div className="flex items-center gap-2 text-[10px] text-slate-300">
+                      <div className="w-4 h-4 border border-red-500 bg-red-950/80 rounded animate-pulse flex items-center justify-center"><span className="text-[8px]">⚠</span></div>
+                      <span>Obstacle Broadcasted to Fleet</span>
                     </div>
                   </div>
                 </div>
               )}
-            </div>
-
-            {/* Vehicle roster */}
-            <div className="rounded-xl border border-slate-900 bg-slate-950 p-6 space-y-4">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Select Cart</span>
-              <div className="space-y-3">
-                {vehicles.map((v) => (
-                  <button
-                    key={v.id}
-                    disabled={v.status === 'OFFLINE'}
-                    onClick={() => handleSelectVehicle(v)}
-                    className={`w-full text-left p-4 rounded-xl border transition-all duration-200 ${
-                      v.status === 'OFFLINE' ? 'opacity-30 cursor-not-allowed' : ''
-                    } ${
-                      selectedVehicleId === v.id
-                        ? 'border-blue-500 bg-blue-600/10 text-slate-100 shadow-lg ring-1 ring-blue-500/50'
-                        : 'border-slate-900 bg-slate-950/40 text-slate-400 hover:border-slate-700 hover:bg-slate-900/30'
-                    }`}
-                  >
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="font-bold text-xs font-mono">{v.vehicle_code}</span>
-                      <span
-                        className={`text-[9px] font-bold px-2 py-0.5 rounded ${
-                          v.status === 'AVAILABLE'
-                            ? 'bg-green-950 text-green-400'
-                            : v.status === 'BUSY'
-                            ? 'bg-blue-950 text-blue-400'
-                            : v.status === 'MAINTENANCE'
-                            ? 'bg-orange-950 text-orange-400'
-                            : 'bg-yellow-950 text-yellow-500'
-                        }`}
-                      >
-                        {v.status}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-300 font-semibold">{v.name}</p>
-                    <div className="flex justify-between items-center mt-2 text-[10px] text-slate-500 font-mono">
-                      <span>Floor {floorLabel(v.current_floor_id)}</span>
-                      <span>🔋 {v.battery_percentage}%</span>
-                    </div>
-                    {v.current_task_id && (
-                      <span className="text-[9px] text-blue-400 font-semibold block mt-1.5 font-mono">
-                        Task: {tasks.find((t) => t.id === v.current_task_id)?.task_code || 'Active'}
-                      </span>
-                    )}
-                  </button>
-                ))}
+              
+              {/* Vehicle Roster (Always visible) */}
+              <div className="rounded-xl border border-slate-900 bg-slate-950 p-6 space-y-4">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest block">
+                  {simMode === 'FLEET' ? 'Active Fleet' : 'Select Cart'}
+                </span>
+                <div className="space-y-3">
+                  {vehicles.map((v) => (
+                    <button
+                      key={v.id}
+                      disabled={v.status === 'OFFLINE' || isSimulatingAll}
+                      onClick={() => handleSelectVehicle(v)}
+                      className={`w-full text-left p-4 rounded-xl border transition-all duration-200 ${
+                        v.status === 'OFFLINE' ? 'opacity-30 cursor-not-allowed' : ''
+                      } ${
+                        selectedVehicleId === v.id
+                          ? 'border-blue-500 bg-blue-600/10 text-slate-100 shadow-lg ring-1 ring-blue-500/50'
+                          : 'border-slate-900 bg-slate-950/40 text-slate-400 hover:border-slate-700 hover:bg-slate-900/30'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="font-bold text-xs font-mono">{v.vehicle_code}</span>
+                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded ${v.status === 'AVAILABLE' ? 'bg-green-950 text-green-400' : 'bg-blue-950 text-blue-400'}`}>
+                          {v.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-300 font-semibold">{v.name}</p>
+                      <div className="flex justify-between items-center mt-2 text-[10px] text-slate-500 font-mono">
+                        <span>Floor {floorLabel(v.current_floor_id)}</span>
+                        <span>🔋 {v.battery_percentage}%</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
