@@ -6,7 +6,7 @@ import { Inter } from 'next/font/google';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
-  title: 'Smart Warehouse Autonomous Logistics Platform',
+  title: 'SmartWarehouse Autonomous Logistics System',
   description: 'AI-assisted routing, autonomous AMR simulation, QR scanner verification, and live tracking dashboard.',
 };
 

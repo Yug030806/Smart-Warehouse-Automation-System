@@ -320,20 +320,41 @@ export default function TrackingPage() {
     
     addLog('Starting multi-vehicle fleet simulation...', 'SUCCESS');
     
-    let available = vehicles.filter(v => v.current_floor_id === selectedFloor && v.status === 'AVAILABLE').slice(0, 3);
-    if (available.length === 0) {
-      const busy = vehicles.filter(v => v.current_floor_id === selectedFloor && v.status !== 'OFFLINE').slice(0, 3);
-      if (busy.length === 0) {
-        addLog('No vehicles found on this floor.', 'WARN');
-        return;
+    let allOnFloor = vehicles.filter(v => v.current_floor_id === selectedFloor && v.status !== 'OFFLINE');
+    if (allOnFloor.length === 0) {
+      addLog('No vehicles found on this floor.', 'WARN');
+      return;
+    }
+
+    let available: Vehicle[] = [];
+
+    // Prioritize the user's selected vehicle if it's on this floor
+    if (selectedVehicleId) {
+      const selectedV = allOnFloor.find(v => v.id === selectedVehicleId);
+      if (selectedV) {
+        available.push(selectedV);
+        allOnFloor = allOnFloor.filter(v => v.id !== selectedVehicleId);
       }
+    }
+
+    // Fill the rest with AVAILABLE vehicles, up to 3 total for the fleet sim
+    const availableOthers = allOnFloor.filter(v => v.status === 'AVAILABLE');
+    available = [...available, ...availableOthers].slice(0, 3);
+
+    if (available.length === 0) {
+      // Fallback: forcefully use busy vehicles if absolutely no one is available
+      const busy = allOnFloor.filter(v => v.status === 'BUSY').slice(0, 3);
+      if (busy.length === 0) return;
       available = busy;
       addLog('Forced reset of BUSY vehicles to start simulation.', 'WARN');
     }
 
     available.forEach(v => {
-      const possibleDests = locations.filter(l => l.floor_id === selectedFloor && (l.type === 'RACK' || l.type === 'DELIVERY') && !(l.x === v.x_position && l.y === v.y_position));
-      const destLoc = possibleDests[Math.floor(Math.random() * possibleDests.length)];
+      const assignment = ensureAssignedTask(v);
+      if (!assignment) return;
+
+      const { task, box } = assignment;
+      const destLoc = locations.find((l) => l.id === task.destination_location_id);
       
       if (destLoc) {
         const pts = calculateRoute(v.current_floor_id, v.x_position, v.y_position, destLoc.floor_id, destLoc.x, destLoc.y, locations);
@@ -344,12 +365,16 @@ export default function TrackingPage() {
           fleetControllersRef.current[v.id] = controller;
           
           supabase.from('vehicles').update({ status: 'BUSY' }).eq('id', v.id);
+          supabase.from('tasks').update({ status: 'IN_PROGRESS', started_at: new Date().toISOString() }).eq('id', task.id);
+          supabase.from('boxes').update({ status: 'IN_TRANSIT' }).eq('id', box.id);
           
           controller.sendMoveCommand(
             pts,
             () => {},
             () => {
               addLog(`✓ ${v.vehicle_code} reached destination.`, 'SUCCESS');
+              supabase.from('tasks').update({ status: 'PICKUP_PENDING' }).eq('id', task.id);
+              supabase.from('boxes').update({ status: 'PICKUP_PENDING' }).eq('id', box.id);
               supabase.from('vehicles').update({ status: 'AVAILABLE' }).eq('id', v.id);
               delete fleetControllersRef.current[v.id];
               if (Object.keys(fleetControllersRef.current).length === 0) setIsSimulatingAll(false);
