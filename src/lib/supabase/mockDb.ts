@@ -197,6 +197,35 @@ class MockDB {
       if (cached) {
         try {
           this.state = JSON.parse(cached);
+          
+          // Migrate old terminology 'CART' to 'AMR' in localStorage data
+          let mutated = false;
+          if (this.state.vehicles) {
+            this.state.vehicles.forEach(v => {
+              if (v.vehicle_code && v.vehicle_code.includes('CART')) {
+                v.vehicle_code = v.vehicle_code.replace(/CART/g, 'AMR');
+                mutated = true;
+              }
+              if (v.name) {
+                if (v.name.includes('Cart')) {
+                  v.name = v.name.replace(/Cart/g, 'AMR');
+                  mutated = true;
+                }
+                if (v.name.includes('CART')) {
+                  v.name = v.name.replace(/CART/g, 'AMR');
+                  mutated = true;
+                }
+                if (v.name.includes('cart')) {
+                  v.name = v.name.replace(/cart/g, 'amr');
+                  mutated = true;
+                }
+              }
+            });
+          }
+          if (mutated) {
+            this.save();
+          }
+
           return;
         } catch {
           // fallback

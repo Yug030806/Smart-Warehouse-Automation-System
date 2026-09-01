@@ -1,6 +1,6 @@
 # Smart Warehouse Autonomous Logistics Platform
 
-Production-ready master prototype built for Smart India Hackathon (SIH) Logistics Platform. Intelligently routes virtual autonomous carts to transport registered box packets, uses elevator transits between multiple floors, scans cargo items using QR code simulation, and generates real-time telemetry updates.
+Production-ready master prototype built for Smart India Hackathon (SIH) Logistics Platform. Intelligently routes virtual autonomous amrs to transport registered box packets, uses elevator transits between multiple floors, scans cargo items using QR code simulation, and generates real-time telemetry updates.
 
 ## 1. Project Structure
 
@@ -18,7 +18,7 @@ src/
 ├── components/            # Map twin layout and header navbars
 └── lib/
     ├── algorithms/astar   # Elevators and A* pathfinding
-    ├── simulator/         # Virtual cart controller
+    ├── simulator/         # Virtual amr controller
     └── supabase/          # Live Supabase and localStorage DB
 ```
 
@@ -56,7 +56,7 @@ Login credentials (passwords match roles + "123"):
 * **Authentication**: Login/Logout, pre-loaded role access, session cache persistence.
 * **Warehouse Digital Twin Map**: multi-floor routing elevator switches, layout nodes representation.
 * **Route engine**: A* pathfinding, walls and rack obstacle avoidance.
-* **Autonomous cart simulator**: Play, Pause, Reset, 1x-10x speed multipliers controls.
+* **Autonomous amr simulator**: Play, Pause, Reset, 1x-10x speed multipliers controls.
 * **QR scanner verification**: Manual input simulation, expected values check, mismatch warnings alerts.
 * **Analytics**: completed/failed task distributions graphs (Recharts).
 * **Audit log**: Security audit log trail entries.
