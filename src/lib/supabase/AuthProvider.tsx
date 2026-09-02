@@ -127,6 +127,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signup = async (fullName: string, email: string, password: string, role: 'ADMIN' | 'MANAGER' | 'OPERATOR'): Promise<boolean> => {
+    // Check if user already exists in profiles
+    const { supabase } = await import('@/lib/supabase/client');
+    const existingRes = await supabase.from('profiles').select('id').eq('email', email.toLowerCase());
+    if (existingRes.data && existingRes.data.length > 0) {
+      throw new Error('An account with this email address already exists.');
+    }
+
     const regUsersStr = localStorage.getItem('sih_registered_users');
     let registeredUsers: RegisteredUser[] = [];
     if (regUsersStr) {
@@ -137,13 +144,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    const exists = registeredUsers.some(u => u.email.toLowerCase() === email.toLowerCase());
-    if (exists) {
-      throw new Error('An account with this email address already exists.');
-    }
-
+    const newId = typeof window !== 'undefined' && window.crypto?.randomUUID ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${Date.now().toString().padStart(12, '0')}`;
     const newUser: RegisteredUser = {
-      id: `usr-${Date.now()}`,
+      id: newId,
       fullName,
       email,
       password,
@@ -154,7 +157,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     registeredUsers.push(newUser);
     localStorage.setItem('sih_registered_users', JSON.stringify(registeredUsers));
 
-    // Also add to mock database profiles so the user appears on the Users page
+    // Persist pending profile directly to live Supabase DB
+    await supabase.from('profiles').insert({
+      id: newId,
+      full_name: fullName,
+      email: email.toLowerCase(),
+      role,
+      assigned_warehouse_ids: [],
+      is_active: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    });
+
+    // Create Admin In-App Alert Notification for pending signup
+    await supabase.from('alerts').insert({
+      id: `alt-${Date.now()}`,
+      type: 'SYSTEM_ERROR',
+      severity: 'WARNING',
+      message: `Pending Registration: New user ${fullName} (${email}) requested ${role} access. Approval required.`,
+      is_acknowledged: false,
+      created_at: new Date().toISOString()
+    });
+
     const mockDb = (await import('@/lib/supabase/mockDb')).default;
     mockDb.saveProfile({
       id: newUser.id,
@@ -167,7 +191,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       updated_at: new Date().toISOString()
     });
 
-    // Do NOT automatically log them in, just return true
     return true;
   };
 

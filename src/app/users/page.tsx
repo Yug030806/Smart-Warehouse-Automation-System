@@ -31,18 +31,19 @@ export default function UsersPage() {
 
   usePreventScroll(Boolean(editingUser || showAddModal));
 
-  const loadData = () => {
+  const loadData = async () => {
     try {
       const regUsersStr = localStorage.getItem('sih_registered_users');
       if (regUsersStr) {
         const regUsers = JSON.parse(regUsersStr) as Array<{ id: string; fullName: string; email: string; role: string }>;
-        const existingProfiles = supabase.from('profiles').select().data || [];
-        const existingIds = new Set((existingProfiles as Profile[]).map(p => p.id));
-        const existingEmails = new Set((existingProfiles as Profile[]).map(p => p.email.toLowerCase()));
+        const existingRes = await supabase.from('profiles').select();
+        const existingProfiles = (existingRes.data || []) as Profile[];
+        const existingIds = new Set(existingProfiles.map(p => p.id));
+        const existingEmails = new Set(existingProfiles.map(p => p.email.toLowerCase()));
         
-        regUsers.forEach(ru => {
+        for (const ru of regUsers) {
           if (!existingIds.has(ru.id) && !existingEmails.has(ru.email.toLowerCase())) {
-            supabase.from('profiles').insert({
+            await supabase.from('profiles').insert({
               id: ru.id,
               full_name: ru.fullName,
               email: ru.email,
@@ -53,27 +54,32 @@ export default function UsersPage() {
               updated_at: new Date().toISOString()
             });
           }
-        });
+        }
       }
     } catch (e) {}
 
-    const list = supabase.from('profiles').select().data || [];
+    const res = await supabase.from('profiles').select();
+    const list = res.data || [];
     setUsers((list as Profile[]).map(p => ({ ...p })));
 
-    const wList = supabase.from('warehouses').select().data || [];
+    const wRes = await supabase.from('warehouses').select();
+    const wList = wRes.data || [];
     setWarehouses(wList as Warehouse[]);
   };
 
   useEffect(() => {
     loadData();
+    const interval = setInterval(loadData, 2000);
+    return () => clearInterval(interval);
   }, []);
 
-  const handleAddUserSubmit = (e: React.FormEvent) => {
+  const handleAddUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !name) return;
 
+    const newId = typeof window !== 'undefined' && window.crypto?.randomUUID ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${Date.now().toString().padStart(12, '0')}`;
     const newProfile: Profile = {
-      id: `u-${role.toLowerCase()}-${Date.now().toString().substring(8)}`,
+      id: newId,
       full_name: name,
       email,
       role,
@@ -83,15 +89,15 @@ export default function UsersPage() {
       is_active: true
     };
 
-    supabase.from('profiles').insert(newProfile);
+    await supabase.from('profiles').insert(newProfile);
     setShowAddModal(false);
     setEmail('');
     setName('');
     setAssignedWarehouses([]);
-    loadData();
+    await loadData();
   };
 
-  const handleDeactivate = (id: string, currentStatus: boolean, profileRole: string) => {
+  const handleDeactivate = async (id: string, currentStatus: boolean, profileRole: string) => {
     if (!currentStatus && ['MANAGER'].includes(profileRole)) {
       // If approving a manager, force them to go through the edit modal to assign warehouses
       const u = users.find(x => x.id === id);
@@ -103,6 +109,8 @@ export default function UsersPage() {
       }
       return;
     }
+
+    await supabase.from('profiles').update({ is_active: !currentStatus }).eq('id', id);
 
     const mockDb = require('@/lib/supabase/mockDb').default;
     const profile = mockDb.getProfiles().find((p: any) => p.id === id);
@@ -119,10 +127,10 @@ export default function UsersPage() {
       }
     } catch (e) { /* ignore */ }
 
-    loadData();
+    await loadData();
   };
 
-  const handleEditUserSubmit = (e: React.FormEvent) => {
+  const handleEditUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser || !editName) return;
 
@@ -150,10 +158,10 @@ export default function UsersPage() {
       updates.assigned_warehouse_ids = [];
     }
 
-    supabase.from('profiles').update(updates).eq('id', editingUser.id);
+    await supabase.from('profiles').update(updates).eq('id', editingUser.id);
 
     setEditingUser(null);
-    loadData();
+    await loadData();
   };
 
   const handleDeleteUser = (id: string) => {

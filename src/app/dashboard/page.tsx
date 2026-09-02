@@ -47,16 +47,26 @@ export default function Dashboard() {
   const [alertsList, setAlertsList] = useState<Alert[]>([]);
   const [selectedFloor, setSelectedFloor] = useState('f-01');
 
-  // Check for pending approval requests when admin logs in
+  // Check for pending approval requests when admin logs in (query live DB & poll)
   useEffect(() => {
-    if (user?.role === 'ADMIN') {
-      const profiles = (supabase.from('profiles').select().data || []) as Profile[];
+    if (user?.role !== 'ADMIN') return;
+
+    const checkPending = async () => {
+      const res = await supabase.from('profiles').select();
+      const profiles = (res.data || []) as Profile[];
       const pending = profiles.filter(p => !p.is_active);
       if (pending.length > 0) {
         setPendingUsers(pending);
         setShowPendingPopup(true);
+      } else {
+        setPendingUsers([]);
+        setShowPendingPopup(false);
       }
-    }
+    };
+
+    checkPending();
+    const interval = setInterval(checkPending, 3000);
+    return () => clearInterval(interval);
   }, [user]);
 
   useEffect(() => {
