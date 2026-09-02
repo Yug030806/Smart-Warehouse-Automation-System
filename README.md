@@ -47,7 +47,6 @@ Login credentials (passwords match roles + "123"):
 * **Admin**: `admin@demo.com` / `admin123`
 * **Manager**: `manager@demo.com` / `manager123`
 * **Operator**: `operator@demo.com` / `operator123`
-* **Viewer**: `viewer@demo.com` / `viewer123`
 
 ---
 

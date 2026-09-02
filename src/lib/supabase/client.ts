@@ -20,7 +20,11 @@ export const supabaseReal = useSupabaseReal
   : null;
 
 // Unified client interfaces wrapping both actual Supabase and mockDb
-export const getSupabaseClient = () => {
+export const getSupabaseClient = (): any => {
+  if (useSupabaseReal && supabaseReal) {
+    return supabaseReal;
+  }
+
   return {
     auth: {
       getUser: async () => {
