@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
+import AmbientBackground from '@/components/AmbientBackground';
 import RoleGuard from '@/components/RoleGuard';
 import { useAuth } from '@/lib/supabase/AuthProvider';
 import { usePreventScroll } from '@/lib/usePreventScroll';
@@ -35,16 +36,20 @@ export default function BoxesPage() {
   const [destLoc, setDestLoc] = useState('');
   const [priority, setPriority] = useState<'NORMAL' | 'HIGH' | 'URGENT'>('NORMAL');
 
-  const loadBoxes = () => {
-    let list = (supabase.from('boxes').select().data || []) as any[];
-    const pList = supabase.from('profiles').select().data || [];
+  const loadBoxes = async () => {
+    const bRes = await supabase.from('boxes').select();
+    let list = (bRes.data || []) as any[];
+    const pRes = await supabase.from('profiles').select();
+    const pList = pRes.data || [];
     const currentUserProfile = pList.find((p: any) => p.id === user?.id);
     const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
     const isRestricted = ['MANAGER'].includes(userRole as string);
-    let locs = supabase.from('locations').select().data || [];
+    const lRes = await supabase.from('locations').select();
+    let locs = lRes.data || [];
 
     if (isRestricted && assignedWarehouses.length > 0) {
-      const fls = (supabase.from('floors').select().data || []) as any[];
+      const fRes = await supabase.from('floors').select();
+      const fls = (fRes.data || []) as any[];
       const allowedF = fls.filter((f: any) => assignedWarehouses.includes(f.warehouse_id)).map((f: any) => f.id);
       const allowedL = locs.filter((l: any) => allowedF.includes(l.floor_id)).map((l: any) => l.id);
       
@@ -57,7 +62,7 @@ export default function BoxesPage() {
 
     setBoxes(list as Box[]);
     setLocations(locs as Location[]);
-    if (locs.length > 0) {
+    if (locs.length > 0 && !srcLoc) {
       setSrcLoc(locs[0].id);
       setDestLoc(locs[1]?.id || locs[0].id);
     }
@@ -65,14 +70,17 @@ export default function BoxesPage() {
 
   useEffect(() => {
     loadBoxes();
+    const interval = setInterval(loadBoxes, 2000);
+    return () => clearInterval(interval);
   }, []);
 
-  const handleAddBox = (e: React.FormEvent) => {
+  const handleAddBox = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!boxCode || !prodName) return;
 
+    const newId = typeof window !== 'undefined' && window.crypto?.randomUUID ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${Date.now().toString().padStart(12, '0')}`;
     const newBox: Box = {
-      id: `box-${Date.now()}`,
+      id: newId,
       box_code: boxCode,
       product_name: prodName,
       category,
@@ -82,19 +90,19 @@ export default function BoxesPage() {
       priority,
       status: 'WAITING',
       qr_code_data: boxCode,
-      created_by: 'u-manager',
+      created_by: user?.id || 'u-manager',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
 
-    supabase.from('boxes').insert(newBox);
+    await supabase.from('boxes').insert(newBox);
     
     // Auto-create task if box is created
     const estDistance = 15;
     const estDuration = 120;
     
     const newTask = {
-      id: `task-${Date.now()}`,
+      id: typeof window !== 'undefined' && window.crypto?.randomUUID ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${(Date.now() + 1).toString().padStart(12, '0')}`,
       task_code: `TSK-${Date.now().toString().substring(7)}`,
       box_id: newBox.id,
       vehicle_id: null,
@@ -106,19 +114,19 @@ export default function BoxesPage() {
       estimated_distance: estDistance,
       estimated_duration: estDuration,
       actual_duration: null,
-      created_by: 'u-manager',
+      created_by: user?.id || 'u-manager',
       assigned_at: null,
       started_at: null,
       completed_at: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
-    supabase.from('tasks').insert(newTask);
+    await supabase.from('tasks').insert(newTask);
 
     setShowAddModal(false);
     setBoxCode('');
     setProdName('');
-    loadBoxes();
+    await loadBoxes();
   };
 
   // Edit Box Modal state
@@ -130,24 +138,25 @@ export default function BoxesPage() {
 
   usePreventScroll(Boolean(editingBox || showAddModal));
 
-  const handleDeleteBox = (id: string) => {
-    supabase.from('boxes').delete().eq('id', id);
-    loadBoxes();
+  const handleDeleteBox = async (id: string) => {
+    await supabase.from('boxes').delete().eq('id', id);
+    await loadBoxes();
   };
 
-  const handleEditBoxSubmit = (e: React.FormEvent) => {
+  const handleEditBoxSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingBox || !editProdName) return;
 
-    supabase.from('boxes').update({
+    await supabase.from('boxes').update({
       product_name: editProdName,
       category: editCategory,
       weight: Number(editWeight),
-      priority: editPriority
+      priority: editPriority,
+      updated_at: new Date().toISOString()
     }).eq('id', editingBox.id);
 
     setEditingBox(null);
-    loadBoxes();
+    await loadBoxes();
   };
 
   // Filter, Sort, Paginate Pipeline
@@ -189,7 +198,8 @@ export default function BoxesPage() {
 
   return (
     <RoleGuard allowedRoles={['ADMIN', 'MANAGER', 'OPERATOR']}>
-      <div className="flex h-screen w-full overflow-hidden bg-slate-950">
+      <div className="flex h-screen w-full overflow-hidden bg-slate-950 relative">
+        <AmbientBackground intensity="low" />
         <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
         <div className="flex-grow flex flex-col min-w-0 h-screen overflow-hidden">
           <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
@@ -214,7 +224,7 @@ export default function BoxesPage() {
           </div>
 
           {/* Search filters panel */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 rounded-xl border border-slate-900 bg-slate-950 p-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 rounded-2xl border border-slate-800/80 bg-[#141419] p-5 shadow-xl">
             <div className="relative">
               <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
               <input
@@ -222,7 +232,7 @@ export default function BoxesPage() {
                 placeholder="Search box code, category..."
                 value={searchQuery}
                 onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-800 bg-slate-950/80 text-xs text-slate-100 placeholder-slate-500 outline-none focus:border-blue-500"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-800 bg-slate-900/80 text-xs text-slate-100 placeholder-slate-500 outline-none focus:border-blue-500"
               />
             </div>
 
@@ -230,7 +240,7 @@ export default function BoxesPage() {
               <select
                 value={filterPriority}
                 onChange={e => { setFilterPriority(e.target.value); setCurrentPage(1); }}
-                className="w-full px-3 py-2.5 rounded-xl border border-slate-800 bg-slate-950 text-xs text-slate-400"
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-800 bg-slate-900 text-xs text-slate-300"
               >
                 <option value="ALL">All Priorities</option>
                 <option value="NORMAL">NORMAL</option>
@@ -243,24 +253,22 @@ export default function BoxesPage() {
               <select
                 value={filterStatus}
                 onChange={e => { setFilterStatus(e.target.value); setCurrentPage(1); }}
-                className="w-full px-3 py-2.5 rounded-xl border border-slate-800 bg-slate-950 text-xs text-slate-400"
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-800 bg-slate-900 text-xs text-slate-300"
               >
                 <option value="ALL">All Statuses</option>
                 <option value="WAITING">WAITING</option>
                 <option value="ASSIGNED">ASSIGNED</option>
-                <option value="PICKED_UP">PICKED_UP</option>
-                <option value="IN_TRANSIT">IN_TRANSIT</option>
                 <option value="DELIVERED">DELIVERED</option>
               </select>
             </div>
 
             <div className="flex items-center justify-end">
-              <span className="text-[11px] text-slate-500 font-mono">Found {filtered.length} packets</span>
+              <span className="text-[11px] text-slate-400 font-mono font-bold">Found {filtered.length} packets</span>
             </div>
           </div>
 
           {/* Boxes list table layout */}
-          <div className="rounded-xl border border-slate-900 bg-slate-950 p-6 space-y-4">
+          <div className="rounded-2xl border border-slate-800/80 bg-[#141419] p-6 shadow-xl space-y-4">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>

@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
+import AmbientBackground from '@/components/AmbientBackground';
 import RoleGuard from '@/components/RoleGuard';
 import { useAuth } from '@/lib/supabase/AuthProvider';
 import { Plus, Edit2, Trash2, MapPin, Layers, Network } from 'lucide-react';
@@ -54,10 +55,12 @@ export default function WarehousesPage() {
   const [zoneCode, setZoneCode] = useState('');
   const [zoneColor, setZoneColor] = useState('#3b82f6');
 
-  const loadData = () => {
-    let w = supabase.from('warehouses').select().data || [];
+  const loadData = async () => {
+    const wRes = await supabase.from('warehouses').select();
+    let w = wRes.data || [];
     
-    const pList = supabase.from('profiles').select().data || [];
+    const pRes = await supabase.from('profiles').select();
+    const pList = pRes.data || [];
     const currentUserProfile = pList.find((p: any) => p.id === user?.id);
     const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
     const isRestricted = ['MANAGER'].includes(userRole);
@@ -76,112 +79,126 @@ export default function WarehousesPage() {
 
   useEffect(() => {
     loadData();
+    const interval = setInterval(loadData, 2000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
     if (selectedWarehouse) {
-      const f = supabase.from('floors').select().eq('warehouse_id', selectedWarehouse.id).data || [];
-      setFloors(f as Floor[]);
-      if (f.length > 0) {
-        setSelectedFloor(f[0] as Floor);
-      } else {
-        setSelectedFloor(null);
-      }
+      const fetchFloors = async () => {
+        const fRes = await supabase.from('floors').select().eq('warehouse_id', selectedWarehouse.id);
+        const f = fRes.data || [];
+        setFloors(f as Floor[]);
+        if (f.length > 0 && !selectedFloor) {
+          setSelectedFloor(f[0] as Floor);
+        } else if (f.length === 0) {
+          setSelectedFloor(null);
+        }
+      };
+      fetchFloors();
     }
   }, [selectedWarehouse]);
 
   useEffect(() => {
-    if (selectedFloor) {
-      const l = supabase.from('locations').select().eq('floor_id', selectedFloor.id).data || [];
-      setLocations(l as Location[]);
-      const z = supabase.from('zones').select().eq('floor_id', selectedFloor.id).data || [];
-      setZones(z);
-    } else {
-      setLocations([]);
-      setZones([]);
-    }
+    const fetchData = async () => {
+      if (selectedFloor) {
+        const lRes = await supabase.from('locations').select().eq('floor_id', selectedFloor.id);
+        setLocations((lRes.data || []) as Location[]);
+        const zRes = await supabase.from('zones').select().eq('floor_id', selectedFloor.id);
+        setZones(zRes.data || []);
+      } else {
+        setLocations([]);
+        setZones([]);
+      }
+    };
+    fetchData();
   }, [selectedFloor]);
 
-  const handleAddWarehouseSubmit = (e: React.FormEvent) => {
+  const handleAddWarehouseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!wName) return;
+    const newId = typeof window !== 'undefined' && window.crypto?.randomUUID ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${Date.now().toString().padStart(12, '0')}`;
     const newW = {
-      id: `w-${Date.now()}`,
+      id: newId,
       name: wName,
       address: wAddress,
       created_at: new Date().toISOString()
     };
-    supabase.from('warehouses').insert(newW);
+    await supabase.from('warehouses').insert(newW);
     setWName('');
     setWAddress('');
     setShowAddWarehouse(false);
-    loadData();
+    await loadData();
   };
 
-  const handleEditWarehouseSubmit = (e: React.FormEvent) => {
+  const handleEditWarehouseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingWarehouse || !editWName) return;
-    supabase.from('warehouses').update({
+    await supabase.from('warehouses').update({
       name: editWName,
       address: editWAddress
     }).eq('id', editingWarehouse.id);
     setEditingWarehouse(null);
-    loadData();
+    await loadData();
   };
 
-  const handleDeleteWarehouse = (id: string) => {
-    supabase.from('warehouses').delete().eq('id', id);
+  const handleDeleteWarehouse = async (id: string) => {
+    await supabase.from('warehouses').delete().eq('id', id);
     setSelectedWarehouse(null);
-    loadData();
+    await loadData();
   };
 
-  const handleAddFloorSubmit = (e: React.FormEvent) => {
+  const handleAddFloorSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedWarehouse || !floorName) return;
+    const newId = typeof window !== 'undefined' && window.crypto?.randomUUID ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${Date.now().toString().padStart(12, '0')}`;
     const newF = {
-      id: `f-${Date.now()}`,
+      id: newId,
       warehouse_id: selectedWarehouse.id,
       floor_number: Number(floorNum),
       name: floorName,
       grid_width: 12,
       grid_height: 8
     };
-    supabase.from('floors').insert(newF);
+    await supabase.from('floors').insert(newF);
     setFloorName('');
     setFloorNum(floors.length + 1);
     setShowAddFloor(false);
-    const f = supabase.from('floors').select().eq('warehouse_id', selectedWarehouse.id).data || [];
-    setFloors(f as Floor[]);
+    const fRes = await supabase.from('floors').select().eq('warehouse_id', selectedWarehouse.id);
+    setFloors((fRes.data || []) as Floor[]);
   };
 
-  const handleEditFloorSubmit = (e: React.FormEvent) => {
+  const handleEditFloorSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingFloor || !editFloorName) return;
-    supabase.from('floors').update({ name: editFloorName }).eq('id', editingFloor.id);
+    await supabase.from('floors').update({ name: editFloorName }).eq('id', editingFloor.id);
     setEditingFloor(null);
     if (selectedWarehouse) {
-      const f = supabase.from('floors').select().eq('warehouse_id', selectedWarehouse.id).data || [];
-      setFloors(f as Floor[]);
+      const fRes = await supabase.from('floors').select().eq('warehouse_id', selectedWarehouse.id);
+      setFloors((fRes.data || []) as Floor[]);
     }
   };
 
-  const handleDeleteFloor = (id: string) => {
-    supabase.from('floors').delete().eq('id', id);
+  const handleDeleteFloor = async (id: string) => {
+    await supabase.from('floors').delete().eq('id', id);
     if (selectedWarehouse) {
-      const f = supabase.from('floors').select().eq('warehouse_id', selectedWarehouse.id).data || [];
+      const fRes = await supabase.from('floors').select().eq('warehouse_id', selectedWarehouse.id);
+      const f = fRes.data || [];
       setFloors(f as Floor[]);
       setSelectedFloor(f.length > 0 ? (f[0] as Floor) : null);
     }
   };
 
-  const handleAddLocSubmit = (e: React.FormEvent) => {
+  const handleAddLocSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFloor || !locName) return;
-    let zList = supabase.from('zones').select().eq('floor_id', selectedFloor.id).data || [];
-    const zoneId = zList.length > 0 ? zList[0].id : 'z-1a';
+    const zRes = await supabase.from('zones').select().eq('floor_id', selectedFloor.id);
+    const zList = zRes.data || [];
+    const zoneId = zList.length > 0 ? zList[0].id : null;
 
+    const newId = typeof window !== 'undefined' && window.crypto?.randomUUID ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${Date.now().toString().padStart(12, '0')}`;
     const newLoc = {
-      id: `loc-${Date.now()}`,
+      id: newId,
       zone_id: zoneId,
       name: locName,
       type: locType,
@@ -189,19 +206,19 @@ export default function WarehousesPage() {
       y: Number(locY),
       floor_id: selectedFloor.id
     };
-    supabase.from('locations').insert(newLoc);
+    await supabase.from('locations').insert(newLoc);
     setLocName('');
     setLocX(0);
     setLocY(0);
     setShowAddLoc(false);
-    const l = supabase.from('locations').select().eq('floor_id', selectedFloor.id).data || [];
-    setLocations(l as Location[]);
+    const lRes = await supabase.from('locations').select().eq('floor_id', selectedFloor.id);
+    setLocations((lRes.data || []) as Location[]);
   };
 
-  const handleEditLocSubmit = (e: React.FormEvent) => {
+  const handleEditLocSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingLoc || !editLocName) return;
-    supabase.from('locations').update({
+    await supabase.from('locations').update({
       name: editLocName,
       type: editLocType,
       x: Number(editLocX),
@@ -209,35 +226,36 @@ export default function WarehousesPage() {
     }).eq('id', editingLoc.id);
     setEditingLoc(null);
     if (selectedFloor) {
-      const l = supabase.from('locations').select().eq('floor_id', selectedFloor.id).data || [];
-      setLocations(l as Location[]);
+      const lRes = await supabase.from('locations').select().eq('floor_id', selectedFloor.id);
+      setLocations((lRes.data || []) as Location[]);
     }
   };
 
-  const handleDeleteLocation = (id: string) => {
-    supabase.from('locations').delete().eq('id', id);
+  const handleDeleteLocation = async (id: string) => {
+    await supabase.from('locations').delete().eq('id', id);
     if (selectedFloor) {
-      const l = supabase.from('locations').select().eq('floor_id', selectedFloor.id).data || [];
-      setLocations(l as Location[]);
+      const lRes = await supabase.from('locations').select().eq('floor_id', selectedFloor.id);
+      setLocations((lRes.data || []) as Location[]);
     }
   };
 
-  const handleAddZoneSubmit = (e: React.FormEvent) => {
+  const handleAddZoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFloor || !zoneName) return;
+    const newId = typeof window !== 'undefined' && window.crypto?.randomUUID ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${Date.now().toString().padStart(12, '0')}`;
     const newZ = {
-      id: `z-${Date.now()}`,
+      id: newId,
       floor_id: selectedFloor.id,
       name: zoneName,
       code: zoneCode || `Z-${Date.now().toString().substring(8)}`,
       color: zoneColor
     };
-    supabase.from('zones').insert(newZ);
+    await supabase.from('zones').insert(newZ);
     setZoneName('');
     setZoneCode('');
     setShowAddZone(false);
-    const z = supabase.from('zones').select().eq('floor_id', selectedFloor.id).data || [];
-    setZones(z);
+    const zRes = await supabase.from('zones').select().eq('floor_id', selectedFloor.id);
+    setZones(zRes.data || []);
   };
 
   const handleDeleteZone = (id: string) => {
@@ -252,7 +270,8 @@ export default function WarehousesPage() {
 
   return (
     <RoleGuard allowedRoles={['ADMIN', 'MANAGER']}>
-      <div className="flex h-screen w-full overflow-hidden bg-slate-950">
+      <div className="flex h-screen w-full overflow-hidden bg-slate-950 relative">
+        <AmbientBackground intensity="low" />
         <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
         <div className="flex-grow flex flex-col min-w-0 h-screen overflow-hidden">
           <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
@@ -273,16 +292,16 @@ export default function WarehousesPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
             {/* Warehouses list */}
-            <div className="rounded-xl border border-slate-900 bg-slate-950 p-6 space-y-4">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest font-bold">Logistics Facilities</span>
+            <div className="rounded-2xl border border-slate-800/80 bg-[#141419] p-6 shadow-xl space-y-4">
+              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider block">Logistics Facilities</span>
               <div className="space-y-2">
                 {warehouses.map(w => (
                   <div
                     key={w.id}
                     className={`p-3.5 rounded-xl border transition duration-150 flex items-center justify-between ${
                       selectedWarehouse?.id === w.id
-                        ? 'border-blue-500 bg-blue-600/10 text-slate-100'
-                        : 'border-slate-900 bg-slate-950/40 text-slate-400 hover:border-slate-800'
+                        ? 'border-blue-500 bg-blue-600/10 text-slate-100 shadow-[0_0_12px_rgba(59,130,246,0.2)]'
+                        : 'border-slate-800/60 bg-slate-900/60 text-slate-300 hover:border-slate-700'
                     }`}
                   >
                     <button onClick={() => setSelectedWarehouse(w)} className="text-left flex-1">
@@ -311,15 +330,15 @@ export default function WarehousesPage() {
             {/* Floors and coordinates grid configuration list */}
             <div className="lg:col-span-3 space-y-8">
               {selectedWarehouse && (
-                <div className="rounded-xl border border-slate-900 bg-slate-950 p-6 space-y-6">
-                  <div className="flex justify-between items-center border-b border-slate-900 pb-4">
+                <div className="rounded-2xl border border-slate-800/80 bg-[#141419] p-6 shadow-xl space-y-6">
+                  <div className="flex justify-between items-center border-b border-slate-800/80 pb-4">
                     <div>
-                      <h3 className="text-lg font-bold text-slate-200">{selectedWarehouse.name} Levels</h3>
-                      <p className="text-xs text-slate-500">Configure zones and layouts for elevators and sorting routes.</p>
+                      <h3 className="text-lg font-bold text-slate-100">{selectedWarehouse.name} Levels</h3>
+                      <p className="text-xs text-slate-400">Configure zones and layouts for elevators and sorting routes.</p>
                     </div>
                     <button 
                       onClick={() => setShowAddFloor(true)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-800 hover:bg-slate-900 text-[11px] font-semibold text-slate-300"
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-[11px] font-semibold text-white shadow-[0_0_12px_rgba(59,130,246,0.3)] transition"
                     >
                       <Plus className="h-3.5 w-3.5" /> Add Level
                     </button>

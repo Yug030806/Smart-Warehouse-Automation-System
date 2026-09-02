@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
+import AmbientBackground from '@/components/AmbientBackground';
 import { calculateRoute } from '@/lib/algorithms/astar';
 import { 
   ClipboardList, 
@@ -40,19 +41,25 @@ export default function TasksPage() {
 
   usePreventScroll(Boolean(manualAssignTask || showCreateTask));
 
-  const loadTasksData = () => {
-    let t = supabase.from('tasks').select().data || [];
-    let v = supabase.from('vehicles').select().data || [];
-    let b = supabase.from('boxes').select().data || [];
-    let l = supabase.from('locations').select().data || [];
+  const loadTasksData = async () => {
+    const tRes = await supabase.from('tasks').select();
+    let t = tRes.data || [];
+    const vRes = await supabase.from('vehicles').select();
+    let v = vRes.data || [];
+    const bRes = await supabase.from('boxes').select();
+    let b = bRes.data || [];
+    const lRes = await supabase.from('locations').select();
+    let l = lRes.data || [];
 
-    const pList = supabase.from('profiles').select().data || [];
+    const pRes = await supabase.from('profiles').select();
+    const pList = pRes.data || [];
     const currentUserProfile = pList.find((p: any) => p.id === user?.id);
     const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
     const isRestricted = ['MANAGER'].includes(userRole);
 
     if (isRestricted && assignedWarehouses.length > 0) {
-        const fls = (supabase.from('floors').select().data || []) as any[];
+        const fRes = await supabase.from('floors').select();
+        const fls = (fRes.data || []) as any[];
         const allowedF = fls.filter((f: any) => assignedWarehouses.includes(f.warehouse_id)).map((f: any) => f.id);
         const allowedL = l.filter((loc: any) => allowedF.includes(loc.floor_id)).map((loc: any) => loc.id);
 
@@ -317,7 +324,8 @@ export default function TasksPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-slate-950">
+    <div className="flex h-screen w-full overflow-hidden bg-slate-950 relative">
+      <AmbientBackground intensity="low" />
       <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
       <div className="flex-grow flex flex-col min-w-0 h-screen overflow-hidden">
         <Navbar onMenuClick={() => setMobileMenuOpen(true)} />

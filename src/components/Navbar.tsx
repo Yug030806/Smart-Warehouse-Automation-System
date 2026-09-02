@@ -10,9 +10,8 @@ interface NavbarProps {
   onMenuClick?: () => void;
 }
 
-const themeOptions: { mode: ThemeMode; icon: typeof Sun; label: string }[] = [
+const themeOptions: { mode: ThemeMode; icon: typeof Moon; label: string }[] = [
   { mode: 'dark', icon: Moon, label: 'Dark' },
-  { mode: 'light', icon: Sun, label: 'Light' },
   { mode: 'aesthetic', icon: Sparkles, label: 'Aesthetic' },
 ];
 
@@ -57,29 +56,29 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
   };
 
   return (
-    <header className="h-16 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl flex items-center justify-between px-4 md:px-8 relative z-30">
-      <div className="flex items-center gap-3 flex-1 min-w-0 pr-4">
+    <header className="h-16 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl flex items-center justify-between px-3 sm:px-6 md:px-8 relative z-30">
+      <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0 pr-2 relative z-10">
         {onMenuClick && (
           <button
             onClick={onMenuClick}
-            className="p-2 rounded-xl border border-slate-800 bg-slate-900/60 text-slate-300 hover:bg-slate-800/80 md:hidden transition-colors"
+            className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl border border-slate-800 bg-slate-900/60 text-slate-300 hover:bg-slate-800/80 md:hidden transition-colors shrink-0"
             aria-label="Toggle navigation menu"
           >
             <Menu className="h-5 w-5" />
           </button>
         )}
-        <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-[10px] font-mono font-bold text-cyan-300">
+        <div className="flex items-center gap-2 min-w-0 truncate">
+          <div className="hidden lg:flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-[10px] font-mono font-bold text-cyan-300 shrink-0">
             <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-ping" />
             TELEMETRY: ONLINE
           </div>
-          <h2 className="text-xs md:text-sm font-bold tracking-wider uppercase text-slate-300 truncate">
-            Warehouse Command Center
+          <h2 className="text-xs md:text-sm font-bold tracking-wider uppercase text-slate-200 truncate">
+            Smart Warehouse OS
           </h2>
         </div>
       </div>
 
-      <div className="flex items-center gap-2 md:gap-3 relative shrink-0">
+      <div className="flex items-center gap-2 md:gap-3 relative shrink-0 z-10">
         {/* Background overlay to close menus when clicking outside */}
         {(showAlertsMenu || showNotifMenu) && (
           <div 

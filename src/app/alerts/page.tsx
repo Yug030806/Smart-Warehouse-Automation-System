@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
+import AmbientBackground from '@/components/AmbientBackground';
 import { useAuth } from '@/lib/supabase/AuthProvider';
 import { AlertCircle, CheckCircle, BellRing, Info, ShieldAlert, Sparkles, AlertTriangle } from 'lucide-react';
 import { Alert } from '@/lib/database.types';
@@ -71,7 +72,8 @@ export default function AlertsPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-slate-950">
+    <div className="flex h-screen w-full overflow-hidden bg-slate-950 relative">
+      <AmbientBackground intensity="low" />
       <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
       <div className="flex-grow flex flex-col min-w-0 h-screen overflow-hidden">
         <Navbar onMenuClick={() => setMobileMenuOpen(true)} />

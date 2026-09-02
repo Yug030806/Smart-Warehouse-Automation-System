@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
+import AmbientBackground from '@/components/AmbientBackground';
 import RoleGuard from '@/components/RoleGuard';
 import { Settings, Save, PlayCircle, CheckCircle2, Gauge, Timer, Zap, RotateCcw, ToggleLeft, ToggleRight } from 'lucide-react';
 import { SystemSettings } from '@/lib/database.types';
@@ -26,22 +27,31 @@ export default function SettingsPage() {
   const [simMode, setSimMode] = useState<'AUTO' | 'MANUAL'>('AUTO');
   const [floorDuration, setFloorDuration] = useState(3);
 
+  const loadSettings = async () => {
+    const res = await supabase.from('system_settings').select();
+    if (res.data && res.data.length > 0) {
+      const s = res.data[0] as SystemSettings;
+      setSettings(s);
+      setSpeed(s.default_speed);
+      setAnimSpeed(s.animation_speed);
+      setAutoStart(s.auto_start);
+      setSimMode(s.simulation_mode);
+      setFloorDuration(s.floor_transition_duration);
+    }
+  };
+
   useEffect(() => {
-    const s = mockDb.getSettings();
-    setSettings(s);
-    setSpeed(s.default_speed);
-    setAnimSpeed(s.animation_speed);
-    setAutoStart(s.auto_start);
-    setSimMode(s.simulation_mode);
-    setFloorDuration(s.floor_transition_duration);
+    loadSettings();
+    const interval = setInterval(loadSettings, 2000);
+    return () => clearInterval(interval);
   }, []);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) return;
 
     const updated: SystemSettings = {
-      id: 'sys-settings',
+      id: settings?.id || '00000000-0000-0000-0000-000000000001',
       default_speed: speed,
       animation_speed: animSpeed,
       auto_start: autoStart,
@@ -50,19 +60,22 @@ export default function SettingsPage() {
       updated_at: new Date().toISOString()
     };
 
+    await supabase.from('system_settings').update(updated).eq('id', updated.id);
+    const mockDb = require('@/lib/supabase/mockDb').default;
     mockDb.saveSettings(updated);
+
     setSettings(updated);
     setSuccess(true);
     setSaveMessage('All simulation settings saved and applied successfully.');
     setTimeout(() => { setSuccess(false); setSaveMessage(''); }, 3000);
 
     // Audit log
-    mockDb.addAuditLog({
-      id: `log-${Date.now()}`,
+    await supabase.from('audit_logs').insert({
+      id: typeof window !== 'undefined' && window.crypto?.randomUUID ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${Date.now().toString().padStart(12, '0')}`,
       user_email: user?.email || 'admin@demo.com',
       action: 'UPDATE_SETTINGS',
       object_type: 'SETTINGS',
-      object_id: 'sys',
+      object_id: updated.id,
       previous_state: settings,
       new_state: updated,
       timestamp: new Date().toISOString()
@@ -85,7 +98,8 @@ export default function SettingsPage() {
 
   return (
     <RoleGuard allowedRoles={['ADMIN', 'MANAGER']}>
-      <div className="flex h-screen w-full overflow-hidden bg-slate-950">
+      <div className="flex h-screen w-full overflow-hidden bg-slate-950 relative">
+        <AmbientBackground intensity="low" />
         <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
         <div className="flex-grow flex flex-col min-w-0 h-screen overflow-hidden">
           <Navbar onMenuClick={() => setMobileMenuOpen(true)} />

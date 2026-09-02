@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/supabase/AuthProvider';
 import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
+import AmbientBackground from '@/components/AmbientBackground';
 import KpiCard from '@/components/KpiCard';
 import WarehouseMap from '@/components/WarehouseMap';
 import { 
@@ -132,7 +133,8 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-slate-950">
+    <div className="flex h-screen w-full overflow-hidden bg-slate-950 relative">
+      <AmbientBackground intensity="low" />
       <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
@@ -204,26 +206,28 @@ export default function Dashboard() {
         )}
         
         <main className="flex-grow p-4 sm:p-6 md:p-8 overflow-y-auto space-y-6 md:space-y-8 overscroll-contain">
+          {/* Top Section Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-3">
-                <h1 className="text-xl sm:text-2xl font-extrabold text-slate-100 tracking-tight">Logistics Master Console</h1>
-                <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
+                <span className="h-6 w-1.5 rounded-full bg-blue-500 shadow-[0_0_12px_#3b82f6]" />
+                <h1 className="text-xl sm:text-2xl font-black text-slate-100 tracking-tight">Smart Warehouse Telemetry</h1>
+                <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30">
                   <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-                  <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Fleet Health: Optimal</span>
+                  <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">System Optimal</span>
                 </div>
               </div>
-              <p className="text-xs sm:text-sm text-slate-400 mt-1">Real-time telemetry overview of autonomous AMR vehicles, payloads, and warehouse grid status.</p>
+              <p className="text-xs sm:text-sm text-slate-400 mt-1 pl-4.5">Autonomous fleet telemetry, inventory throughput, and AGV performance metrics.</p>
             </div>
-            <div className="flex flex-wrap gap-2 p-1 rounded-2xl bg-slate-900/80 border border-slate-800/80 backdrop-blur-xl">
+            <div className="flex flex-wrap gap-2 p-1.5 rounded-2xl bg-[#141419] border border-slate-800/80">
               {['f-01', 'f-02', 'f-03'].map((fId, idx) => (
                 <button
                   key={fId}
                   onClick={() => setSelectedFloor(fId)}
-                  className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all duration-200 ${
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 ${
                     selectedFloor === fId
-                      ? 'bg-cyan-500 text-slate-950 shadow-[0_0_15px_rgba(6,182,212,0.4)] scale-105'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                      ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(59,130,246,0.4)]'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
                   }`}
                 >
                   Floor {idx + 1}
@@ -232,28 +236,101 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* KPI Dashboard Row */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
-            <KpiCard title="Total Packets" value={stats.totalBoxes} icon={Boxes} colorClass="text-blue-400" />
-            <KpiCard title="Pending Tasks" value={stats.pendingTasks} icon={Clock} colorClass="text-yellow-500" />
-            <KpiCard title="Active Transport" value={stats.activeTasks} icon={Activity} colorClass="text-emerald-400" />
-            <KpiCard title="Active Warnings" value={stats.activeAlerts} icon={AlertTriangle} colorClass={stats.activeAlerts > 0 ? 'text-red-500' : 'text-slate-600'} />
-            <KpiCard title="Edge-AI Active" value={stats.edgeAiActive} icon={Brain} colorClass="text-purple-400" />
-            <KpiCard title="Obstacles Today" value={stats.obstaclesToday} icon={AlertTriangle} colorClass="text-amber-500" />
+          {/* Card Type 1: Small Multi-Number Stat Cards (Top Row) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {/* Stat Card 1: Total Tasks */}
+            <div className="rounded-2xl border border-slate-800/80 bg-[#141419] p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Transportation Tasks</span>
+                <div className="h-9 w-9 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-blue-400">
+                  <ClipboardList className="h-4 w-4" />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2 pt-1">
+                <div>
+                  <div className="text-2xl font-black text-slate-100">{stats.activeTasks}</div>
+                  <div className="text-[11px] font-semibold text-slate-400 mt-0.5">Active</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-black text-amber-400">{stats.pendingTasks}</div>
+                  <div className="text-[11px] font-semibold text-slate-400 mt-0.5">Pending</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-black text-emerald-400">{stats.completedDeliveries}</div>
+                  <div className="text-[11px] font-semibold text-slate-400 mt-0.5">Completed</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Stat Card 2: AGV Fleet Overview */}
+            <div className="rounded-2xl border border-slate-800/80 bg-[#141419] p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">AGV Fleet Status</span>
+                <div className="h-9 w-9 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-cyan-400">
+                  <Truck className="h-4 w-4" />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2 pt-1">
+                <div>
+                  <div className="text-2xl font-black text-emerald-400">{stats.availableVehicles}</div>
+                  <div className="text-[11px] font-semibold text-slate-400 mt-0.5">Available</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-black text-blue-400">{stats.busyVehicles}</div>
+                  <div className="text-[11px] font-semibold text-slate-400 mt-0.5">Busy</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-black text-purple-400">{stats.edgeAiActive}</div>
+                  <div className="text-[11px] font-semibold text-slate-400 mt-0.5">Edge-AI</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Stat Card 3: Inventory & Safety Metrics */}
+            <div className="rounded-2xl border border-slate-800/80 bg-[#141419] p-6 shadow-xl space-y-4 sm:col-span-2 lg:col-span-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Payloads & System Alerts</span>
+                <div className="h-9 w-9 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-amber-400">
+                  <Boxes className="h-4 w-4" />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2 pt-1">
+                <div>
+                  <div className="text-2xl font-black text-slate-100">{stats.totalBoxes}</div>
+                  <div className="text-[11px] font-semibold text-slate-400 mt-0.5">Packets</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-black text-red-400">{stats.activeAlerts}</div>
+                  <div className="text-[11px] font-semibold text-slate-400 mt-0.5">Alerts</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-black text-amber-400">{stats.obstaclesToday}</div>
+                  <div className="text-[11px] font-semibold text-slate-400 mt-0.5">Obstacles</div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Live Map Panel */}
+            {/* Live Map Panel & Ranked List */}
             <div className="lg:col-span-2 space-y-6">
+              {/* Card Type 5: Map / Availability Digital Twin Card */}
               <WarehouseMap floorId={selectedFloor} />
               
-              {/* Active Tasks list */}
-              <div className="rounded-xl border border-slate-900 bg-slate-950 p-6 shadow-xl space-y-4">
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Active Dispatch Log</span>
+              {/* Active Tasks Dispatch Log Table */}
+              <div className="rounded-2xl border border-slate-800/80 bg-[#141419] p-6 shadow-xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="h-4 w-1 rounded-full bg-blue-500" />
+                    <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">Active Task Dispatch Pipeline</span>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-cyan-400">{activeTasksList.length} Tasks Live</span>
+                </div>
+                
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead>
-                      <tr className="border-b border-slate-900 text-slate-500 uppercase tracking-wider font-bold">
+                      <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider font-extrabold">
                         <th className="pb-3">Task ID</th>
                         <th className="pb-3">Vehicle</th>
                         <th className="pb-3">Priority</th>
@@ -261,34 +338,34 @@ export default function Dashboard() {
                         <th className="pb-3">Est Time</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-900/60">
+                    <tbody className="divide-y divide-slate-800/60">
                       {activeTasksList.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="py-4 text-center text-slate-500">No active transportation tasks.</td>
+                          <td colSpan={5} className="py-6 text-center text-slate-500 font-medium">No active transportation tasks currently executing.</td>
                         </tr>
                       ) : (
                         activeTasksList.map(task => (
                           <tr key={task.id} className="text-slate-300">
-                            <td className="py-3 font-mono font-bold text-blue-400">{task.task_code}</td>
-                            <td className="py-3 font-medium">
+                            <td className="py-3.5 font-mono font-bold text-cyan-400">{task.task_code}</td>
+                            <td className="py-3.5 font-bold">
                               {task.vehicle_id ? (
-                                <span className="flex items-center gap-1.5"><Truck className="h-3.5 w-3.5 text-blue-500" /> {vehiclesList.find(v => v.id === task.vehicle_id)?.vehicle_code}</span>
+                                <span className="flex items-center gap-1.5 text-blue-400"><Truck className="h-3.5 w-3.5" /> {vehiclesList.find(v => v.id === task.vehicle_id)?.vehicle_code}</span>
                               ) : (
-                                <span className="text-slate-600">Unassigned</span>
+                                <span className="text-slate-500 font-normal">Unassigned</span>
                               )}
                             </td>
-                            <td className="py-3">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                task.priority === 'URGENT' ? 'bg-red-950 text-red-400' : (task.priority === 'HIGH' ? 'bg-yellow-950 text-yellow-500' : 'bg-slate-900 text-slate-400')
+                            <td className="py-3.5">
+                              <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black tracking-wider ${
+                                task.priority === 'URGENT' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : (task.priority === 'HIGH' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-slate-800 text-slate-400')
                               }`}>{task.priority}</span>
                             </td>
-                            <td className="py-3">
-                              <span className="flex items-center gap-1.5">
-                                <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-ping"></span>
+                            <td className="py-3.5">
+                              <span className="flex items-center gap-1.5 text-slate-200 font-semibold">
+                                <span className="h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
                                 {task.status}
                               </span>
                             </td>
-                            <td className="py-3 text-slate-400">{task.estimated_duration}s</td>
+                            <td className="py-3.5 text-slate-400 font-mono">{task.estimated_duration}s</td>
                           </tr>
                         ))
                       )}
@@ -298,50 +375,87 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Side status panel list */}
-            <div className="space-y-8">
-              {/* Vehicles status board */}
-              <div className="rounded-xl border border-slate-900 bg-slate-950 p-6 shadow-xl space-y-4">
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest font-bold">Vehicle Fleet Roster</span>
-                <div className="space-y-3">
+            {/* Side Status Column & Ring Cards */}
+            <div className="space-y-6">
+              {/* Card Type 4: Circular Progress / Ring Card 1 (Task Success Rate) */}
+              <div className="rounded-2xl border border-slate-800/80 bg-gradient-to-br from-amber-950/40 via-[#141419] to-[#141419] p-6 shadow-xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Task Completion Rate</span>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[10px] font-extrabold border border-amber-500/30">98% ↗</span>
+                </div>
+                <div className="flex items-center justify-between pt-2">
+                  <div className="space-y-3">
+                    <div>
+                      <div className="text-xl font-black text-slate-100">{stats.completedDeliveries}</div>
+                      <div className="text-[10px] font-bold text-slate-400">Delivered</div>
+                    </div>
+                    <div>
+                      <div className="text-xl font-black text-amber-400">{stats.pendingTasks}</div>
+                      <div className="text-[10px] font-bold text-slate-400">In Pipeline</div>
+                    </div>
+                  </div>
+                  
+                  {/* Styled Ring Representation */}
+                  <div className="relative h-24 w-24 flex items-center justify-center rounded-full bg-slate-900 border-4 border-amber-500/40 shadow-[0_0_20px_rgba(245,158,11,0.2)]">
+                    <div className="text-center">
+                      <div className="text-lg font-black text-amber-400">98%</div>
+                      <div className="text-[8px] font-bold text-slate-400 uppercase">Success</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card Type 4: Circular Progress / Ring Card 2 (AGV Fleet Health) */}
+              <div className="rounded-2xl border border-slate-800/80 bg-gradient-to-br from-purple-950/40 via-[#141419] to-[#141419] p-6 shadow-xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Fleet Uptime Health</span>
+                  <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 text-[10px] font-extrabold border border-purple-500/30">100% ↗</span>
+                </div>
+                <div className="flex items-center justify-between pt-2">
+                  <div className="space-y-3">
+                    <div>
+                      <div className="text-xl font-black text-purple-400">{stats.edgeAiActive} / {vehiclesList.length}</div>
+                      <div className="text-[10px] font-bold text-slate-400">Edge-AI Bots</div>
+                    </div>
+                    <div>
+                      <div className="text-xl font-black text-emerald-400">{stats.availableVehicles}</div>
+                      <div className="text-[10px] font-bold text-slate-400">Ready Docks</div>
+                    </div>
+                  </div>
+                  
+                  {/* Styled Ring Representation */}
+                  <div className="relative h-24 w-24 flex items-center justify-center rounded-full bg-slate-900 border-4 border-purple-500/40 shadow-[0_0_20px_rgba(168,85,247,0.2)]">
+                    <div className="text-center">
+                      <div className="text-lg font-black text-purple-400">100%</div>
+                      <div className="text-[8px] font-bold text-slate-400 uppercase">Uptime</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card Type 3: Ranked Category List Card */}
+              <div className="rounded-2xl border border-slate-800/80 bg-[#141419] p-6 shadow-xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">AGV Fleet Roster</span>
+                  <span className="text-[10px] font-bold text-cyan-400">{vehiclesList.length} Units</span>
+                </div>
+                <div className="space-y-2.5">
                   {vehiclesList.map(v => (
-                    <div key={v.id} className="flex items-center justify-between p-3 rounded-lg border border-slate-900 bg-slate-950/40">
+                    <div key={v.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-800/60 bg-slate-900/60 hover:border-slate-700 transition-colors">
                       <div>
-                        <span className="text-xs font-bold text-slate-200">{v.vehicle_code}</span>
-                        <p className="text-[10px] text-slate-500">{v.name}</p>
+                        <div className="text-xs font-black text-slate-100">{v.vehicle_code}</div>
+                        <div className="text-[10px] font-medium text-slate-400">{v.name}</div>
                       </div>
                       <div className="text-right">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                          v.status === 'AVAILABLE' ? 'bg-green-950 text-green-400' : (v.status === 'BUSY' ? 'bg-blue-950 text-blue-400' : 'bg-red-950 text-red-400')
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${
+                          v.status === 'AVAILABLE' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : (v.status === 'BUSY' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30')
                         }`}>{v.status}</span>
-                        <div className="flex items-center justify-end gap-1 mt-1 text-[10px] text-slate-400 font-bold">
-                          <span>Battery: {v.battery_percentage}%</span>
+                        <div className="text-[10px] font-bold text-slate-400 mt-1">
+                          Battery: {v.battery_percentage}%
                         </div>
                       </div>
                     </div>
                   ))}
-                </div>
-              </div>
-
-              {/* Recent warnings alerts board */}
-              <div className="rounded-xl border border-slate-900 bg-slate-950 p-6 shadow-xl space-y-4">
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest font-bold">Recent Alerts Log</span>
-                <div className="space-y-3">
-                  {alertsList.length === 0 ? (
-                    <p className="text-xs text-slate-600 text-center py-4">No active system warnings.</p>
-                  ) : (
-                    alertsList.map(alert => (
-                      <div key={alert.id} className="p-3 rounded-lg border border-slate-900 bg-slate-950/40 space-y-1.5">
-                        <div className="flex justify-between items-center">
-                          <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
-                            alert.severity === 'CRITICAL' ? 'bg-red-950 text-red-400' : 'bg-yellow-950 text-yellow-500'
-                          }`}>{alert.severity}</span>
-                          <span className="text-[9px] text-slate-600">{new Date(alert.created_at).toLocaleTimeString()}</span>
-                        </div>
-                        <p className="text-[11px] text-slate-300 font-medium">{alert.message}</p>
-                      </div>
-                    ))
-                  )}
                 </div>
               </div>
             </div>

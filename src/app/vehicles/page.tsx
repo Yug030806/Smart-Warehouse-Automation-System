@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
+import AmbientBackground from '@/components/AmbientBackground';
 import { useAuth } from '@/lib/supabase/AuthProvider';
 import { usePreventScroll } from '@/lib/usePreventScroll';
 import { Search, MapPin, Truck, Plus, Trash2, BatteryCharging, AlertCircle, RefreshCw } from 'lucide-react';
@@ -30,16 +31,21 @@ export default function VehiclesPage() {
 
   usePreventScroll(Boolean(editingVehicle || showAddModal));
 
-  const loadVehicles = () => {
-    let list = (supabase.from('vehicles').select().data || []) as any[];
-    const pList = supabase.from('profiles').select().data || [];
+  const loadVehicles = async () => {
+    const vRes = await supabase.from('vehicles').select();
+    let list = (vRes.data || []) as any[];
+    const pRes = await supabase.from('profiles').select();
+    const pList = pRes.data || [];
     const currentUserProfile = pList.find((p: any) => p.id === user?.id);
     const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
     const isRestricted = ['MANAGER'].includes(userRole as string);
 
-    let fls = supabase.from('floors').select().data || [];
-    let locs = supabase.from('locations').select().data || [];
-    let tsk = supabase.from('tasks').select().data || [];
+    const fRes = await supabase.from('floors').select();
+    let fls = fRes.data || [];
+    const lRes = await supabase.from('locations').select();
+    let locs = lRes.data || [];
+    const tRes = await supabase.from('tasks').select();
+    let tsk = tRes.data || [];
 
     if (isRestricted && assignedWarehouses.length > 0) {
       const allowedF = fls.filter((f: any) => assignedWarehouses.includes(f.warehouse_id)).map((f: any) => f.id);
@@ -59,19 +65,21 @@ export default function VehiclesPage() {
     setVehicles(list as Vehicle[]);
 
     setFloors(fls as Floor[]);
-    if (fls.length > 0) setFloorId(fls[0].id);
+    if (fls.length > 0 && !floorId) setFloorId(fls[0].id);
 
     setLocations(locs as Location[]);
-    if (locs.length > 0) setStartLocId(locs[0].id);
+    if (locs.length > 0 && !startLocId) setStartLocId(locs[0].id);
 
     setTasks(tsk as Task[]);
   };
 
   useEffect(() => {
     loadVehicles();
+    const interval = setInterval(loadVehicles, 2000);
+    return () => clearInterval(interval);
   }, []);
 
-  const handleAddVehicle = (e: React.FormEvent) => {
+  const handleAddVehicle = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!vCode || !vName) return;
 
@@ -80,8 +88,9 @@ export default function VehiclesPage() {
     const x = selectedLoc ? selectedLoc.x : 5;
     const y = selectedLoc ? selectedLoc.y : 1;
 
+    const newId = typeof window !== 'undefined' && window.crypto?.randomUUID ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${Date.now().toString().padStart(12, '0')}`;
     const newVehicle: Vehicle = {
-      id: `v-${Date.now()}`,
+      id: newId,
       vehicle_code: vCode,
       name: vName,
       status: 'AVAILABLE',
@@ -101,19 +110,19 @@ export default function VehiclesPage() {
       obstacle_count: 0
     };
 
-    supabase.from('vehicles').insert(newVehicle);
+    await supabase.from('vehicles').insert(newVehicle);
     setShowAddModal(false);
     setVCode('');
     setVName('');
-    loadVehicles();
+    await loadVehicles();
   };
 
-  const handleDeleteVehicle = (id: string) => {
-    supabase.from('vehicles').delete().eq('id', id);
-    loadVehicles();
+  const handleDeleteVehicle = async (id: string) => {
+    await supabase.from('vehicles').delete().eq('id', id);
+    await loadVehicles();
   };
 
-  const handleSendToCharging = (id: string) => {
+  const handleSendToCharging = async (id: string) => {
     const v = vehicles.find(x => x.id === id);
     if (!v) return;
 
@@ -121,7 +130,7 @@ export default function VehiclesPage() {
     const charger = locations.find(l => l.floor_id === v.current_floor_id && l.type === 'CHARGING');
     if (!charger) return;
 
-    supabase.from('vehicles').update({
+    await supabase.from('vehicles').update({
       status: 'CHARGING',
       x_position: charger.x,
       y_position: charger.y,
@@ -129,10 +138,10 @@ export default function VehiclesPage() {
       battery_percentage: 100
     }).eq('id', id);
 
-    loadVehicles();
+    await loadVehicles();
   };
 
-  const handleResetVehicle = (id: string) => {
+  const handleResetVehicle = async (id: string) => {
     const v = vehicles.find(x => x.id === id);
     if (!v) return;
 
@@ -140,7 +149,7 @@ export default function VehiclesPage() {
     const x = charger ? charger.x : 5;
     const y = charger ? charger.y : 1;
 
-    supabase.from('vehicles').update({
+    await supabase.from('vehicles').update({
       status: 'AVAILABLE',
       x_position: x,
       y_position: y,
@@ -149,28 +158,27 @@ export default function VehiclesPage() {
       battery_percentage: 95
     }).eq('id', id);
 
-    loadVehicles();
+    await loadVehicles();
   };
 
-
-
-  const handleEditVehicleSubmit = (e: React.FormEvent) => {
+  const handleEditVehicleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingVehicle || !editVName) return;
 
-    supabase.from('vehicles').update({
+    await supabase.from('vehicles').update({
       name: editVName,
       status: editStatus
     }).eq('id', editingVehicle.id);
 
     setEditingVehicle(null);
-    loadVehicles();
+    await loadVehicles();
   };
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-slate-950">
+    <div className="flex h-screen w-full overflow-hidden bg-slate-950 relative">
+      <AmbientBackground intensity="low" />
       <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
       <div className="flex-grow flex flex-col min-w-0 h-screen overflow-hidden">
         <Navbar onMenuClick={() => setMobileMenuOpen(true)} />

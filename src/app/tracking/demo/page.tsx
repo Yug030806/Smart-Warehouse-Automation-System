@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
+import AmbientBackground from '@/components/AmbientBackground';
 import WarehouseMap from '@/components/WarehouseMap';
 import { calculateRoute } from '@/lib/algorithms/astar';
 import { SimulatorVehicleController } from '@/lib/simulator/vehicleController';
@@ -239,7 +240,8 @@ export default function DemoPage() {
   };
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-slate-950">
+    <div className="flex h-screen w-full overflow-hidden bg-slate-950 relative">
+      <AmbientBackground intensity="high" />
       <Sidebar />
       <div className="flex-grow flex flex-col min-w-0 h-screen overflow-hidden">
         <Navbar />

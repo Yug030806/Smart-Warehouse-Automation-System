@@ -28,19 +28,19 @@ body {
 }
 
 /* ============================================================
-   THEME: DARK
+   THEME: DARK (Enriched — Deep Navy + Subtle Violet Accents)
    ============================================================ */
 .theme-dark {
-  --background: #020617;
+  --background: #050510;
   --foreground: #f1f5f9;
-  --panel: rgba(15, 23, 42, 0.88);
-  --panel-hover: #1e293b;
-  --border: #1e293b;
-  --card: #0f172a;
+  --panel: rgba(12, 12, 30, 0.92);
+  --panel-hover: #1a1a3e;
+  --border: #1e1e40;
+  --card: #0c0c1e;
   --muted: #94a3b8;
-  --sidebar-bg: rgba(2, 6, 23, 0.92);
-  --navbar-bg: rgba(2, 6, 23, 0.92);
-  --input-bg: #020617;
+  --sidebar-bg: rgba(5, 5, 16, 0.95);
+  --navbar-bg: rgba(5, 5, 16, 0.95);
+  --input-bg: #060614;
 }
 
 .theme-dark .bg-slate-950 {
@@ -48,95 +48,30 @@ body {
 }
 
 .theme-dark .bg-slate-900 {
-  background-color: rgba(15, 23, 42, 0.88) !important;
+  background-color: rgba(12, 12, 30, 0.90) !important;
   backdrop-filter: blur(14px);
 }
 
 .theme-dark header,
 .theme-dark aside {
-  background-color: rgba(2, 6, 23, 0.92) !important;
+  background-color: rgba(5, 5, 16, 0.95) !important;
   backdrop-filter: blur(16px);
 }
 
 /* ============================================================
-   THEME: LIGHT
-   ============================================================ */
-.theme-light {
-  --background: #f8fafc;
-  --foreground: #0f172a;
-  --panel: #ffffff;
-  --panel-hover: #f1f5f9;
-  --border: #e2e8f0;
-  --card: #ffffff;
-  --muted: #64748b;
-  --sidebar-bg: #ffffff;
-  --navbar-bg: #ffffff;
-  --input-bg: #f1f5f9;
-}
-
-.theme-light body {
-  background-color: #f8fafc !important;
-}
-
-/* Light theme overrides */
-.theme-light .bg-slate-950 { background-color: #f8fafc !important; }
-.theme-light .bg-slate-900 { background-color: #ffffff !important; }
-.theme-light .bg-slate-900\/60 { background-color: rgba(255,255,255,0.9) !important; }
-.theme-light .bg-slate-900\/80 { background-color: rgba(255,255,255,0.95) !important; }
-.theme-light .bg-slate-900\/40 { background-color: rgba(241,245,249,0.6) !important; }
-.theme-light .bg-slate-900\/30 { background-color: rgba(241,245,249,0.5) !important; }
-.theme-light .bg-slate-950\/80 { background-color: rgba(241,245,249,0.9) !important; }
-.theme-light .bg-slate-950\/50 { background-color: rgba(241,245,249,0.7) !important; }
-.theme-light .bg-slate-950\/40 { background-color: rgba(241,245,249,0.6) !important; }
-.theme-light .bg-slate-950\/90 { background-color: rgba(241,245,249,0.95) !important; }
-
-.theme-light .text-slate-100 { color: #0f172a !important; }
-.theme-light .text-slate-200 { color: #1e293b !important; }
-.theme-light .text-slate-300 { color: #334155 !important; }
-.theme-light .text-slate-400 { color: #64748b !important; }
-.theme-light .text-slate-500 { color: #94a3b8 !important; }
-.theme-light .text-slate-50 { color: #ffffff !important; }
-
-.theme-light .border-slate-800 { border-color: #e2e8f0 !important; }
-.theme-light .border-slate-900 { border-color: #e2e8f0 !important; }
-.theme-light .border-slate-800\/80 { border-color: rgba(226,232,240,0.8) !important; }
-.theme-light .border-slate-800\/60 { border-color: rgba(226,232,240,0.6) !important; }
-.theme-light .border-slate-900\/50 { border-color: rgba(226,232,240,0.5) !important; }
-.theme-light .border-slate-700 { border-color: #cbd5e1 !important; }
-
-.theme-light .hover\:bg-slate-800:hover { background-color: #e2e8f0 !important; }
-.theme-light .hover\:bg-slate-900:hover { background-color: #f1f5f9 !important; }
-.theme-light .hover\:bg-slate-900\/60:hover { background-color: rgba(241,245,249,0.8) !important; }
-.theme-light .hover\:text-slate-100:hover { color: #0f172a !important; }
-.theme-light .hover\:text-slate-200:hover { color: #1e293b !important; }
-.theme-light .hover\:text-slate-300:hover { color: #334155 !important; }
-.theme-light .hover\:border-slate-800:hover { border-color: #cbd5e1 !important; }
-.theme-light .hover\:border-slate-700:hover { border-color: #94a3b8 !important; }
-
-.theme-light .placeholder-slate-600::placeholder { color: #94a3b8 !important; }
-
-.theme-light ::-webkit-scrollbar-track { background: #f8fafc; }
-.theme-light ::-webkit-scrollbar-thumb { background: #cbd5e1; }
-.theme-light ::-webkit-scrollbar-thumb:hover { background: #3b82f6; }
-
-/* Light theme shadow adjustments */
-.theme-light .shadow-2xl { box-shadow: 0 4px 24px rgba(0,0,0,0.06) !important; }
-.theme-light .shadow-xl { box-shadow: 0 2px 16px rgba(0,0,0,0.04) !important; }
-
-/* ============================================================
-   THEME: AESTHETIC (Cyberpunk / Neon Cyan & Purple Inspired by Logo)
+   THEME: AESTHETIC (Dark Nude / Cream — based on #CCB3A3)
    ============================================================ */
 .theme-aesthetic {
-  --background: #0b0a1a;
-  --foreground: #e8e0f0;
-  --panel: rgba(18, 17, 42, 0.88);
-  --panel-hover: #1a1940;
-  --border: #2a2555;
-  --card: #12112a;
-  --muted: #9d8ec2;
-  --sidebar-bg: rgba(11, 10, 26, 0.92);
-  --navbar-bg: rgba(11, 10, 26, 0.92);
-  --input-bg: #0e0d22;
+  --background: #1a1614;
+  --foreground: #f7f1ec;
+  --panel: rgba(38, 32, 29, 0.94);
+  --panel-hover: #342c28;
+  --border: #4f433d;
+  --card: #241e1b;
+  --muted: #d9c4b7;
+  --sidebar-bg: rgba(24, 20, 18, 0.96);
+  --navbar-bg: rgba(24, 20, 18, 0.96);
+  --input-bg: #201a18;
 }
 
 .theme-aesthetic .bg-slate-950 {
@@ -145,53 +80,62 @@ body {
 
 .theme-aesthetic header,
 .theme-aesthetic aside {
-  background-color: rgba(11, 10, 26, 0.92) !important;
+  background-color: rgba(24, 20, 18, 0.96) !important;
   backdrop-filter: blur(16px);
 }
 
-.theme-aesthetic .bg-slate-900 { background-color: rgba(18, 17, 42, 0.88) !important; backdrop-filter: blur(14px); }
-.theme-aesthetic .bg-slate-900\/60 { background-color: rgba(18,17,42,0.75) !important; }
-.theme-aesthetic .bg-slate-900\/80 { background-color: rgba(18,17,42,0.9) !important; }
-.theme-aesthetic .bg-slate-900\/40 { background-color: rgba(18,17,42,0.6) !important; }
-.theme-aesthetic .bg-slate-900\/30 { background-color: rgba(18,17,42,0.5) !important; }
-.theme-aesthetic .bg-slate-950\/80 { background-color: rgba(11,10,26,0.9) !important; }
-.theme-aesthetic .bg-slate-950\/50 { background-color: rgba(11,10,26,0.7) !important; }
-.theme-aesthetic .bg-slate-950\/40 { background-color: rgba(11,10,26,0.6) !important; }
-.theme-aesthetic .bg-slate-950\/90 { background-color: rgba(11,10,26,0.95) !important; }
+.theme-aesthetic .bg-slate-900 { background-color: rgba(38, 32, 29, 0.92) !important; backdrop-filter: blur(14px); }
+.theme-aesthetic .bg-slate-900\/60 { background-color: rgba(38, 32, 29, 0.75) !important; }
+.theme-aesthetic .bg-slate-900\/80 { background-color: rgba(38, 32, 29, 0.92) !important; }
+.theme-aesthetic .bg-slate-900\/40 { background-color: rgba(38, 32, 29, 0.60) !important; }
+.theme-aesthetic .bg-slate-900\/30 { background-color: rgba(38, 32, 29, 0.50) !important; }
+.theme-aesthetic .bg-slate-950\/80 { background-color: rgba(24, 20, 18, 0.90) !important; }
+.theme-aesthetic .bg-slate-950\/50 { background-color: rgba(24, 20, 18, 0.70) !important; }
+.theme-aesthetic .bg-slate-950\/40 { background-color: rgba(24, 20, 18, 0.60) !important; }
+.theme-aesthetic .bg-slate-950\/90 { background-color: rgba(24, 20, 18, 0.95) !important; }
 
-.theme-aesthetic .text-slate-100 { color: #e8e0f0 !important; }
-.theme-aesthetic .text-slate-200 { color: #d4c8e8 !important; }
-.theme-aesthetic .text-slate-300 { color: #b8a8d4 !important; }
-.theme-aesthetic .text-slate-400 { color: #9d8ec2 !important; }
-.theme-aesthetic .text-slate-500 { color: #7a6ba8 !important; }
+/* Aesthetic warm text tones */
+.theme-aesthetic .text-slate-100 { color: #f7f1ec !important; }
+.theme-aesthetic .text-slate-200 { color: #ebdcd3 !important; }
+.theme-aesthetic .text-slate-300 { color: #CCB3A3 !important; }
+.theme-aesthetic .text-slate-400 { color: #b89d8d !important; }
+.theme-aesthetic .text-slate-500 { color: #9c8475 !important; }
 
-.theme-aesthetic .border-slate-800 { border-color: #2a2555 !important; }
-.theme-aesthetic .border-slate-900 { border-color: #1e1a45 !important; }
-.theme-aesthetic .border-slate-800\/80 { border-color: rgba(42,37,85,0.8) !important; }
-.theme-aesthetic .border-slate-700 { border-color: #3d3570 !important; }
+/* Aesthetic warm borders */
+.theme-aesthetic .border-slate-800 { border-color: #4f433d !important; }
+.theme-aesthetic .border-slate-900 { border-color: #382f2b !important; }
+.theme-aesthetic .border-slate-800\/80 { border-color: rgba(79, 67, 61, 0.8) !important; }
+.theme-aesthetic .border-slate-800\/60 { border-color: rgba(79, 67, 61, 0.6) !important; }
+.theme-aesthetic .border-slate-700 { border-color: #CCB3A3 !important; }
 
-.theme-aesthetic .hover\:bg-slate-800:hover { background-color: #1a1940 !important; }
-.theme-aesthetic .hover\:bg-slate-900:hover { background-color: #16153a !important; }
-.theme-aesthetic .hover\:bg-slate-900\/60:hover { background-color: rgba(22,21,58,0.7) !important; }
-.theme-aesthetic .hover\:text-slate-100:hover { color: #e8e0f0 !important; }
+/* Aesthetic warm hovers */
+.theme-aesthetic .hover\:bg-slate-800:hover { background-color: #342c28 !important; }
+.theme-aesthetic .hover\:bg-slate-900:hover { background-color: #2b2320 !important; }
+.theme-aesthetic .hover\:bg-slate-900\/60:hover { background-color: rgba(43, 35, 32, 0.7) !important; }
+.theme-aesthetic .hover\:text-slate-100:hover { color: #f7f1ec !important; }
 
-.theme-aesthetic .hover\:border-slate-800:hover { border-color: #3d3570 !important; }
-.theme-aesthetic .hover\:border-slate-700:hover { border-color: #4a4080 !important; }
+.theme-aesthetic .hover\:border-slate-800:hover { border-color: #CCB3A3 !important; }
+.theme-aesthetic .hover\:border-slate-700:hover { border-color: #d9c4b7 !important; }
 
-/* Aesthetic neon accents */
-.theme-aesthetic .bg-blue-600 { background-color: #7c3aed !important; }
-.theme-aesthetic .bg-blue-600\/10 { background-color: rgba(124,58,237,0.1) !important; }
-.theme-aesthetic .hover\:bg-blue-500:hover { background-color: #8b5cf6 !important; }
-.theme-aesthetic .text-blue-400 { color: #a78bfa !important; }
-.theme-aesthetic .text-blue-500 { color: #8b5cf6 !important; }
-.theme-aesthetic .border-blue-500 { border-color: #7c3aed !important; }
-.theme-aesthetic .border-blue-600\/30 { border-color: rgba(124,58,237,0.3) !important; }
-.theme-aesthetic .bg-blue-950 { background-color: rgba(124,58,237,0.15) !important; }
-.theme-aesthetic .bg-blue-950\/20 { background-color: rgba(124,58,237,0.1) !important; }
+/* Aesthetic dark nude accent (#CCB3A3 derived) — replaces blue */
+.theme-aesthetic .bg-blue-600 { background-color: #CCB3A3 !important; color: #1a1614 !important; }
+.theme-aesthetic .bg-blue-600\/10 { background-color: rgba(204, 179, 163, 0.14) !important; }
+.theme-aesthetic .hover\:bg-blue-500:hover { background-color: #d9c4b7 !important; }
+.theme-aesthetic .text-blue-400 { color: #CCB3A3 !important; }
+.theme-aesthetic .text-blue-500 { color: #b89d8d !important; }
+.theme-aesthetic .border-blue-500 { border-color: #CCB3A3 !important; }
+.theme-aesthetic .border-blue-600\/30 { border-color: rgba(204, 179, 163, 0.35) !important; }
+.theme-aesthetic .bg-blue-950 { background-color: rgba(204, 179, 163, 0.18) !important; }
+.theme-aesthetic .bg-blue-950\/20 { background-color: rgba(204, 179, 163, 0.12) !important; }
 
-.theme-aesthetic ::-webkit-scrollbar-track { background: #0b0a1a; }
-.theme-aesthetic ::-webkit-scrollbar-thumb { background: #2a2555; }
-.theme-aesthetic ::-webkit-scrollbar-thumb:hover { background: #7c3aed; }
+/* Aesthetic warm card surface overrides */
+.theme-aesthetic .bg-\[\#141419\] { background-color: #241e1b !important; }
+.theme-aesthetic .bg-\[\#0A0A0F\] { background-color: #1a1614 !important; }
+
+/* Aesthetic warm scrollbar */
+.theme-aesthetic ::-webkit-scrollbar-track { background: #1a1614; }
+.theme-aesthetic ::-webkit-scrollbar-thumb { background: #4f433d; }
+.theme-aesthetic ::-webkit-scrollbar-thumb:hover { background: #CCB3A3; }
 
 /* ============================================================
    CUSTOM SCROLLBARS
@@ -224,7 +168,7 @@ body {
 }
 
 .theme-aesthetic .motion-bg-container {
-  background-color: #0b0a1a;
+  background-color: #1a1410;
 }
 
 @keyframes cinematic-pan {
@@ -284,10 +228,10 @@ body {
 .orb-dark-2 { background: radial-gradient(circle, rgba(139, 92, 246, 0.30), rgba(99, 102, 241, 0.15), transparent 70%); }
 .orb-dark-3 { background: radial-gradient(circle, rgba(6, 182, 212, 0.30), rgba(37, 99, 235, 0.15), transparent 70%); }
 
-/* Aesthetic Theme Orbs: Balanced Ambient Cyan-Purple-Magenta Glow */
-.orb-aesthetic-1 { background: radial-gradient(circle, rgba(0, 210, 255, 0.40), rgba(124, 58, 237, 0.25), transparent 70%); }
-.orb-aesthetic-2 { background: radial-gradient(circle, rgba(236, 72, 153, 0.35), rgba(139, 92, 246, 0.20), transparent 70%); }
-.orb-aesthetic-3 { background: radial-gradient(circle, rgba(6, 182, 212, 0.35), rgba(124, 58, 237, 0.20), transparent 70%); }
+/* Aesthetic Theme Orbs: Dark Nude (#CCB3A3) Glow */
+.orb-aesthetic-1 { background: radial-gradient(circle, rgba(204, 179, 163, 0.40), rgba(217, 196, 183, 0.22), transparent 70%); }
+.orb-aesthetic-2 { background: radial-gradient(circle, rgba(235, 220, 211, 0.30), rgba(204, 179, 163, 0.18), transparent 70%); }
+.orb-aesthetic-3 { background: radial-gradient(circle, rgba(184, 157, 141, 0.30), rgba(79, 67, 61, 0.18), transparent 70%); }
 
 /* Animated Circuit Streams */
 @keyframes stream-flow-1 {
@@ -330,8 +274,8 @@ body {
 }
 
 .stream-aesthetic {
-  background: linear-gradient(90deg, transparent, rgba(236, 72, 153, 0.2), #ec4899, rgba(124, 58, 237, 0.2), transparent);
-  box-shadow: 0 0 12px rgba(236, 72, 153, 0.4);
+  background: linear-gradient(90deg, transparent, rgba(204, 179, 163, 0.25), #CCB3A3, rgba(217, 196, 183, 0.25), transparent);
+  box-shadow: 0 0 12px rgba(204, 179, 163, 0.4);
 }
 
 /* Circuit Nodes Pulse */
@@ -355,8 +299,8 @@ body {
   box-shadow: 0 0 10px rgba(0, 198, 255, 0.6);
 }
 .node-aesthetic {
-  background: #ec4899;
-  box-shadow: 0 0 12px rgba(236, 72, 153, 0.6);
+  background: #CCB3A3;
+  box-shadow: 0 0 12px rgba(204, 179, 163, 0.6);
 }
 
 /* Floating Particles */
@@ -381,7 +325,7 @@ body {
 .particle-6 { top: 38%; left: 55%; animation: particle-float-6 8s ease-in-out infinite; }
 
 .particle-dark { background: #00c6ff; box-shadow: 0 0 8px rgba(0, 198, 255, 0.5); opacity: 0.45; }
-.particle-aesthetic { background: #ec4899; box-shadow: 0 0 10px rgba(236, 72, 153, 0.5); opacity: 0.55; }
+.particle-aesthetic { background: #CCB3A3; box-shadow: 0 0 10px rgba(204, 179, 163, 0.5); opacity: 0.55; }
 
 /* Global Smooth Theme Transitions */
 *, *::before, *::after {

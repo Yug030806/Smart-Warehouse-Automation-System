@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/supabase/AuthProvider';
 import { KeyRound, Eye, EyeOff, Lock, Mail, Sparkles, ShieldCheck, UserCheck, Bot } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
+import AmbientBackground from '@/components/AmbientBackground';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -74,6 +75,7 @@ export default function LoginPage() {
       className="relative flex min-h-screen items-center justify-center bg-slate-950 px-4 py-12 overflow-hidden"
       onMouseMove={handleMouseMove}
     >
+      <AmbientBackground intensity="high" />
       {/* Dynamic Animated Ambient Background Orbs */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -top-32 -left-32 w-96 h-96 bg-cyan-500/15 rounded-full blur-3xl animate-pulse pointer-events-none" />

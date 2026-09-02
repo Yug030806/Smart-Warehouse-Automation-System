@@ -36,8 +36,7 @@ export default function MotionBackground() {
   // Don't render on login page
   if (pathname === '/login') return null;
 
-  // Keep light mode clean & minimal
-  if (theme === 'light') return null;
+
 
   const isAesthetic = theme === 'aesthetic';
 

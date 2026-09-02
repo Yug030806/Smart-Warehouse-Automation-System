@@ -5,13 +5,14 @@ import { useAuth } from '@/lib/supabase/AuthProvider';
 import Link from 'next/link';
 import { UserPlus, Eye, EyeOff, Lock, Mail, User, ShieldCheck, UserCheck, Bot, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
+import AmbientBackground from '@/components/AmbientBackground';
 
 export default function SignupPage() {
   const { signup } = useAuth();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'ADMIN' | 'MANAGER'  | 'OPERATOR'>('OPERATOR');
+  const [role, setRole] = useState<'MANAGER' | 'OPERATOR'>('OPERATOR');
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -31,7 +32,6 @@ export default function SignupPage() {
   const rolesList = [
     { value: 'OPERATOR' as const, label: 'AMR Operator', icon: Bot },
     { value: 'MANAGER' as const, label: 'Manager', icon: UserCheck },
-    { value: 'ADMIN' as const, label: 'Admin', icon: ShieldCheck },
   ];
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -62,6 +62,7 @@ export default function SignupPage() {
       className="relative flex min-h-screen items-center justify-center bg-slate-950 px-4 py-12 overflow-hidden"
       onMouseMove={handleMouseMove}
     >
+      <AmbientBackground intensity="high" />
       {/* Dynamic Animated Ambient Background Orbs */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -top-32 -right-32 w-96 h-96 bg-cyan-500/15 rounded-full blur-3xl animate-pulse pointer-events-none" />
@@ -200,7 +201,7 @@ export default function SignupPage() {
                   <span>Desired Role</span>
                   <span className="text-[10px] text-cyan-400 font-semibold">Admin Approval Required</span>
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   {rolesList.map((r) => {
                     const isSelected = role === r.value;
                     const IconC = r.icon;
