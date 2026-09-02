@@ -83,22 +83,23 @@ export default function LoginPage() {
         <div className="absolute inset-0 bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:24px_24px] opacity-10 pointer-events-none" />
       </div>
 
-      {/* Parallax Background Logo */}
-      <div className="absolute inset-0 z-0 flex items-center justify-center pointer-events-none opacity-20">
+      {/* Fullscreen AMR Warehouse Background Image */}
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
         <img 
-          src="/logo.png" 
-          alt="" 
-          className="w-full h-full object-cover" 
+          src="/login-bg.jpg" 
+          alt="Warehouse AMR Fleet" 
+          className="w-full h-full object-cover opacity-60" 
           style={bgStyle}
         />
-        <div className="absolute inset-0 bg-slate-950/60" />
+        {/* Soft dark gradient tint for crisp text contrast */}
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/50 to-slate-950/80" />
       </div>
 
       <motion.div 
         initial={{ opacity: 0, y: 20, scale: 0.95 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.4, ease: 'easeOut' }}
-        className="relative z-10 w-full max-w-md rounded-3xl border border-slate-800/80 bg-slate-900/70 p-8 shadow-[0_0_50px_rgba(6,182,212,0.1)] backdrop-blur-2xl"
+        className="relative z-10 w-full max-w-md rounded-3xl border border-slate-700/60 bg-slate-950/60 p-8 shadow-[0_0_50px_rgba(0,0,0,0.6)] backdrop-blur-xl"
       >
         <div className="flex flex-col items-center text-center">
           <motion.div 

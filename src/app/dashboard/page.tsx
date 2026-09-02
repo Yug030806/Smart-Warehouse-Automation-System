@@ -207,24 +207,28 @@ export default function Dashboard() {
         
         <main className="flex-grow p-4 sm:p-6 md:p-8 overflow-y-auto space-y-6 md:space-y-8 overscroll-contain">
           {/* Top Section Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3">
-                <span className="h-6 w-1.5 rounded-full bg-blue-500 shadow-[0_0_12px_#3b82f6]" />
-                <h1 className="text-xl sm:text-2xl font-black text-slate-100 tracking-tight">Smart Warehouse Telemetry</h1>
-                <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full min-w-0">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                <span className="h-6 w-1.5 rounded-full bg-blue-500 shadow-[0_0_12px_#3b82f6] shrink-0" />
+                <h1 className="text-lg sm:text-xl md:text-2xl font-black text-slate-100 tracking-tight break-words min-w-0">
+                  Smart Warehouse Telemetry
+                </h1>
+                <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 shrink-0">
                   <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
                   <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">System Optimal</span>
                 </div>
               </div>
-              <p className="text-xs sm:text-sm text-slate-400 mt-1 pl-4.5">Autonomous fleet telemetry, inventory throughput, and AGV performance metrics.</p>
+              <p className="text-xs sm:text-sm text-slate-400 mt-1 sm:pl-4.5 break-words">
+                Autonomous fleet telemetry, inventory throughput, and AGV performance metrics.
+              </p>
             </div>
-            <div className="flex flex-wrap gap-2 p-1.5 rounded-2xl bg-[#141419] border border-slate-800/80">
+            <div className="flex items-center gap-1.5 sm:gap-2 p-1.5 rounded-2xl bg-[#141419] border border-slate-800/80 shrink-0 self-start sm:self-auto w-full sm:w-auto justify-between sm:justify-start">
               {['f-01', 'f-02', 'f-03'].map((fId, idx) => (
                 <button
                   key={fId}
                   onClick={() => setSelectedFloor(fId)}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 ${
+                  className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 text-center ${
                     selectedFloor === fId
                       ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(59,130,246,0.4)]'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
