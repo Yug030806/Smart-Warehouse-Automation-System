@@ -10,6 +10,12 @@ export const metadata = {
   description: 'AI-assisted routing, autonomous AMR simulation, QR scanner verification, and live tracking dashboard.',
 };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+};
+
 import { AuthProvider } from '@/lib/supabase/AuthProvider';
 import { ThemeProvider } from '@/lib/ThemeProvider';
 import MotionBackground from '@/components/MotionBackground';

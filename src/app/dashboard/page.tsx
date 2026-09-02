@@ -133,10 +133,10 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-slate-950 relative">
+    <div className="md:flex h-screen w-full overflow-hidden bg-slate-950 relative">
       <AmbientBackground intensity="low" />
       <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+      <div className="flex flex-col w-full md:flex-1 md:min-w-0 h-screen overflow-hidden">
         <Navbar onMenuClick={() => setMobileMenuOpen(true)} />
 
         {/* Pending Approvals Popup Modal */}
@@ -205,13 +205,13 @@ export default function Dashboard() {
           </div>
         )}
         
-        <main className="flex-grow p-4 sm:p-6 md:p-8 overflow-y-auto space-y-6 md:space-y-8 overscroll-contain">
+        <main className="flex-grow p-3 sm:p-6 md:p-8 overflow-y-auto space-y-6 md:space-y-8 overscroll-contain w-full min-w-0">
           {/* Top Section Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full min-w-0">
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 w-full sm:w-auto flex-1">
               <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <span className="h-6 w-1.5 rounded-full bg-blue-500 shadow-[0_0_12px_#3b82f6] shrink-0" />
-                <h1 className="text-lg sm:text-xl md:text-2xl font-black text-slate-100 tracking-tight break-words min-w-0">
+                <h1 className="text-xl sm:text-2xl font-black text-slate-100 tracking-tight leading-tight min-w-0">
                   Smart Warehouse Telemetry
                 </h1>
                 <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 shrink-0">
@@ -219,16 +219,16 @@ export default function Dashboard() {
                   <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">System Optimal</span>
                 </div>
               </div>
-              <p className="text-xs sm:text-sm text-slate-400 mt-1 sm:pl-4.5 break-words">
+              <p className="text-xs sm:text-sm text-slate-400 mt-1 sm:pl-4.5">
                 Autonomous fleet telemetry, inventory throughput, and AGV performance metrics.
               </p>
             </div>
-            <div className="flex items-center gap-1.5 sm:gap-2 p-1.5 rounded-2xl bg-[#141419] border border-slate-800/80 shrink-0 self-start sm:self-auto w-full sm:w-auto justify-between sm:justify-start">
+            <div className="flex items-center gap-1.5 sm:gap-2 p-1.5 rounded-2xl bg-[#141419] border border-slate-800/80 shrink-0 w-full sm:w-auto overflow-x-auto">
               {['f-01', 'f-02', 'f-03'].map((fId, idx) => (
                 <button
                   key={fId}
                   onClick={() => setSelectedFloor(fId)}
-                  className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 text-center ${
+                  className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 text-center whitespace-nowrap ${
                     selectedFloor === fId
                       ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(59,130,246,0.4)]'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
@@ -241,75 +241,75 @@ export default function Dashboard() {
           </div>
 
           {/* Card Type 1: Small Multi-Number Stat Cards (Top Row) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 w-full min-w-0">
             {/* Stat Card 1: Total Tasks */}
-            <div className="rounded-2xl border border-slate-800/80 bg-[#141419] p-6 shadow-xl space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Transportation Tasks</span>
-                <div className="h-9 w-9 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-blue-400">
+            <div className="rounded-2xl border border-slate-800/80 bg-[#141419] p-4 sm:p-6 shadow-xl space-y-4 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider min-w-0">Transportation Tasks</span>
+                <div className="h-9 w-9 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-blue-400 shrink-0">
                   <ClipboardList className="h-4 w-4" />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-2 pt-1">
-                <div>
-                  <div className="text-2xl font-black text-slate-100">{stats.activeTasks}</div>
-                  <div className="text-[11px] font-semibold text-slate-400 mt-0.5">Active</div>
+              <div className="grid grid-cols-3 gap-2 pt-1 min-w-0">
+                <div className="min-w-0">
+                  <div className="text-xl sm:text-2xl font-black text-slate-100">{stats.activeTasks}</div>
+                  <div className="text-[10px] sm:text-[11px] font-semibold text-slate-400 mt-0.5">Active</div>
                 </div>
-                <div>
-                  <div className="text-2xl font-black text-amber-400">{stats.pendingTasks}</div>
-                  <div className="text-[11px] font-semibold text-slate-400 mt-0.5">Pending</div>
+                <div className="min-w-0">
+                  <div className="text-xl sm:text-2xl font-black text-amber-400">{stats.pendingTasks}</div>
+                  <div className="text-[10px] sm:text-[11px] font-semibold text-slate-400 mt-0.5">Pending</div>
                 </div>
-                <div>
-                  <div className="text-2xl font-black text-emerald-400">{stats.completedDeliveries}</div>
-                  <div className="text-[11px] font-semibold text-slate-400 mt-0.5">Completed</div>
+                <div className="min-w-0">
+                  <div className="text-xl sm:text-2xl font-black text-emerald-400">{stats.completedDeliveries}</div>
+                  <div className="text-[10px] sm:text-[11px] font-semibold text-slate-400 mt-0.5">Completed</div>
                 </div>
               </div>
             </div>
 
             {/* Stat Card 2: AGV Fleet Overview */}
-            <div className="rounded-2xl border border-slate-800/80 bg-[#141419] p-6 shadow-xl space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">AGV Fleet Status</span>
-                <div className="h-9 w-9 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-cyan-400">
+            <div className="rounded-2xl border border-slate-800/80 bg-[#141419] p-4 sm:p-6 shadow-xl space-y-4 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider min-w-0">AGV Fleet Status</span>
+                <div className="h-9 w-9 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-cyan-400 shrink-0">
                   <Truck className="h-4 w-4" />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-2 pt-1">
-                <div>
-                  <div className="text-2xl font-black text-emerald-400">{stats.availableVehicles}</div>
-                  <div className="text-[11px] font-semibold text-slate-400 mt-0.5">Available</div>
+              <div className="grid grid-cols-3 gap-2 pt-1 min-w-0">
+                <div className="min-w-0">
+                  <div className="text-xl sm:text-2xl font-black text-emerald-400">{stats.availableVehicles}</div>
+                  <div className="text-[10px] sm:text-[11px] font-semibold text-slate-400 mt-0.5">Available</div>
                 </div>
-                <div>
-                  <div className="text-2xl font-black text-blue-400">{stats.busyVehicles}</div>
-                  <div className="text-[11px] font-semibold text-slate-400 mt-0.5">Busy</div>
+                <div className="min-w-0">
+                  <div className="text-xl sm:text-2xl font-black text-blue-400">{stats.busyVehicles}</div>
+                  <div className="text-[10px] sm:text-[11px] font-semibold text-slate-400 mt-0.5">Busy</div>
                 </div>
-                <div>
-                  <div className="text-2xl font-black text-purple-400">{stats.edgeAiActive}</div>
-                  <div className="text-[11px] font-semibold text-slate-400 mt-0.5">Edge-AI</div>
+                <div className="min-w-0">
+                  <div className="text-xl sm:text-2xl font-black text-purple-400">{stats.edgeAiActive}</div>
+                  <div className="text-[10px] sm:text-[11px] font-semibold text-slate-400 mt-0.5">Edge-AI</div>
                 </div>
               </div>
             </div>
 
             {/* Stat Card 3: Inventory & Safety Metrics */}
-            <div className="rounded-2xl border border-slate-800/80 bg-[#141419] p-6 shadow-xl space-y-4 sm:col-span-2 lg:col-span-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Payloads & System Alerts</span>
-                <div className="h-9 w-9 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-amber-400">
+            <div className="rounded-2xl border border-slate-800/80 bg-[#141419] p-4 sm:p-6 shadow-xl space-y-4 sm:col-span-2 lg:col-span-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider min-w-0">Payloads & System Alerts</span>
+                <div className="h-9 w-9 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-amber-400 shrink-0">
                   <Boxes className="h-4 w-4" />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-2 pt-1">
-                <div>
-                  <div className="text-2xl font-black text-slate-100">{stats.totalBoxes}</div>
-                  <div className="text-[11px] font-semibold text-slate-400 mt-0.5">Packets</div>
+              <div className="grid grid-cols-3 gap-2 pt-1 min-w-0">
+                <div className="min-w-0">
+                  <div className="text-xl sm:text-2xl font-black text-slate-100">{stats.totalBoxes}</div>
+                  <div className="text-[10px] sm:text-[11px] font-semibold text-slate-400 mt-0.5">Packets</div>
                 </div>
-                <div>
-                  <div className="text-2xl font-black text-red-400">{stats.activeAlerts}</div>
-                  <div className="text-[11px] font-semibold text-slate-400 mt-0.5">Alerts</div>
+                <div className="min-w-0">
+                  <div className="text-xl sm:text-2xl font-black text-red-400">{stats.activeAlerts}</div>
+                  <div className="text-[10px] sm:text-[11px] font-semibold text-slate-400 mt-0.5">Alerts</div>
                 </div>
-                <div>
-                  <div className="text-2xl font-black text-amber-400">{stats.obstaclesToday}</div>
-                  <div className="text-[11px] font-semibold text-slate-400 mt-0.5">Obstacles</div>
+                <div className="min-w-0">
+                  <div className="text-xl sm:text-2xl font-black text-amber-400">{stats.obstaclesToday}</div>
+                  <div className="text-[10px] sm:text-[11px] font-semibold text-slate-400 mt-0.5">Obstacles</div>
                 </div>
               </div>
             </div>

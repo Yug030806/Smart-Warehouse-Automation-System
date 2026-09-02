@@ -73,7 +73,7 @@ export default function SignupPage() {
       {/* Blurred logo background */}
       <div className="absolute inset-0 z-0 flex items-center justify-center pointer-events-none opacity-20">
         <img 
-          src="/logo.png" 
+          src="/logo.jpg" 
           alt="" 
           className="w-full h-full object-cover" 
           style={bgStyle}
@@ -92,7 +92,7 @@ export default function SignupPage() {
             whileHover={{ scale: 1.08, rotate: -3 }}
             className="relative p-3 rounded-2xl bg-slate-800/80 border border-slate-700/60 shadow-lg"
           >
-            <img src="/logo.png" alt="Smart Warehouse Logo" className="h-14 w-14 object-contain" />
+            <img src="/logo.jpg" alt="Smart Warehouse Logo" className="h-14 w-14 object-contain" />
             <div className="absolute -inset-1 rounded-2xl bg-cyan-500/20 blur opacity-75 pointer-events-none animate-pulse" />
           </motion.div>
 

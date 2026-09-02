@@ -64,7 +64,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
 
       <aside 
         className={`fixed md:static inset-y-0 left-0 z-50 w-64 shrink-0 border-r border-slate-800/80 bg-slate-950/40 backdrop-blur-md flex flex-col h-screen transition-transform duration-300 ease-in-out md:translate-x-0 overscroll-contain relative overflow-hidden ${
-          mobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
+          mobileOpen ? 'translate-x-0 shadow-2xl flex' : '-translate-x-full hidden md:flex'
         }`}
       >
         {/* AMR Warehouse Background Image */}
@@ -81,7 +81,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
             className="flex items-center gap-3 font-bold text-slate-100 text-base tracking-wider flex-1 min-w-0 pr-2 group"
           >
             <div className="relative shrink-0">
-              <img src="/logo.png" alt="Smart Warehouse Logo" className="h-10 w-10 object-contain rounded-xl group-hover:scale-105 transition-transform duration-200" />
+              <img src="/logo.jpg" alt="Smart Warehouse Logo" className="h-10 w-10 object-contain rounded-xl group-hover:scale-105 transition-transform duration-200" />
               <div className="absolute -inset-0.5 rounded-xl bg-cyan-500/20 blur opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
             </div>
             <div className="flex flex-col leading-tight min-w-0">

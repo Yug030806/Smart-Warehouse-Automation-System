@@ -106,7 +106,7 @@ export default function LoginPage() {
             whileHover={{ scale: 1.08, rotate: 3 }}
             className="relative p-3 rounded-2xl bg-slate-800/80 border border-slate-700/60 shadow-lg"
           >
-            <img src="/logo.png" alt="Smart Warehouse Logo" className="h-14 w-14 object-contain" />
+            <img src="/logo.jpg" alt="Smart Warehouse Logo" className="h-14 w-14 object-contain" />
             <div className="absolute -inset-1 rounded-2xl bg-cyan-500/20 blur opacity-75 pointer-events-none animate-pulse" />
           </motion.div>
           
