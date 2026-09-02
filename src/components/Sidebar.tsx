@@ -63,32 +63,38 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
       )}
 
       <aside 
-        className={`fixed md:static inset-y-0 left-0 z-50 w-64 shrink-0 border-r border-slate-900 bg-slate-950 flex flex-col h-screen transition-transform duration-300 ease-in-out md:translate-x-0 overscroll-contain ${
+        className={`fixed md:static inset-y-0 left-0 z-50 w-64 shrink-0 border-r border-slate-800/80 bg-slate-950/80 backdrop-blur-2xl flex flex-col h-screen transition-transform duration-300 ease-in-out md:translate-x-0 overscroll-contain ${
           mobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
         }`}
       >
-        <div className="p-5 border-b border-slate-900 flex items-center justify-between">
+        <div className="p-5 border-b border-slate-800/80 flex items-center justify-between">
           <Link 
             href="/dashboard" 
             onClick={onMobileClose}
-            className="flex items-center gap-3 font-bold text-slate-100 text-base tracking-wider flex-1 min-w-0 pr-2"
+            className="flex items-center gap-3 font-bold text-slate-100 text-base tracking-wider flex-1 min-w-0 pr-2 group"
           >
-            <img src="/logo.png" alt="Smart Warehouse Logo" className="h-10 w-10 object-contain rounded-lg shrink-0" />
+            <div className="relative shrink-0">
+              <img src="/logo.png" alt="Smart Warehouse Logo" className="h-10 w-10 object-contain rounded-xl group-hover:scale-105 transition-transform duration-200" />
+              <div className="absolute -inset-0.5 rounded-xl bg-cyan-500/20 blur opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+            </div>
             <div className="flex flex-col leading-tight min-w-0">
-              <span className="text-sm font-extrabold truncate">Smart Warehouse</span>
-              <span className="text-[9px] text-slate-500 font-semibold tracking-widest uppercase truncate">Logistics Platform</span>
+              <span className="text-sm font-extrabold truncate text-slate-100 tracking-tight">Smart Warehouse</span>
+              <span className="text-[9px] text-cyan-400 font-bold tracking-widest uppercase truncate flex items-center gap-1">
+                <span className="h-1 w-1 rounded-full bg-cyan-400 animate-ping" />
+                Logistics OS
+              </span>
             </div>
           </Link>
           <button 
             onClick={onMobileClose}
-            className="md:hidden p-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-900 shrink-0"
+            className="md:hidden p-2 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 shrink-0 transition-colors"
             aria-label="Close Sidebar"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto overscroll-contain">
+        <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto overscroll-contain">
           {menuItems.map((item) => {
             if (!item.roles.includes(userRole)) return null;
             const isActive = pathname.startsWith(item.href);
@@ -97,14 +103,19 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
                 key={item.name}
                 href={item.href}
                 onClick={onMobileClose}
-                className={`flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all duration-150 ${
+                className={`relative flex items-center gap-3 px-4 py-3 text-xs font-bold rounded-xl transition-all duration-200 group ${
                   isActive 
-                    ? 'bg-blue-600 text-slate-50' 
-                    : 'text-slate-400 hover:text-slate-100 hover:bg-slate-900/60'
+                    ? 'bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.15)]' 
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 hover:translate-x-1'
                 }`}
               >
-                <item.icon className="h-4 w-4 shrink-0" />
-                <span className="truncate">{item.name}</span>
+                {/* Glowing Left Indicator */}
+                {isActive && (
+                  <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-cyan-400 shadow-[0_0_10px_#38bdf8]" />
+                )}
+                
+                <item.icon className={`h-4 w-4 shrink-0 transition-transform duration-200 group-hover:scale-110 ${isActive ? 'text-cyan-400' : 'text-slate-400 group-hover:text-slate-200'}`} />
+                <span className="truncate tracking-wide">{item.name}</span>
               </Link>
             );
           })}

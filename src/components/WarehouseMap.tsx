@@ -1,9 +1,11 @@
 'use client';
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { Location, Vehicle, RouteSegment, EdgeAIDecision, FleetMessage } from '@/lib/database.types';
 import { ObstacleCell } from '@/lib/simulator/edgeAIEngine';
-import { Bot } from 'lucide-react';
+import { Bot, Zap, ArrowUpRight, AlertTriangle } from 'lucide-react';
+import * as Tooltip from '@radix-ui/react-tooltip';
 
 interface WarehouseMapProps {
   floorId: string;
@@ -51,153 +53,167 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
 
   vehicles.forEach(veh => {
     if (veh.x_position >= 0 && veh.x_position < gridWidth && veh.y_position >= 0 && veh.y_position < gridHeight) {
-      // Vehicle takes precedence visually
       grid[veh.y_position][veh.x_position] = { type: 'vehicle', data: veh };
     }
   });
 
-  // Check if coordinate is in the active route
   const getRouteIndex = (x: number, y: number) => {
     if (!activeRoute) return -1;
     return activeRoute.findIndex(pt => pt.x === x && pt.y === y && pt.floor_id === floorId);
   };
 
   return (
-    <div className="rounded-xl border border-slate-900 bg-slate-950 p-4 sm:p-6 shadow-xl space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Warehouse Digital Twin Layout</span>
-        <div className="flex flex-wrap items-center gap-3 text-[11px] sm:text-xs">
-          <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-blue-500/20 border border-blue-500"></span><span className="text-slate-400">Rack</span></div>
-          <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-green-500/20 border border-green-500"></span><span className="text-slate-400">Pickup</span></div>
-          <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-orange-500/20 border border-orange-500"></span><span className="text-slate-400">Out</span></div>
-          <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-purple-500/20 border border-purple-500"></span><span className="text-slate-400">Elevator</span></div>
-          <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-yellow-500/20 border border-yellow-500 text-[9px] flex items-center justify-center text-yellow-400">⚡</span><span className="text-slate-400">Charging</span></div>
-          <div className="flex items-center gap-1.5"><span className="h-4 w-4 rounded-lg bg-blue-600 border border-slate-500 flex items-center justify-center"><Bot size={10} className="text-slate-100" /></span><span className="text-slate-400">AMR</span></div>
-          <div className="flex items-center gap-1.5 ml-4 pl-4 border-l border-slate-800"><span className="h-3 w-3 rounded bg-red-950 border border-red-500 text-red-500 text-[8px] flex items-center justify-center font-bold">⚠</span><span className="text-slate-400">Obstacle</span></div>
+    <Tooltip.Provider delayDuration={150}>
+      <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-xl p-4 sm:p-6 shadow-2xl space-y-4 overflow-hidden">
+        {/* Cyber Blueprint Grid Background Effect */}
+        <div className="absolute inset-0 bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:16px_16px] opacity-10 pointer-events-none" />
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative z-10">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
+            <span className="text-xs font-bold text-slate-300 uppercase tracking-widest">Warehouse Digital Twin Layout</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 text-[11px] sm:text-xs">
+            <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-blue-500/20 border border-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.3)]"></span><span className="text-slate-400 font-medium">Rack</span></div>
+            <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-emerald-500/20 border border-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]"></span><span className="text-slate-400 font-medium">Pickup</span></div>
+            <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-orange-500/20 border border-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.3)]"></span><span className="text-slate-400 font-medium">Out</span></div>
+            <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-purple-500/20 border border-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.3)]"></span><span className="text-slate-400 font-medium">Elevator</span></div>
+            <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-amber-500/20 border border-amber-500 text-[9px] flex items-center justify-center text-amber-400">⚡</span><span className="text-slate-400 font-medium">Charging</span></div>
+            <div className="flex items-center gap-1.5"><span className="h-4 w-4 rounded-lg bg-cyan-600 border border-slate-400 flex items-center justify-center shadow-[0_0_10px_rgba(6,182,212,0.4)]"><Bot size={10} className="text-slate-100" /></span><span className="text-slate-400 font-medium">AMR</span></div>
+            <div className="flex items-center gap-1.5 ml-4 pl-4 border-l border-slate-800"><span className="h-3 w-3 rounded bg-red-950 border border-red-500 text-red-500 text-[8px] flex items-center justify-center font-bold">⚠</span><span className="text-slate-400 font-medium">Obstacle</span></div>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto relative z-10">
+          <div className="grid grid-cols-12 gap-2 min-w-[640px] p-1">
+            {grid.map((row, y) =>
+              row.map((cell, x) => {
+                const routeIdx = getRouteIndex(x, y);
+                const hasRoute = routeIdx !== -1;
+                const isSelectedVehicleCoord = selectedVehicle && selectedVehicle.x_position === x && selectedVehicle.y_position === y && selectedVehicle.current_floor_id === floorId;
+
+                let cellColor = 'bg-slate-900/40 border border-slate-800/60 hover:border-cyan-500/40 hover:bg-slate-800/40';
+                let text = '';
+                let cellLabel = `Coordinate [${x}, ${y}]`;
+                
+                const isObstacle = obstacles.find(o => o.x === x && o.y === y && o.floor_id === floorId);
+                
+                let isSensorRange = false;
+                if (showSensorRange) {
+                  for (const veh of vehicles) {
+                    const dist = Math.max(Math.abs(veh.x_position - x), Math.abs(veh.y_position - y));
+                    if (dist > 0 && dist <= 2) { isSensorRange = true; break; }
+                  }
+                }
+
+                let vehicleBadge = null;
+
+                if (cell) {
+                  if (cell.type === 'location') {
+                    const loc = cell.data as Location;
+                    cellLabel = `${loc.name} (${loc.type})`;
+                    if (loc.type === 'RACK') {
+                      cellColor = 'bg-blue-950/30 border border-blue-800/60 text-blue-300 hover:bg-blue-900/40 shadow-inner';
+                      text = 'R';
+                    } else if (loc.type === 'PICKUP') {
+                      cellColor = 'bg-emerald-950/30 border border-emerald-800/60 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.1)]';
+                      text = 'IN';
+                    } else if (loc.type === 'DELIVERY') {
+                      cellColor = 'bg-orange-950/30 border border-orange-800/60 text-orange-400 shadow-[0_0_12px_rgba(249,115,22,0.1)]';
+                      text = 'OUT';
+                    } else if (loc.type === 'ELEVATOR') {
+                      cellColor = 'bg-purple-900/40 border-2 border-purple-500/80 text-purple-300 font-extrabold shadow-[0_0_15px_rgba(168,85,247,0.25)]';
+                      text = 'EL';
+                    } else if (loc.type === 'CHARGING') {
+                      cellColor = 'bg-amber-950/30 border border-amber-800/60 text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.1)]';
+                      text = '⚡';
+                    }
+                  } else if (cell.type === 'vehicle') {
+                    const veh = cell.data as Vehicle;
+                    cellLabel = `AMR Unit: ${veh.vehicle_code} | Battery: ${veh.battery_percentage}% | Status: ${veh.status}`;
+                    
+                    const recentDecision = [...edgeDecisions].reverse().find(d => d.vehicle_id === veh.id);
+                    const isStopped = recentDecision?.decision_type === 'STOP' || recentDecision?.decision_type === 'EMERGENCY_STOP';
+                    const isSlow = recentDecision?.decision_type === 'SLOW_DOWN';
+                    
+                    if (isSelectedVehicleCoord) {
+                      cellColor = isStopped 
+                        ? 'bg-red-500 border-2 border-white text-slate-950 font-bold scale-105 shadow-[0_0_20px_rgba(239,68,68,0.5)]' 
+                        : (isSlow ? 'bg-amber-500 border-2 border-white text-slate-950 font-bold scale-105 shadow-[0_0_20px_rgba(245,158,11,0.5)]' : 'bg-cyan-500 border-2 border-white text-slate-950 font-bold scale-105 shadow-[0_0_20px_rgba(6,182,212,0.5)]');
+                    } else {
+                      cellColor = isStopped 
+                        ? 'bg-red-600 border border-red-400 text-slate-100 font-semibold shadow-[0_0_10px_rgba(239,68,68,0.3)]'
+                        : (isSlow ? 'bg-amber-600 border border-amber-400 text-slate-100 font-semibold shadow-[0_0_10px_rgba(245,158,11,0.3)]' : 'bg-cyan-600 border border-cyan-400 text-slate-100 font-semibold shadow-[0_0_10px_rgba(6,182,212,0.3)]');
+                    }
+                    
+                    text = '' as any;
+                    vehicleBadge = (
+                      <>
+                        <Bot size={13} className={isStopped ? 'text-slate-900' : 'text-slate-100'} />
+                        <span className={`text-[7px] font-black leading-none ${isStopped ? 'text-slate-900' : 'text-slate-100'}`}>
+                          {veh.vehicle_code.substring(4)}
+                        </span>
+                        {recentDecision && (
+                          <div className={`absolute -top-2.5 -right-2 px-1 rounded text-[8px] font-black z-20 shadow-md ${
+                            isStopped ? 'bg-red-500 text-black animate-pulse' : (isSlow ? 'bg-amber-500 text-black' : 'bg-emerald-400 text-black')
+                          }`}>
+                            {isStopped ? 'STOP' : (isSlow ? 'SLOW' : 'OK')}
+                          </div>
+                        )}
+                      </>
+                    );
+                  }
+                }
+
+                return (
+                  <Tooltip.Root key={`${x}-${y}`}>
+                    <Tooltip.Trigger asChild>
+                      <button
+                        onClick={() => onGridClick?.(x, y)}
+                        className={`relative aspect-square flex flex-col items-center justify-center rounded-xl text-[10px] font-bold transition-all duration-200 active:scale-90 ${cellColor}`}
+                      >
+                        {/* Sensor range visualization layer */}
+                        {isSensorRange && !cell && !isObstacle && (
+                          <div className="absolute inset-0 bg-cyan-500/10 border border-cyan-500/30 rounded-xl pointer-events-none animate-pulse" />
+                        )}
+
+                        {/* Obstacle overlay */}
+                        {isObstacle && (
+                          <div className="absolute inset-0 bg-red-950/90 border border-red-500 rounded-xl flex items-center justify-center z-10 animate-pulse shadow-[0_0_12px_rgba(239,68,68,0.4)]">
+                            <span className="text-red-400 font-bold text-xs">⚠</span>
+                          </div>
+                        )}
+
+                        {vehicleBadge}
+
+                        <span className="z-10">{text || <span className="text-[8px] text-slate-600 font-medium">{x},{y}</span>}</span>
+                        
+                        {/* Route marker overlay */}
+                        {hasRoute && cell?.type !== 'vehicle' && (
+                          <span className="absolute inset-0 flex items-center justify-center bg-cyan-500/25 border-2 border-cyan-400 rounded-xl animate-pulse shadow-[0_0_15px_rgba(6,182,212,0.4)]">
+                            <span className="text-[9px] text-cyan-200 font-mono font-extrabold">{routeIdx}</span>
+                          </span>
+                        )}
+                      </button>
+                    </Tooltip.Trigger>
+                    <Tooltip.Portal>
+                      <Tooltip.Content
+                        side="top"
+                        sideOffset={5}
+                        className="z-[100] px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-100 shadow-2xl animate-in fade-in zoom-in-95 duration-150"
+                      >
+                        {cellLabel}
+                        <Tooltip.Arrow className="fill-slate-900" />
+                      </Tooltip.Content>
+                    </Tooltip.Portal>
+                  </Tooltip.Root>
+                );
+              })
+            )}
+          </div>
         </div>
       </div>
-
-      <div className="overflow-x-auto">
-        <div className="grid grid-cols-12 gap-1.5 min-w-[640px]">
-          {grid.map((row, y) =>
-            row.map((cell, x) => {
-              const routeIdx = getRouteIndex(x, y);
-              const hasRoute = routeIdx !== -1;
-              const isSelectedVehicleCoord = selectedVehicle && selectedVehicle.x_position === x && selectedVehicle.y_position === y && selectedVehicle.current_floor_id === floorId;
-
-              let cellColor = 'bg-slate-900/30 border border-slate-900 hover:border-slate-800';
-              let text = '';
-              let cellLabel = `${x},${y}`;
-              
-              // Edge-AI visualizations
-              const isObstacle = obstacles.find(o => o.x === x && o.y === y && o.floor_id === floorId);
-              
-              // Sensor range: show for ALL vehicles on this floor (2-cell radius around each)
-              let isSensorRange = false;
-              if (showSensorRange) {
-                for (const veh of vehicles) {
-                  const dist = Math.max(Math.abs(veh.x_position - x), Math.abs(veh.y_position - y));
-                  if (dist > 0 && dist <= 2) { isSensorRange = true; break; }
-                }
-              }
-
-              let vehicleBadge = null;
-
-              if (cell) {
-                if (cell.type === 'location') {
-                  const loc = cell.data as Location;
-                  cellLabel = loc.name;
-                  if (loc.type === 'RACK') {
-                    cellColor = 'bg-blue-900/10 border border-blue-900/50 hover:bg-blue-900/25';
-                    text = 'R';
-                  } else if (loc.type === 'PICKUP') {
-                    cellColor = 'bg-green-950/20 border border-green-900/60 text-green-400';
-                    text = 'IN';
-                  } else if (loc.type === 'DELIVERY') {
-                    cellColor = 'bg-orange-950/20 border border-orange-900/60 text-orange-400';
-                    text = 'OUT';
-                  } else if (loc.type === 'ELEVATOR') {
-                    cellColor = 'bg-purple-800/40 border-2 border-purple-500/70 text-purple-300 font-bold';
-                    text = 'EL';
-                  } else if (loc.type === 'CHARGING') {
-                    cellColor = 'bg-yellow-950/20 border border-yellow-900/60 text-yellow-500';
-                    text = '⚡';
-                  }
-                } else if (cell.type === 'vehicle') {
-                  const veh = cell.data as Vehicle;
-                  cellLabel = `${veh.vehicle_code} (${veh.status})`;
-                  
-                  // Need to get the NEWEST decision (from the end of the array)
-                  const recentDecision = [...edgeDecisions].reverse().find(d => d.vehicle_id === veh.id);
-                  const isStopped = recentDecision?.decision_type === 'STOP' || recentDecision?.decision_type === 'EMERGENCY_STOP';
-                  const isSlow = recentDecision?.decision_type === 'SLOW_DOWN';
-                  
-                  if (isSelectedVehicleCoord) {
-                    cellColor = isStopped 
-                      ? 'bg-red-500 border border-slate-100 text-slate-950 font-bold scale-105 shadow-lg shadow-red-500/30' 
-                      : (isSlow ? 'bg-amber-500 border border-slate-100 text-slate-950 font-bold scale-105 shadow-lg shadow-amber-500/30' : 'bg-blue-500 border border-slate-100 text-slate-950 font-bold scale-105 shadow-lg shadow-blue-500/30');
-                  } else {
-                    cellColor = isStopped 
-                      ? 'bg-red-600 border border-slate-500 text-slate-100 font-semibold'
-                      : (isSlow ? 'bg-amber-600 border border-slate-500 text-slate-100 font-semibold' : 'bg-blue-600 border border-slate-500 text-slate-100 font-semibold');
-                  }
-                  
-                  text = '' as any;
-                  vehicleBadge = (
-                    <>
-                      <Bot size={12} className={isStopped ? 'text-slate-900' : 'text-slate-100'} />
-                      <span className={`text-[7px] font-black leading-none ${isStopped ? 'text-slate-900' : 'text-slate-100'}`}>
-                        {veh.vehicle_code.substring(4)}
-                      </span>
-                      {recentDecision && (
-                        <div className={`absolute -top-3 -right-2 px-1 rounded text-[8px] font-black z-20 ${
-                          isStopped ? 'bg-red-500 text-black animate-pulse' : (isSlow ? 'bg-amber-500 text-black' : 'bg-green-500 text-black')
-                        }`}>
-                          {isStopped ? 'STOP' : (isSlow ? 'SLOW' : 'OK')}
-                        </div>
-                      )}
-                    </>
-                  );
-                }
-              }
-
-              const roundedShape = cell?.type === 'vehicle' ? 'rounded-lg' : 'rounded-lg';
-
-              return (
-                <button
-                  key={`${x}-${y}`}
-                  onClick={() => onGridClick?.(x, y)}
-                  title={cellLabel}
-                  className={`relative aspect-square flex flex-col items-center justify-center ${roundedShape} text-[10px] font-bold transition-all duration-150 active:scale-95 ${cellColor}`}
-                >
-                  {/* Sensor range visualization layer */}
-                  {isSensorRange && !cell && !isObstacle && (
-                    <div className="absolute inset-0 bg-blue-500/10 border-blue-500/20 rounded-lg pointer-events-none" />
-                  )}
-
-                  {/* Obstacle overlay */}
-                  {isObstacle && (
-                    <div className="absolute inset-0 bg-red-950/80 border border-red-500 rounded-lg flex items-center justify-center z-10 animate-pulse">
-                      <span className="text-red-500 font-bold text-xs">⚠</span>
-                    </div>
-                  )}
-
-                  {vehicleBadge}
-
-                  <span className="z-10">{text || <span className="text-[8px] text-slate-700 font-normal">{x},{y}</span>}</span>
-                  
-                  {/* Route marker overlay */}
-                  {hasRoute && cell?.type !== 'vehicle' && (
-                    <span className="absolute inset-0 flex items-center justify-center bg-blue-500/20 border-2 border-blue-500 rounded-lg animate-pulse">
-                      <span className="text-[8px] text-blue-300 font-mono font-black">{routeIdx}</span>
-                    </span>
-                  )}
-                </button>
-              );
-            })
-          )}
-        </div>
-      </div>
-    </div>
+    </Tooltip.Provider>
   );
 }
+

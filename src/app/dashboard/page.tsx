@@ -197,33 +197,28 @@ export default function Dashboard() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-3">
-                <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Logistics Master Console</h1>
-                <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-green-950/30 border border-green-900/50">
-                  <ShieldCheck className="h-3.5 w-3.5 text-green-400" />
-                  <span className="text-[10px] font-bold text-green-400 uppercase tracking-widest">Fleet Health: Optimal</span>
+                <h1 className="text-xl sm:text-2xl font-extrabold text-slate-100 tracking-tight">Logistics Master Console</h1>
+                <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
+                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+                  <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Fleet Health: Optimal</span>
                 </div>
               </div>
-              <p className="text-xs sm:text-sm text-slate-400 mt-1">Real-time status overview of vehicles, tasks, and system payloads.</p>
+              <p className="text-xs sm:text-sm text-slate-400 mt-1">Real-time telemetry overview of autonomous AMR vehicles, payloads, and warehouse grid status.</p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button 
-                onClick={() => setSelectedFloor('f-01')}
-                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-semibold border transition duration-150 ${selectedFloor === 'f-01' ? 'bg-blue-600 border-blue-500 text-slate-100' : 'bg-slate-950 border-slate-900 text-slate-400 hover:text-slate-200'}`}
-              >
-                Floor 1
-              </button>
-              <button 
-                onClick={() => setSelectedFloor('f-02')}
-                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-semibold border transition duration-150 ${selectedFloor === 'f-02' ? 'bg-blue-600 border-blue-500 text-slate-100' : 'bg-slate-950 border-slate-900 text-slate-400 hover:text-slate-200'}`}
-              >
-                Floor 2
-              </button>
-              <button 
-                onClick={() => setSelectedFloor('f-03')}
-                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-semibold border transition duration-150 ${selectedFloor === 'f-03' ? 'bg-blue-600 border-blue-500 text-slate-100' : 'bg-slate-950 border-slate-900 text-slate-400 hover:text-slate-200'}`}
-              >
-                Floor 3
-              </button>
+            <div className="flex flex-wrap gap-2 p-1 rounded-2xl bg-slate-900/80 border border-slate-800/80 backdrop-blur-xl">
+              {['f-01', 'f-02', 'f-03'].map((fId, idx) => (
+                <button
+                  key={fId}
+                  onClick={() => setSelectedFloor(fId)}
+                  className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all duration-200 ${
+                    selectedFloor === fId
+                      ? 'bg-cyan-500 text-slate-950 shadow-[0_0_15px_rgba(6,182,212,0.4)] scale-105'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  }`}
+                >
+                  Floor {idx + 1}
+                </button>
+              ))}
             </div>
           </div>
 

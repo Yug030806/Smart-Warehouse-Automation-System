@@ -57,20 +57,26 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
   };
 
   return (
-    <header className="h-16 border-b border-slate-900 bg-slate-950 flex items-center justify-between px-4 md:px-8 relative z-30">
+    <header className="h-16 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl flex items-center justify-between px-4 md:px-8 relative z-30">
       <div className="flex items-center gap-3 flex-1 min-w-0 pr-4">
         {onMenuClick && (
           <button
             onClick={onMenuClick}
-            className="p-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800 md:hidden"
+            className="p-2 rounded-xl border border-slate-800 bg-slate-900/60 text-slate-300 hover:bg-slate-800/80 md:hidden transition-colors"
             aria-label="Toggle navigation menu"
           >
             <Menu className="h-5 w-5" />
           </button>
         )}
-        <h2 className="text-xs md:text-sm font-semibold tracking-wider uppercase text-slate-400 truncate">
-          Warehouse Logistics
-        </h2>
+        <div className="flex items-center gap-3">
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-[10px] font-mono font-bold text-cyan-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-ping" />
+            TELEMETRY: ONLINE
+          </div>
+          <h2 className="text-xs md:text-sm font-bold tracking-wider uppercase text-slate-300 truncate">
+            Warehouse Command Center
+          </h2>
+        </div>
       </div>
 
       <div className="flex items-center gap-2 md:gap-3 relative shrink-0">
