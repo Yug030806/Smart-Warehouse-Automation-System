@@ -44,12 +44,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    const sessionStr = sessionStorage.getItem('sih_session');
+    const sessionStr = localStorage.getItem('sih_session') || sessionStorage.getItem('sih_session');
     if (sessionStr) {
       try {
         const sessionObj = JSON.parse(sessionStr);
         setUser(sessionObj);
       } catch (e) {
+        localStorage.removeItem('sih_session');
         sessionStorage.removeItem('sih_session');
       }
     }
@@ -120,6 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
       role: effectiveRole
     };
+    localStorage.setItem('sih_session', JSON.stringify(sessionObj));
     sessionStorage.setItem('sih_session', JSON.stringify(sessionObj));
     setUser(sessionObj);
     router.push('/dashboard');
@@ -195,6 +197,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
+    localStorage.removeItem('sih_session');
     sessionStorage.removeItem('sih_session');
     setUser(null);
     router.push('/login');

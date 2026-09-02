@@ -67,8 +67,6 @@ export default function TasksPage() {
         b = b.filter((bx: any) => allowedL.includes(bx.current_location_id));
         t = t.filter((tsk: any) => allowedL.includes(tsk.source_location_id));
         l = l.filter((loc: any) => allowedL.includes(loc.id));
-    } else if (isRestricted) {
-        t = []; v = []; b = []; l = [];
     }
 
     setTasks(t as Task[]);

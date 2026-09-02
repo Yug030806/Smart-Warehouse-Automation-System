@@ -91,11 +91,6 @@ export default function Dashboard() {
         vehicles = vehicles.filter((v: any) => allowedF.includes(v.current_floor_id));
         boxes = boxes.filter((b: any) => allowedL.includes(b.current_location_id));
         tasks = tasks.filter((t: any) => allowedL.includes(t.source_location_id));
-      } else if (isRestricted) {
-        vehicles = [];
-        boxes = [];
-        tasks = [];
-        alerts = [];
       }
 
       const totalBoxes = boxes.length;

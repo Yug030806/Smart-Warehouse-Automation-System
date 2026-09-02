@@ -55,11 +55,6 @@ export default function VehiclesPage() {
       fls = fls.filter((f: any) => allowedF.includes(f.id));
       locs = locs.filter((l: any) => allowedL.includes(l.id));
       tsk = tsk.filter((t: any) => allowedL.includes(t.source_location_id));
-    } else if (isRestricted) {
-      list = [];
-      fls = [];
-      locs = [];
-      tsk = [];
     }
 
     setVehicles(list as Vehicle[]);

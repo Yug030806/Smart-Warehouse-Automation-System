@@ -67,8 +67,6 @@ export default function WarehousesPage() {
 
     if (isRestricted && assignedWarehouses.length > 0) {
       w = w.filter((warehouse: any) => assignedWarehouses.includes(warehouse.id));
-    } else if (isRestricted) {
-      w = [];
     }
 
     setWarehouses(w as Warehouse[]);
@@ -116,18 +114,46 @@ export default function WarehousesPage() {
 
   const handleAddWarehouseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!wName) return;
+    if (!wName.trim()) return;
     const newId = typeof window !== 'undefined' && window.crypto?.randomUUID ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${Date.now().toString().padStart(12, '0')}`;
     const newW = {
       id: newId,
-      name: wName,
-      address: wAddress,
+      name: wName.trim(),
+      address: wAddress.trim(),
       created_at: new Date().toISOString()
     };
     await supabase.from('warehouses').insert(newW);
+
+    // If user is logged in, ensure the new warehouse is added to their profile's assigned warehouses
+    if (user?.id) {
+      const pRes = await supabase.from('profiles').select();
+      const pList = pRes.data || [];
+      const currentUserProfile = pList.find((p: any) => p.id === user.id);
+      if (currentUserProfile) {
+        const assigned = currentUserProfile.assigned_warehouse_ids || [];
+        if (!assigned.includes(newId)) {
+          await supabase.from('profiles').update({
+            assigned_warehouse_ids: [...assigned, newId]
+          }).eq('id', user.id);
+        }
+      }
+    }
+
+    // Auto-create initial default level/floor
+    const newFloorId = typeof window !== 'undefined' && window.crypto?.randomUUID ? window.crypto.randomUUID() : `f-${Date.now()}`;
+    await supabase.from('floors').insert({
+      id: newFloorId,
+      warehouse_id: newId,
+      floor_number: 1,
+      name: 'Floor 1 - Storage & Docking',
+      grid_width: 12,
+      grid_height: 8
+    });
+
     setWName('');
     setWAddress('');
     setShowAddWarehouse(false);
+    setSelectedWarehouse(newW as Warehouse);
     await loadData();
   };
 

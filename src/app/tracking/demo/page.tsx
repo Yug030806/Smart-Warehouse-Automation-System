@@ -53,26 +53,29 @@ export default function DemoPage() {
     { label: 'Step 9: Complete Dispatch Order', desc: 'Finalise task completed status and release vehicle.' }
   ];
 
-  const initDemo = () => {
-    // Reset db state to ensure BX-1001 is pending WAITING
-    mockDb.resetToSeeds();
+  const loadDemoData = () => {
     const locs = supabase.from('locations').select().data || [];
     setLocations(locs as Location[]);
 
-    const b = mockDb.getBoxes().find(x => x.box_code === 'BX-1001');
-    setBox(b || null);
+    const b = mockDb.getBoxes().find(x => x.box_code === 'BX-1001') || mockDb.getBoxes()[0] || null;
+    setBox(b);
     
-    const t = mockDb.getTasks().find(x => x.task_code === 'TSK-1001');
-    setTask(t || null);
+    const t = mockDb.getTasks().find(x => x.task_code === 'TSK-1001') || mockDb.getTasks()[0] || null;
+    setTask(t);
 
     setRecentLogs(mockDb.getAuditLogs().slice(0, 5) as AuditLog[]);
 
     setCurrentStep(0);
-    setStepStatus('SIH Demo setup completed. Click Step 1 to begin sequence.');
+    setStepStatus('SIH Demo setup ready. Click Step 1 to begin sequence.');
+  };
+
+  const handleResetDemoSeeds = () => {
+    mockDb.resetToSeeds();
+    loadDemoData();
   };
 
   useEffect(() => {
-    initDemo();
+    loadDemoData();
   }, []);
 
   const triggerNextStep = async () => {
@@ -256,7 +259,7 @@ export default function DemoPage() {
               <p className="text-sm text-slate-400">Step-by-step interactive test verification of autonomous transport logistics workflow.</p>
             </div>
             <button
-              onClick={initDemo}
+              onClick={handleResetDemoSeeds}
               className="px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-semibold text-slate-300 hover:text-slate-100 transition"
             >
               Reset Demo Seeds

@@ -48,10 +48,6 @@ export default function AnalyticsPage() {
       list = list.filter((t: any) => allowedL.includes(t.source_location_id));
       vList = vList.filter((v: any) => allowedF.includes(v.current_floor_id));
       bList = bList.filter((b: any) => allowedL.includes(b.current_location_id));
-    } else if (isRestricted) {
-      list = [];
-      vList = [];
-      bList = [];
     }
 
     setTasks(list as Task[]);

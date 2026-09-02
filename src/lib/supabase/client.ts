@@ -161,6 +161,14 @@ export const getSupabaseClient = (): any => {
               
               if (table === 'profiles') {
                 mockDb.getProfiles().forEach(u => { if ((u as any)[col] === val) mockDb.saveProfile({ ...u, ...payload }); });
+              } else if (table === 'warehouses') {
+                mockDb.getWarehouses().forEach(w => { if ((w as any)[col] === val) mockDb.saveWarehouse({ ...w, ...payload }); });
+              } else if (table === 'floors') {
+                mockDb.getFloors().forEach(f => { if ((f as any)[col] === val) mockDb.saveFloor({ ...f, ...payload }); });
+              } else if (table === 'zones') {
+                mockDb.getZones().forEach(z => { if ((z as any)[col] === val) mockDb.saveZone({ ...z, ...payload }); });
+              } else if (table === 'locations') {
+                mockDb.getLocations().forEach(l => { if ((l as any)[col] === val) mockDb.saveLocation({ ...l, ...payload }); });
               } else if (table === 'vehicles') {
                 mockDb.getVehicles().forEach(v => { if ((v as any)[col] === val) mockDb.saveVehicle({ ...v, ...payload }); });
               } else if (table === 'boxes') {

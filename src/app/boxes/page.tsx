@@ -55,9 +55,6 @@ export default function BoxesPage() {
       
       list = list.filter((b: any) => allowedL.includes(b.current_location_id));
       locs = locs.filter((l: any) => allowedL.includes(l.id));
-    } else if (isRestricted) {
-      list = [];
-      locs = [];
     }
 
     setBoxes(list as Box[]);
