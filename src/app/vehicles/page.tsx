@@ -18,14 +18,8 @@ export default function VehiclesPage() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
 
-  // Add vehicle Form state
+  // Add vehicle modal visibility
   const [showAddModal, setShowAddModal] = useState(false);
-  const [vCode, setVCode] = useState('');
-  const [vName, setVName] = useState('');
-  const [floorId, setFloorId] = useState('');
-  const [startLocId, setStartLocId] = useState('');
-  const [modalError, setModalError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Edit Vehicle state
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
@@ -61,80 +55,24 @@ export default function VehiclesPage() {
     }
 
     setVehicles(list as Vehicle[]);
-
     setFloors(fls as Floor[]);
-    if (fls.length > 0 && !floorId) {
-      setFloorId(fls[0].id);
-      const flLocs = (locs as Location[]).filter(l => l.floor_id === fls[0].id);
-      if (flLocs.length > 0 && !startLocId) setStartLocId(flLocs[0].id);
-    }
-
     setLocations(locs as Location[]);
-    if (locs.length > 0 && !startLocId) setStartLocId(locs[0].id);
-
     setTasks(tsk as Task[]);
   };
 
   useEffect(() => {
     loadVehicles();
-    const interval = setInterval(loadVehicles, 2000);
-    return () => clearInterval(interval);
   }, []);
 
-  const handleAddVehicle = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!vCode.trim() || !vName.trim()) return;
-
-    setModalError(null);
-    setIsSubmitting(true);
-
-    try {
-      // Find start location coordinates
-      const selectedLoc = locations.find(l => l.id === startLocId);
-      const x = selectedLoc ? selectedLoc.x : 5;
-      const y = selectedLoc ? selectedLoc.y : 1;
-
-      const targetFloorId = floorId || (floors.length > 0 ? floors[0].id : null);
-      if (!targetFloorId) {
-        setModalError('No floor level found to commission this AMR.');
-        setIsSubmitting(false);
-        return;
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Pause background polling while any modal is open
+      if (!showAddModal && !editingVehicle) {
+        loadVehicles();
       }
-
-      const newId = generateUUID();
-      const newVehicle = {
-        id: newId,
-        vehicle_code: vCode.trim(),
-        name: vName.trim(),
-        status: 'AVAILABLE',
-        battery_percentage: 100,
-        current_location_id: startLocId ? startLocId : null,
-        current_floor_id: targetFloorId,
-        x_position: x,
-        y_position: y,
-        speed: 1,
-        current_task_id: null,
-        created_at: new Date().toISOString()
-      };
-
-      const { error } = await supabase.from('vehicles').insert(newVehicle);
-      if (error) {
-        setModalError(error.message);
-        setIsSubmitting(false);
-        return;
-      }
-
-      setShowAddModal(false);
-      setVCode('');
-      setVName('');
-      setModalError(null);
-      setIsSubmitting(false);
-      await loadVehicles();
-    } catch (err: any) {
-      setModalError(err?.message || 'Failed to commission AMR.');
-      setIsSubmitting(false);
-    }
-  };
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [showAddModal, editingVehicle]);
 
   const handleDeleteVehicle = async (id: string) => {
     await supabase.from('vehicles').delete().eq('id', id);
@@ -210,10 +148,7 @@ export default function VehiclesPage() {
             </div>
             {['ADMIN', 'MANAGER'].includes(userRole) && (
               <button
-                onClick={() => {
-                  setVCode(`AMR-${Math.floor(Math.random() * 900 + 100)}`);
-                  setShowAddModal(true);
-                }}
+                onClick={() => setShowAddModal(true)}
                 className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-semibold text-slate-50 transition duration-150 shrink-0"
               >
                 <Plus className="h-4 w-4" /> Commission AMR
@@ -398,97 +333,185 @@ export default function VehiclesPage() {
 
       {/* Commission Vehicle Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget) { const cancelBtn = Array.from((e.target as HTMLElement).querySelectorAll('button')).find(b => b.textContent?.match(/cancel|close/i) || b.querySelector('svg.lucide-x')); if (cancelBtn) (cancelBtn as HTMLButtonElement).click(); } }}>
-          <form onSubmit={handleAddVehicle} className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-bold text-slate-100">Commission Autonomous Vehicle (AMR)</h3>
-
-            {modalError && (
-              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold">
-                {modalError}
-              </div>
-            )}
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Vehicle Identifier Code</label>
-                <input
-                  type="text"
-                  required
-                  value={vCode}
-                  onChange={e => setVCode(e.target.value)}
-                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs font-mono text-slate-100"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Callsign / Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Pallet Runner Sigma"
-                  value={vName}
-                  onChange={e => setVName(e.target.value)}
-                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-100"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Starting Level</label>
-                  <select
-                    value={floorId}
-                    onChange={e => {
-                      const newFid = e.target.value;
-                      setFloorId(newFid);
-                      const flLocs = locations.filter(l => l.floor_id === newFid);
-                      setStartLocId(flLocs.length > 0 ? flLocs[0].id : '');
-                    }}
-                    className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-200 outline-none"
-                  >
-                    {floors.map(f => (
-                      <option key={f.id} value={f.id}>{f.name || `Floor ${f.floor_number}`}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Initial Dock Node</label>
-                  <select
-                    value={startLocId}
-                    onChange={e => setStartLocId(e.target.value)}
-                    className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-200 outline-none"
-                  >
-                    <option value="">(Origin Node [5, 1])</option>
-                    {locations.filter(l => l.floor_id === floorId).map(l => (
-                      <option key={l.id} value={l.id}>{l.name} [{l.x},{l.y}]</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-              <button 
-                type="button" 
-                onClick={() => {
-                  setShowAddModal(false);
-                  setModalError(null);
-                }} 
-                className="px-4 py-2 text-xs font-semibold text-slate-400"
-              >
-                Cancel
-              </button>
-              <button 
-                type="submit" 
-                disabled={isSubmitting}
-                className="px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg transition"
-              >
-                {isSubmitting ? 'Commissioning...' : 'Commission & Spawn'}
-              </button>
-            </div>
-          </form>
-        </div>
+        <CommissionAmrModal
+          onClose={() => setShowAddModal(false)}
+          floors={floors}
+          locations={locations}
+          onSuccess={loadVehicles}
+        />
       )}
+    </div>
+  );
+}
+
+interface CommissionModalProps {
+  onClose: () => void;
+  floors: Floor[];
+  locations: Location[];
+  onSuccess: () => Promise<void>;
+}
+
+function CommissionAmrModal({ onClose, floors, locations, onSuccess }: CommissionModalProps) {
+  const initialFloor = floors.length > 0 ? floors[0].id : '';
+  const initialLocs = locations.filter(l => l.floor_id === initialFloor);
+
+  const [vCode, setVCode] = useState(() => `AMR-${Math.floor(Math.random() * 900 + 100)}`);
+  const [vName, setVName] = useState('');
+  const [floorId, setFloorId] = useState(() => initialFloor);
+  const [startLocId, setStartLocId] = useState(() => initialLocs.length > 0 ? initialLocs[0].id : '');
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // If floors were not yet loaded when modal mounted, initialize floorId once floors arrive
+  useEffect(() => {
+    if (!floorId && floors.length > 0) {
+      setFloorId(floors[0].id);
+      const flLocs = locations.filter(l => l.floor_id === floors[0].id);
+      setStartLocId(flLocs.length > 0 ? flLocs[0].id : '');
+    }
+  }, [floors, floorId, locations]);
+
+  const handleFloorChange = (newFid: string) => {
+    setFloorId(newFid);
+    const flLocs = locations.filter(l => l.floor_id === newFid);
+    setStartLocId(flLocs.length > 0 ? flLocs[0].id : '');
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!vCode.trim() || !vName.trim()) return;
+
+    setModalError(null);
+    setIsSubmitting(true);
+
+    try {
+      const selectedLoc = locations.find(l => l.id === startLocId);
+      const x = selectedLoc ? selectedLoc.x : 5;
+      const y = selectedLoc ? selectedLoc.y : 1;
+
+      const targetFloorId = floorId || (floors.length > 0 ? floors[0].id : null);
+      if (!targetFloorId) {
+        setModalError('No floor level found to commission this AMR.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const newId = generateUUID();
+      const newVehicle = {
+        id: newId,
+        vehicle_code: vCode.trim(),
+        name: vName.trim(),
+        status: 'AVAILABLE',
+        battery_percentage: 100,
+        current_location_id: startLocId ? startLocId : null,
+        current_floor_id: targetFloorId,
+        x_position: x,
+        y_position: y,
+        speed: 1,
+        current_task_id: null,
+        created_at: new Date().toISOString()
+      };
+
+      const { error } = await supabase.from('vehicles').insert(newVehicle);
+      if (error) {
+        setModalError(error.message);
+        setIsSubmitting(false);
+        return;
+      }
+
+      await onSuccess();
+      onClose();
+    } catch (err: any) {
+      setModalError(err?.message || 'Failed to commission AMR.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const currentFloorLocations = locations.filter(l => l.floor_id === floorId);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4 backdrop-blur-sm">
+      <form onSubmit={handleSubmit} className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
+        <h3 className="text-lg font-bold text-slate-100">Commission Autonomous Vehicle (AMR)</h3>
+
+        {modalError && (
+          <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold">
+            {modalError}
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Vehicle Identifier Code</label>
+            <input
+              type="text"
+              required
+              value={vCode}
+              onChange={e => setVCode(e.target.value)}
+              className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs font-mono text-slate-100"
+            />
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Callsign / Name</label>
+            <input
+              type="text"
+              required
+              placeholder="e.g. Pallet Runner Sigma"
+              value={vName}
+              onChange={e => setVName(e.target.value)}
+              className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-100"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Starting Level</label>
+              <select
+                value={floorId}
+                onChange={e => handleFloorChange(e.target.value)}
+                className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-200 outline-none"
+              >
+                {floors.map(f => (
+                  <option key={f.id} value={f.id}>{f.name || `Floor ${f.floor_number}`}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Initial Dock Node</label>
+              <select
+                value={startLocId}
+                onChange={e => setStartLocId(e.target.value)}
+                className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-200 outline-none"
+              >
+                <option value="">(Origin Node [5, 1])</option>
+                {currentFloorLocations.map(l => (
+                  <option key={l.id} value={l.id}>{l.name} [{l.x},{l.y}]</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+          <button 
+            type="button" 
+            onClick={onClose} 
+            className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-slate-200 transition"
+          >
+            Cancel
+          </button>
+          <button 
+            type="submit" 
+            disabled={isSubmitting}
+            className="px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg transition shadow-md"
+          >
+            {isSubmitting ? 'Commissioning...' : 'Commission & Spawn'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
