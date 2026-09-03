@@ -11,9 +11,13 @@ export default function AuditLogPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const loadLogs = () => {
-    const list = supabase.from('audit_logs').select().data || [];
-    setLogs(list as AuditLog[]);
+  const loadLogs = async () => {
+    try {
+      const res = await supabase.from('audit_logs').select();
+      setLogs((res.data || []) as AuditLog[]);
+    } catch (err) {
+      console.error('Failed to load audit logs:', err);
+    }
   };
 
   useEffect(() => {

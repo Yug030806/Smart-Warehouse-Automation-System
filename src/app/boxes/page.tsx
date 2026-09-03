@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/supabase/AuthProvider';
 import { usePreventScroll } from '@/lib/usePreventScroll';
 import { Plus, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, FileDown, Edit3, Trash2, Link2 } from 'lucide-react';
 import { Box, Location } from '@/lib/database.types';
+import { generateUUID } from '@/lib/uuid';
 import Link from 'next/link';
 
 export default function BoxesPage() {
@@ -75,7 +76,7 @@ export default function BoxesPage() {
     e.preventDefault();
     if (!boxCode || !prodName) return;
 
-    const newId = typeof window !== 'undefined' && window.crypto?.randomUUID ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${Date.now().toString().padStart(12, '0')}`;
+    const newId = generateUUID();
     const newBox: Box = {
       id: newId,
       box_code: boxCode,
@@ -99,7 +100,7 @@ export default function BoxesPage() {
     const estDuration = 120;
     
     const newTask = {
-      id: typeof window !== 'undefined' && window.crypto?.randomUUID ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${(Date.now() + 1).toString().padStart(12, '0')}`,
+      id: generateUUID(),
       task_code: `TSK-${Date.now().toString().substring(7)}`,
       box_id: newBox.id,
       vehicle_id: null,

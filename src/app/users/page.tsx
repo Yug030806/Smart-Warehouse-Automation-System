@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/supabase/AuthProvider';
 import { usePreventScroll } from '@/lib/usePreventScroll';
 import { Plus, Search, Shield, UserCheck, Trash2, ShieldAlert } from 'lucide-react';
 import { Profile, Warehouse } from '@/lib/database.types';
+import { generateUUID } from '@/lib/uuid';
 
 export default function UsersPage() {
   const { user } = useAuth();
@@ -78,7 +79,7 @@ export default function UsersPage() {
     e.preventDefault();
     if (!email || !name) return;
 
-    const newId = typeof window !== 'undefined' && window.crypto?.randomUUID ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${Date.now().toString().padStart(12, '0')}`;
+    const newId = generateUUID();
     const newProfile: Profile = {
       id: newId,
       full_name: name,

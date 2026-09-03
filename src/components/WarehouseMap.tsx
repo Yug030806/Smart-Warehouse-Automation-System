@@ -23,17 +23,44 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
 
   useEffect(() => {
-    const loadMapElements = () => {
-      const locs = supabase.from('locations').select().eq('floor_id', floorId).data || [];
-      setLocations(locs as Location[]);
+    let isMounted = true;
 
-      const vehs = (supabase.from('vehicles').select().data || []) as Vehicle[];
-      setVehicles(vehs.filter(v => v.current_floor_id === floorId));
+    const loadMapElements = async () => {
+      try {
+        let activeFloorId = floorId;
+
+        // If floorId is not provided or set to mock fallback, find the first real floor
+        if (!activeFloorId || activeFloorId === 'f-01') {
+          const fRes = await supabase.from('floors').select();
+          const fls = fRes.data || [];
+          if (fls.length > 0) {
+            activeFloorId = fls[0].id;
+          }
+        }
+
+        if (!activeFloorId) return;
+
+        const locRes = await supabase.from('locations').select().eq('floor_id', activeFloorId);
+        if (isMounted && locRes.data) {
+          setLocations(locRes.data as Location[]);
+        }
+
+        const vehRes = await supabase.from('vehicles').select();
+        if (isMounted && vehRes.data) {
+          const vehs = (vehRes.data || []) as Vehicle[];
+          setVehicles(vehs.filter((v: any) => v.current_floor_id === activeFloorId));
+        }
+      } catch (err) {
+        console.error('Failed to load map coordinates and vehicles:', err);
+      }
     };
 
     loadMapElements();
     const interval = setInterval(loadMapElements, 1000);
-    return () => clearInterval(interval);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, [floorId]);
 
   const gridWidth = 12;
@@ -53,7 +80,9 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
 
   vehicles.forEach(veh => {
     if (veh.x_position >= 0 && veh.x_position < gridWidth && veh.y_position >= 0 && veh.y_position < gridHeight) {
-      grid[veh.y_position][veh.x_position] = { type: 'vehicle', data: veh };
+      const existing = grid[veh.y_position][veh.x_position];
+      const existingLoc = existing?.type === 'location' ? (existing.data as Location) : undefined;
+      grid[veh.y_position][veh.x_position] = { type: 'vehicle', data: veh, location: existingLoc };
     }
   });
 
@@ -130,7 +159,10 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
                     }
                   } else if (cell.type === 'vehicle') {
                     const veh = cell.data as Vehicle;
-                    cellLabel = `AMR Unit: ${veh.vehicle_code} | Battery: ${veh.battery_percentage}% | Status: ${veh.status}`;
+                    const underLoc = cell.location as Location | undefined;
+                    cellLabel = underLoc
+                      ? `AMR: ${veh.vehicle_code} at ${underLoc.name} (${underLoc.type}) | Battery: ${veh.battery_percentage}% | Status: ${veh.status}`
+                      : `AMR: ${veh.vehicle_code} | Battery: ${veh.battery_percentage}% | Status: ${veh.status}`;
                     
                     const recentDecision = [...edgeDecisions].reverse().find(d => d.vehicle_id === veh.id);
                     const isStopped = recentDecision?.decision_type === 'STOP' || recentDecision?.decision_type === 'EMERGENCY_STOP';
@@ -153,6 +185,11 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
                         <span className={`text-[7px] font-black leading-none ${isStopped ? 'text-slate-900' : 'text-slate-100'}`}>
                           {veh.vehicle_code.substring(4)}
                         </span>
+                        {underLoc && (
+                          <span className="text-[6px] px-0.5 mt-0.5 rounded bg-slate-950/80 font-mono text-cyan-300">
+                            {underLoc.type === 'PICKUP' ? 'IN' : (underLoc.type === 'DELIVERY' ? 'OUT' : (underLoc.type === 'RACK' ? 'RK' : '⚡'))}
+                          </span>
+                        )}
                         {recentDecision && (
                           <div className={`absolute -top-2.5 -right-2 px-1 rounded text-[8px] font-black z-20 shadow-md ${
                             isStopped ? 'bg-red-500 text-black animate-pulse' : (isSlow ? 'bg-amber-500 text-black' : 'bg-emerald-400 text-black')

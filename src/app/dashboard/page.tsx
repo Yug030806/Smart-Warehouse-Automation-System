@@ -22,7 +22,7 @@ import {
   Brain,
   ShieldCheck
 } from 'lucide-react';
-import { Box, Vehicle, Task, Alert, Profile } from '@/lib/database.types';
+import { Box, Vehicle, Task, Alert, Profile, Floor } from '@/lib/database.types';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -30,6 +30,8 @@ export default function Dashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showPendingPopup, setShowPendingPopup] = useState(false);
   const [pendingUsers, setPendingUsers] = useState<Profile[]>([]);
+  const [floors, setFloors] = useState<Floor[]>([]);
+  const [selectedFloor, setSelectedFloor] = useState('');
   const [stats, setStats] = useState({
     totalBoxes: 0,
     pendingTasks: 0,
@@ -46,7 +48,6 @@ export default function Dashboard() {
   const [activeTasksList, setActiveTasksList] = useState<Task[]>([]);
   const [vehiclesList, setVehiclesList] = useState<Vehicle[]>([]);
   const [alertsList, setAlertsList] = useState<Alert[]>([]);
-  const [selectedFloor, setSelectedFloor] = useState('f-01');
 
   // Check for pending approval requests when admin logs in (query live DB & poll)
   useEffect(() => {
@@ -71,61 +72,93 @@ export default function Dashboard() {
   }, [user]);
 
   useEffect(() => {
-    const fetchDashboardData = () => {
-      let boxes = (supabase.from('boxes').select().data || []) as Box[];
-      let vehicles = (supabase.from('vehicles').select().data || []) as Vehicle[];
-      let tasks = (supabase.from('tasks').select().data || []) as Task[];
-      let alerts = (supabase.from('alerts').select().eq('is_acknowledged', false).data || []) as Alert[];
+    let isMounted = true;
 
-      const pList = supabase.from('profiles').select().data || [];
-      const currentUserProfile = pList.find((p: any) => p.id === user?.id);
-      const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
-      const isRestricted = ['MANAGER'].includes(user?.user_metadata?.role as string);
+    const fetchDashboardData = async () => {
+      try {
+        const [bRes, vRes, tRes, aRes, pRes, fRes, lRes] = await Promise.all([
+          supabase.from('boxes').select(),
+          supabase.from('vehicles').select(),
+          supabase.from('tasks').select(),
+          supabase.from('alerts').select().eq('is_acknowledged', false),
+          supabase.from('profiles').select(),
+          supabase.from('floors').select(),
+          supabase.from('locations').select()
+        ]);
 
-      if (isRestricted && assignedWarehouses.length > 0) {
-        const fls = (supabase.from('floors').select().data || []) as any[];
-        const locs = (supabase.from('locations').select().data || []) as any[];
-        const allowedF = fls.filter((f: any) => assignedWarehouses.includes(f.warehouse_id)).map((f: any) => f.id);
-        const allowedL = locs.filter((l: any) => allowedF.includes(l.floor_id)).map((l: any) => l.id);
+        let boxes = (bRes.data || []) as Box[];
+        let vehicles = (vRes.data || []) as Vehicle[];
+        let tasks = (tRes.data || []) as Task[];
+        let alerts = (aRes.data || []) as Alert[];
+        const pList = pRes.data || [];
+        const fls = (fRes.data || []) as Floor[];
+        const locs = (lRes.data || []) as any[];
 
-        vehicles = vehicles.filter((v: any) => allowedF.includes(v.current_floor_id));
-        boxes = boxes.filter((b: any) => allowedL.includes(b.current_location_id));
-        tasks = tasks.filter((t: any) => allowedL.includes(t.source_location_id));
+        if (isMounted && fls.length > 0) {
+          setFloors(fls);
+          setSelectedFloor(prev => {
+            if (prev && fls.some(f => f.id === prev)) return prev;
+            return fls[0].id;
+          });
+        }
+
+        const currentUserProfile = pList.find(
+          (p: any) => p.id === user?.id || (user?.email && p.email?.toLowerCase() === user?.email?.toLowerCase())
+        );
+        const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
+        const userRole = user?.user_metadata?.role || (user as any)?.role || 'OPERATOR';
+        const isRestricted = ['MANAGER'].includes(userRole);
+
+        if (isRestricted && assignedWarehouses.length > 0) {
+          const allowedF = fls.filter((f: any) => assignedWarehouses.includes(f.warehouse_id)).map((f: any) => f.id);
+          const allowedL = locs.filter((l: any) => allowedF.includes(l.floor_id)).map((l: any) => l.id);
+
+          vehicles = vehicles.filter((v: any) => allowedF.includes(v.current_floor_id));
+          boxes = boxes.filter((b: any) => allowedL.includes(b.current_location_id));
+          tasks = tasks.filter((t: any) => allowedL.includes(t.source_location_id));
+        }
+
+        const totalBoxes = boxes.length;
+        const pendingTasks = tasks.filter(t => t.status === 'PENDING').length;
+        const activeTasks = tasks.filter(t => ['ASSIGNED', 'IN_PROGRESS', 'PICKUP_PENDING', 'PICKED_UP', 'DELIVERING'].includes(t.status)).length;
+        const completedDeliveries = tasks.filter(t => t.status === 'COMPLETED').length;
+        const availableVehicles = vehicles.filter(v => v.status === 'AVAILABLE').length;
+        const busyVehicles = vehicles.filter(v => v.status === 'BUSY').length;
+        const urgentTasks = tasks.filter(t => t.priority === 'URGENT' && t.status !== 'COMPLETED').length;
+        const activeAlerts = alerts.length;
+        const edgeAiActive = vehicles.filter(v => v.sensor_suite_active).length;
+        const obstaclesToday = vehicles.reduce((sum, v) => sum + (v.obstacle_count || 0), 0);
+
+        if (isMounted) {
+          setStats({
+            totalBoxes,
+            pendingTasks,
+            activeTasks,
+            completedDeliveries,
+            availableVehicles,
+            busyVehicles,
+            urgentTasks,
+            activeAlerts,
+            edgeAiActive,
+            obstaclesToday
+          });
+
+          setActiveTasksList(tasks.filter(t => t.status !== 'COMPLETED' && t.status !== 'CANCELLED').slice(0, 5) as Task[]);
+          setVehiclesList(vehicles as Vehicle[]);
+          setAlertsList(alerts.slice(0, 5) as Alert[]);
+        }
+      } catch (err) {
+        console.error('Error fetching dashboard live data:', err);
       }
-
-      const totalBoxes = boxes.length;
-      const pendingTasks = tasks.filter(t => t.status === 'PENDING').length;
-      const activeTasks = tasks.filter(t => ['ASSIGNED', 'IN_PROGRESS', 'PICKUP_PENDING', 'PICKED_UP', 'DELIVERING'].includes(t.status)).length;
-      const completedDeliveries = tasks.filter(t => t.status === 'COMPLETED').length;
-      const availableVehicles = vehicles.filter(v => v.status === 'AVAILABLE').length;
-      const busyVehicles = vehicles.filter(v => v.status === 'BUSY').length;
-      const urgentTasks = tasks.filter(t => t.priority === 'URGENT' && t.status !== 'COMPLETED').length;
-      const activeAlerts = alerts.length;
-      const edgeAiActive = vehicles.filter(v => v.sensor_suite_active).length;
-      const obstaclesToday = vehicles.reduce((sum, v) => sum + (v.obstacle_count || 0), 0);
-
-      setStats({
-        totalBoxes,
-        pendingTasks,
-        activeTasks,
-        completedDeliveries,
-        availableVehicles,
-        busyVehicles,
-        urgentTasks,
-        activeAlerts,
-        edgeAiActive,
-        obstaclesToday
-      });
-
-      setActiveTasksList(tasks.filter(t => t.status !== 'COMPLETED' && t.status !== 'CANCELLED').slice(0, 5) as Task[]);
-      setVehiclesList(vehicles as Vehicle[]);
-      setAlertsList(alerts.slice(0, 5) as Alert[]);
     };
 
     fetchDashboardData();
     const interval = setInterval(fetchDashboardData, 2000);
-    return () => clearInterval(interval);
-  }, []);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [user]);
 
   return (
     <div className="md:flex h-screen w-full overflow-hidden bg-slate-950 relative">
@@ -313,6 +346,31 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Live Map Panel & Ranked List */}
             <div className="lg:col-span-2 space-y-6">
+              {/* Floor Switcher */}
+              {floors.length > 1 && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#141419] border border-slate-800/80 rounded-2xl p-3 px-4 shadow-lg">
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
+                    <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Floor Level:</span>
+                  </div>
+                  <div className="flex items-center gap-2 overflow-x-auto">
+                    {floors.map(f => (
+                      <button
+                        key={f.id}
+                        onClick={() => setSelectedFloor(f.id)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                          selectedFloor === f.id
+                            ? 'bg-cyan-500/20 border border-cyan-400 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.25)]'
+                            : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {f.name || `Floor ${f.floor_number}`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Card Type 5: Map / Availability Digital Twin Card */}
               <WarehouseMap floorId={selectedFloor} />
               

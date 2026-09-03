@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/supabase/AuthProvider';
 import { usePreventScroll } from '@/lib/usePreventScroll';
 import { Search, MapPin, Truck, Plus, Trash2, BatteryCharging, AlertCircle, RefreshCw } from 'lucide-react';
 import { Vehicle, Floor, Location, Task } from '@/lib/database.types';
+import { generateUUID } from '@/lib/uuid';
 
 export default function VehiclesPage() {
   const { user } = useAuth();
@@ -83,7 +84,7 @@ export default function VehiclesPage() {
     const x = selectedLoc ? selectedLoc.x : 5;
     const y = selectedLoc ? selectedLoc.y : 1;
 
-    const newId = typeof window !== 'undefined' && window.crypto?.randomUUID ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${Date.now().toString().padStart(12, '0')}`;
+    const newId = generateUUID();
     const newVehicle: Vehicle = {
       id: newId,
       vehicle_code: vCode,

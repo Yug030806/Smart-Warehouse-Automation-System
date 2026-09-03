@@ -23,26 +23,37 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
   const [showNotifMenu, setShowNotifMenu] = useState(false);
 
   useEffect(() => {
-    // Initial fetch of notifications and alerts
-    const fetchUpdates = () => {
-      const activeAlerts = supabase.from('alerts').select().eq('is_acknowledged', false).data || [];
-      setAlerts(activeAlerts as Alert[]);
-      const unreadNotifs = supabase.from('notifications').select().eq('is_read', false).data || [];
-      setNotifications(unreadNotifs as Notification[]);
+    let isMounted = true;
+    const fetchUpdates = async () => {
+      try {
+        const [aRes, nRes] = await Promise.all([
+          supabase.from('alerts').select().eq('is_acknowledged', false),
+          supabase.from('notifications').select().eq('is_read', false)
+        ]);
+        if (isMounted) {
+          setAlerts((aRes.data || []) as Alert[]);
+          setNotifications((nRes.data || []) as Notification[]);
+        }
+      } catch (err) {
+        console.error('Failed to fetch navbar alerts:', err);
+      }
     };
 
     fetchUpdates();
     const interval = setInterval(fetchUpdates, 3000);
-    return () => clearInterval(interval);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
-  const handleClearNotifs = () => {
-    supabase.from('notifications').update({ is_read: true }).eq('is_read', false);
+  const handleClearNotifs = async () => {
+    await supabase.from('notifications').update({ is_read: true }).eq('is_read', false);
     setNotifications([]);
   };
 
-  const handleAcknowledgeAlert = (id: string) => {
-    supabase.from('alerts').update({ is_acknowledged: true }).eq('id', id);
+  const handleAcknowledgeAlert = async (id: string) => {
+    await supabase.from('alerts').update({ is_acknowledged: true }).eq('id', id);
     setAlerts(alerts.filter(x => x.id !== id));
   };
 

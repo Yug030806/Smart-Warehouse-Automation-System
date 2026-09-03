@@ -97,29 +97,40 @@ export default function TrackingPage() {
     return () => unsubscribe();
   }, [addLog]);
 
-  const loadData = useCallback(() => {
-    const v = (supabase.from('vehicles').select().data || []) as Vehicle[];
-    setVehicles(v);
-    const t = (supabase.from('tasks').select().data || []) as Task[];
-    setTasks(t);
-    const l = (supabase.from('locations').select().data || []) as Location[];
-    setLocations(l);
-    const b = (supabase.from('boxes').select().data || []) as Box[];
-    setBoxes(b);
+  const loadData = useCallback(async () => {
+    try {
+      const [vRes, tRes, lRes, bRes] = await Promise.all([
+        supabase.from('vehicles').select(),
+        supabase.from('tasks').select(),
+        supabase.from('locations').select(),
+        supabase.from('boxes').select()
+      ]);
 
-    setObstacles(fleetCoordinator.getGlobalObstacles());
-    setEdgeDecisions(mockDb.getEdgeAIDecisions());
-    setFleetMetrics(fleetCoordinator.getMetrics());
+      const v = (vRes.data || []) as Vehicle[];
+      setVehicles(v);
+      const t = (tRes.data || []) as Task[];
+      setTasks(t);
+      const l = (lRes.data || []) as Location[];
+      setLocations(l);
+      const b = (bRes.data || []) as Box[];
+      setBoxes(b);
 
-    const sysSettings = mockDb.getSettings();
-    if (!simControllerRef.current) {
-      setSimSpeed(sysSettings.default_speed || 1);
-    }
+      setObstacles(fleetCoordinator.getGlobalObstacles());
+      setEdgeDecisions(mockDb.getEdgeAIDecisions());
+      setFleetMetrics(fleetCoordinator.getMetrics());
 
-    if (!hasAutoSelected.current && v.length > 0) {
-      hasAutoSelected.current = true;
-      setSelectedVehicleId(v[0].id);
-      setSelectedFloor(v[0].current_floor_id);
+      const sysSettings = mockDb.getSettings();
+      if (!simControllerRef.current) {
+        setSimSpeed(sysSettings.default_speed || 1);
+      }
+
+      if (!hasAutoSelected.current && v.length > 0) {
+        hasAutoSelected.current = true;
+        setSelectedVehicleId(v[0].id);
+        setSelectedFloor(v[0].current_floor_id);
+      }
+    } catch (err) {
+      console.error('Failed to load tracking data:', err);
     }
   }, []);
 

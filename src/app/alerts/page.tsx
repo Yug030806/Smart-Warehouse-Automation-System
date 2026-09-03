@@ -15,9 +15,13 @@ export default function AlertsPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [filterSeverity, setFilterSeverity] = useState('ALL');
 
-  const loadAlerts = () => {
-    const list = supabase.from('alerts').select().data || [];
-    setAlerts(list as Alert[]);
+  const loadAlerts = async () => {
+    try {
+      const res = await supabase.from('alerts').select();
+      setAlerts((res.data || []) as Alert[]);
+    } catch (err) {
+      console.error('Failed to load alerts:', err);
+    }
   };
 
   useEffect(() => {
@@ -26,13 +30,13 @@ export default function AlertsPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleAcknowledge = (id: string) => {
-    supabase.from('alerts').update({ is_acknowledged: true }).eq('id', id);
+  const handleAcknowledge = async (id: string) => {
+    await supabase.from('alerts').update({ is_acknowledged: true }).eq('id', id);
     loadAlerts();
   };
 
-  const handleResolve = (id: string) => {
-    supabase.from('alerts').update({
+  const handleResolve = async (id: string) => {
+    await supabase.from('alerts').update({
       is_acknowledged: true,
       resolved_at: new Date().toISOString()
     }).eq('id', id);

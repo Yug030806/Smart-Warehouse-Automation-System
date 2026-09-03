@@ -31,29 +31,50 @@ export default function AnalyticsPage() {
   const [filterPriority, setFilterPriority] = useState('ALL');
 
   useEffect(() => {
-    let list = (supabase.from('tasks').select().data || []) as any[];
-    const pList = supabase.from('profiles').select().data || [];
-    const currentUserProfile = pList.find((p: any) => p.id === user?.id);
-    const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
-    const isRestricted = ['MANAGER'].includes(userRole as string);
-    let vList = supabase.from('vehicles').select().data || [];
-    let bList = supabase.from('boxes').select().data || [];
+    let isMounted = true;
+    const fetchAnalytics = async () => {
+      try {
+        const [tRes, pRes, vRes, bRes, fRes, lRes] = await Promise.all([
+          supabase.from('tasks').select(),
+          supabase.from('profiles').select(),
+          supabase.from('vehicles').select(),
+          supabase.from('boxes').select(),
+          supabase.from('floors').select(),
+          supabase.from('locations').select()
+        ]);
 
-    if (isRestricted && assignedWarehouses.length > 0) {
-      const fls = (supabase.from('floors').select().data || []) as any[];
-      const locs = (supabase.from('locations').select().data || []) as any[];
-      const allowedF = fls.filter((f: any) => assignedWarehouses.includes(f.warehouse_id)).map((f: any) => f.id);
-      const allowedL = locs.filter((l: any) => allowedF.includes(l.floor_id)).map((l: any) => l.id);
+        let list = (tRes.data || []) as any[];
+        const pList = pRes.data || [];
+        const currentUserProfile = pList.find((p: any) => p.id === user?.id || (user?.email && p.email?.toLowerCase() === user?.email?.toLowerCase()));
+        const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
+        const isRestricted = ['MANAGER'].includes(userRole as string);
+        let vList = (vRes.data || []) as any[];
+        let bList = (bRes.data || []) as any[];
 
-      list = list.filter((t: any) => allowedL.includes(t.source_location_id));
-      vList = vList.filter((v: any) => allowedF.includes(v.current_floor_id));
-      bList = bList.filter((b: any) => allowedL.includes(b.current_location_id));
-    }
+        if (isRestricted && assignedWarehouses.length > 0) {
+          const fls = (fRes.data || []) as any[];
+          const locs = (lRes.data || []) as any[];
+          const allowedF = fls.filter((f: any) => assignedWarehouses.includes(f.warehouse_id)).map((f: any) => f.id);
+          const allowedL = locs.filter((l: any) => allowedF.includes(l.floor_id)).map((l: any) => l.id);
 
-    setTasks(list as Task[]);
-    setVehicles(vList as Vehicle[]);
-    setBoxes(bList as Box[]);
-  }, []);
+          list = list.filter((t: any) => allowedL.includes(t.source_location_id));
+          vList = vList.filter((v: any) => allowedF.includes(v.current_floor_id));
+          bList = bList.filter((b: any) => allowedL.includes(b.current_location_id));
+        }
+
+        if (isMounted) {
+          setTasks(list as Task[]);
+          setVehicles(vList as Vehicle[]);
+          setBoxes(bList as Box[]);
+        }
+      } catch (err) {
+        console.error('Failed to load analytics data:', err);
+      }
+    };
+
+    fetchAnalytics();
+    return () => { isMounted = false; };
+  }, [user, userRole]);
 
   // Filter Tasks list
   const filteredTasks = tasks.filter(t => {

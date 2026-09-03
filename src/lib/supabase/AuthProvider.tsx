@@ -1,6 +1,7 @@
 'use client';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { generateUUID } from '@/lib/uuid';
 
 export interface UserSession {
   id: string;
@@ -146,7 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    const newId = typeof window !== 'undefined' && window.crypto?.randomUUID ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${Date.now().toString().padStart(12, '0')}`;
+    const newId = generateUUID();
     const newUser: RegisteredUser = {
       id: newId,
       fullName,

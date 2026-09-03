@@ -8,6 +8,7 @@ import RoleGuard from '@/components/RoleGuard';
 import { Settings, Save, PlayCircle, CheckCircle2, Gauge, Timer, Zap, RotateCcw, ToggleLeft, ToggleRight } from 'lucide-react';
 import { SystemSettings } from '@/lib/database.types';
 import mockDb from '@/lib/supabase/mockDb';
+import { generateUUID } from '@/lib/uuid';
 
 import { useAuth } from '@/lib/supabase/AuthProvider';
 
@@ -71,7 +72,7 @@ export default function SettingsPage() {
 
     // Audit log
     await supabase.from('audit_logs').insert({
-      id: typeof window !== 'undefined' && window.crypto?.randomUUID ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${Date.now().toString().padStart(12, '0')}`,
+      id: generateUUID(),
       user_email: user?.email || 'admin@demo.com',
       action: 'UPDATE_SETTINGS',
       object_type: 'SETTINGS',

@@ -6,8 +6,9 @@ import Navbar from '@/components/Navbar';
 import AmbientBackground from '@/components/AmbientBackground';
 import RoleGuard from '@/components/RoleGuard';
 import { useAuth } from '@/lib/supabase/AuthProvider';
-import { Plus, Edit2, Trash2, MapPin, Layers, Network } from 'lucide-react';
+import { Plus, Edit2, Trash2, MapPin, Layers, Network, AlertCircle, Loader2 } from 'lucide-react';
 import { Warehouse, Floor, Location } from '@/lib/database.types';
+import { generateUUID } from '@/lib/uuid';
 
 export default function WarehousesPage() {
   const { user } = useAuth();
@@ -23,6 +24,8 @@ export default function WarehousesPage() {
   const [showAddWarehouse, setShowAddWarehouse] = useState(false);
   const [wName, setWName] = useState('');
   const [wAddress, setWAddress] = useState('');
+  const [isSubmittingWarehouse, setIsSubmittingWarehouse] = useState(false);
+  const [warehouseError, setWarehouseError] = useState<string | null>(null);
 
   // Edit Warehouse state
   const [editingWarehouse, setEditingWarehouse] = useState<Warehouse | null>(null);
@@ -56,22 +59,32 @@ export default function WarehousesPage() {
   const [zoneColor, setZoneColor] = useState('#3b82f6');
 
   const loadData = async () => {
-    const wRes = await supabase.from('warehouses').select();
-    let w = wRes.data || [];
-    
-    const pRes = await supabase.from('profiles').select();
-    const pList = pRes.data || [];
-    const currentUserProfile = pList.find((p: any) => p.id === user?.id);
-    const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
-    const isRestricted = ['MANAGER'].includes(userRole);
+    try {
+      const wRes = await supabase.from('warehouses').select();
+      let w = wRes.data || [];
+      
+      const pRes = await supabase.from('profiles').select();
+      const pList = pRes.data || [];
+      const currentUserProfile = pList.find(
+        (p: any) => p.id === user?.id || (user?.email && p.email?.toLowerCase() === user?.email?.toLowerCase())
+      );
+      const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
+      const isRestricted = ['MANAGER'].includes(userRole);
 
-    if (isRestricted && assignedWarehouses.length > 0) {
-      w = w.filter((warehouse: any) => assignedWarehouses.includes(warehouse.id));
-    }
+      if (isRestricted && assignedWarehouses.length > 0) {
+        w = w.filter((warehouse: any) => assignedWarehouses.includes(warehouse.id));
+      }
 
-    setWarehouses(w as Warehouse[]);
-    if (w.length > 0 && !selectedWarehouse) {
-      setSelectedWarehouse(w[0] as Warehouse);
+      setWarehouses(w as Warehouse[]);
+      setSelectedWarehouse((prev: Warehouse | null) => {
+        if (!prev && w.length > 0) return w[0] as Warehouse;
+        if (prev && !w.some((item: any) => item.id === prev.id)) {
+          return (w[0] as Warehouse) || null;
+        }
+        return prev;
+      });
+    } catch (err) {
+      console.error('Failed to load warehouse data:', err);
     }
   };
 
@@ -79,7 +92,7 @@ export default function WarehousesPage() {
     loadData();
     const interval = setInterval(loadData, 2000);
     return () => clearInterval(interval);
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (selectedWarehouse) {
@@ -114,79 +127,119 @@ export default function WarehousesPage() {
 
   const handleAddWarehouseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!wName.trim()) return;
-    const newId = typeof window !== 'undefined' && window.crypto?.randomUUID ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${Date.now().toString().padStart(12, '0')}`;
-    const newW = {
-      id: newId,
-      name: wName.trim(),
-      address: wAddress.trim(),
-      created_at: new Date().toISOString()
-    };
-    await supabase.from('warehouses').insert(newW);
-
-    // If user is logged in, ensure the new warehouse is added to their profile's assigned warehouses
-    if (user?.id) {
-      const pRes = await supabase.from('profiles').select();
-      const pList = pRes.data || [];
-      const currentUserProfile = pList.find((p: any) => p.id === user.id);
-      if (currentUserProfile) {
-        const assigned = currentUserProfile.assigned_warehouse_ids || [];
-        if (!assigned.includes(newId)) {
-          await supabase.from('profiles').update({
-            assigned_warehouse_ids: [...assigned, newId]
-          }).eq('id', user.id);
-        }
-      }
+    setWarehouseError(null);
+    if (!wName.trim()) {
+      setWarehouseError('Logistics center name is required.');
+      return;
     }
 
-    // Auto-create initial default level/floor
-    const newFloorId = typeof window !== 'undefined' && window.crypto?.randomUUID ? window.crypto.randomUUID() : `f-${Date.now()}`;
-    await supabase.from('floors').insert({
-      id: newFloorId,
-      warehouse_id: newId,
-      floor_number: 1,
-      name: 'Floor 1 - Storage & Docking',
-      grid_width: 12,
-      grid_height: 8
-    });
+    setIsSubmittingWarehouse(true);
+    try {
+      const newId = generateUUID();
+      const newW: Warehouse = {
+        id: newId,
+        name: wName.trim(),
+        address: wAddress.trim() || 'Sector 1 Logistics Zone',
+        created_at: new Date().toISOString()
+      };
 
-    setWName('');
-    setWAddress('');
-    setShowAddWarehouse(false);
-    setSelectedWarehouse(newW as Warehouse);
-    await loadData();
+      const { error: insertError } = await supabase.from('warehouses').insert(newW);
+      if (insertError) {
+        console.error('Error creating warehouse in database:', insertError);
+        throw new Error(insertError.message || 'Database rejected warehouse insertion.');
+      }
+
+      // Auto-create initial default level/floor
+      const newFloorId = generateUUID();
+      const newFloor: Floor = {
+        id: newFloorId,
+        warehouse_id: newId,
+        floor_number: 1,
+        name: 'Floor 1 - Storage & Docking',
+        grid_width: 12,
+        grid_height: 8
+      };
+      const { error: floorErr } = await supabase.from('floors').insert(newFloor);
+      if (floorErr) {
+        console.warn('Notice creating initial floor:', floorErr);
+      }
+
+      // Update user profile assigned_warehouse_ids if user is restricted
+      if (user?.id || user?.email) {
+        try {
+          const pRes = await supabase.from('profiles').select();
+          const pList = pRes.data || [];
+          const currentUserProfile = pList.find(
+            (p: any) => p.id === user?.id || (user?.email && p.email?.toLowerCase() === user?.email?.toLowerCase())
+          );
+          if (currentUserProfile) {
+            const assigned = currentUserProfile.assigned_warehouse_ids || [];
+            if (!assigned.includes(newId)) {
+              await supabase.from('profiles').update({
+                assigned_warehouse_ids: [...assigned, newId]
+              }).eq('id', currentUserProfile.id);
+            }
+          }
+        } catch (pErr) {
+          console.warn('Profile warehouse assignment notice:', pErr);
+        }
+      }
+
+      setWName('');
+      setWAddress('');
+      setShowAddWarehouse(false);
+      setSelectedWarehouse(newW);
+      await loadData();
+    } catch (err: any) {
+      setWarehouseError(err?.message || 'Failed to save logistics center. Please check database permissions.');
+    } finally {
+      setIsSubmittingWarehouse(false);
+    }
   };
 
   const handleEditWarehouseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingWarehouse || !editWName) return;
-    await supabase.from('warehouses').update({
-      name: editWName,
-      address: editWAddress
+    if (!editingWarehouse || !editWName.trim()) return;
+    const { error } = await supabase.from('warehouses').update({
+      name: editWName.trim(),
+      address: editWAddress.trim()
     }).eq('id', editingWarehouse.id);
+    if (error) {
+      alert('Failed to update warehouse: ' + error.message);
+      return;
+    }
     setEditingWarehouse(null);
     await loadData();
   };
 
   const handleDeleteWarehouse = async (id: string) => {
-    await supabase.from('warehouses').delete().eq('id', id);
+    if (!confirm('Are you sure you want to delete this logistics facility?')) return;
+    const { error } = await supabase.from('warehouses').delete().eq('id', id);
+    if (error) {
+      alert('Failed to delete warehouse: ' + error.message);
+      return;
+    }
     setSelectedWarehouse(null);
     await loadData();
   };
 
   const handleAddFloorSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedWarehouse || !floorName) return;
-    const newId = typeof window !== 'undefined' && window.crypto?.randomUUID ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${Date.now().toString().padStart(12, '0')}`;
+    if (!selectedWarehouse || !floorName.trim()) return;
+    const newId = generateUUID();
     const newF = {
       id: newId,
       warehouse_id: selectedWarehouse.id,
       floor_number: Number(floorNum),
-      name: floorName,
+      name: floorName.trim(),
       grid_width: 12,
       grid_height: 8
     };
-    await supabase.from('floors').insert(newF);
+    const { error } = await supabase.from('floors').insert(newF);
+    if (error) {
+      alert('Failed to add floor: ' + error.message);
+      return;
+    }
     setFloorName('');
     setFloorNum(floors.length + 1);
     setShowAddFloor(false);
@@ -196,8 +249,12 @@ export default function WarehousesPage() {
 
   const handleEditFloorSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingFloor || !editFloorName) return;
-    await supabase.from('floors').update({ name: editFloorName }).eq('id', editingFloor.id);
+    if (!editingFloor || !editFloorName.trim()) return;
+    const { error } = await supabase.from('floors').update({ name: editFloorName.trim() }).eq('id', editingFloor.id);
+    if (error) {
+      alert('Failed to update floor: ' + error.message);
+      return;
+    }
     setEditingFloor(null);
     if (selectedWarehouse) {
       const fRes = await supabase.from('floors').select().eq('warehouse_id', selectedWarehouse.id);
@@ -206,7 +263,12 @@ export default function WarehousesPage() {
   };
 
   const handleDeleteFloor = async (id: string) => {
-    await supabase.from('floors').delete().eq('id', id);
+    if (!confirm('Are you sure you want to delete this floor level?')) return;
+    const { error } = await supabase.from('floors').delete().eq('id', id);
+    if (error) {
+      alert('Failed to delete floor: ' + error.message);
+      return;
+    }
     if (selectedWarehouse) {
       const fRes = await supabase.from('floors').select().eq('warehouse_id', selectedWarehouse.id);
       const f = fRes.data || [];
@@ -217,22 +279,26 @@ export default function WarehousesPage() {
 
   const handleAddLocSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedFloor || !locName) return;
+    if (!selectedFloor || !locName.trim()) return;
     const zRes = await supabase.from('zones').select().eq('floor_id', selectedFloor.id);
     const zList = zRes.data || [];
     const zoneId = zList.length > 0 ? zList[0].id : null;
 
-    const newId = typeof window !== 'undefined' && window.crypto?.randomUUID ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${Date.now().toString().padStart(12, '0')}`;
+    const newId = generateUUID();
     const newLoc = {
       id: newId,
       zone_id: zoneId,
-      name: locName,
+      name: locName.trim(),
       type: locType,
       x: Number(locX),
       y: Number(locY),
       floor_id: selectedFloor.id
     };
-    await supabase.from('locations').insert(newLoc);
+    const { error } = await supabase.from('locations').insert(newLoc);
+    if (error) {
+      alert('Failed to add location: ' + error.message);
+      return;
+    }
     setLocName('');
     setLocX(0);
     setLocY(0);
@@ -243,13 +309,17 @@ export default function WarehousesPage() {
 
   const handleEditLocSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingLoc || !editLocName) return;
-    await supabase.from('locations').update({
-      name: editLocName,
+    if (!editingLoc || !editLocName.trim()) return;
+    const { error } = await supabase.from('locations').update({
+      name: editLocName.trim(),
       type: editLocType,
       x: Number(editLocX),
       y: Number(editLocY)
     }).eq('id', editingLoc.id);
+    if (error) {
+      alert('Failed to update location: ' + error.message);
+      return;
+    }
     setEditingLoc(null);
     if (selectedFloor) {
       const lRes = await supabase.from('locations').select().eq('floor_id', selectedFloor.id);
@@ -258,7 +328,11 @@ export default function WarehousesPage() {
   };
 
   const handleDeleteLocation = async (id: string) => {
-    await supabase.from('locations').delete().eq('id', id);
+    const { error } = await supabase.from('locations').delete().eq('id', id);
+    if (error) {
+      alert('Failed to delete location: ' + error.message);
+      return;
+    }
     if (selectedFloor) {
       const lRes = await supabase.from('locations').select().eq('floor_id', selectedFloor.id);
       setLocations((lRes.data || []) as Location[]);
@@ -267,16 +341,20 @@ export default function WarehousesPage() {
 
   const handleAddZoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedFloor || !zoneName) return;
-    const newId = typeof window !== 'undefined' && window.crypto?.randomUUID ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${Date.now().toString().padStart(12, '0')}`;
+    if (!selectedFloor || !zoneName.trim()) return;
+    const newId = generateUUID();
     const newZ = {
       id: newId,
       floor_id: selectedFloor.id,
-      name: zoneName,
-      code: zoneCode || `Z-${Date.now().toString().substring(8)}`,
+      name: zoneName.trim(),
+      code: zoneCode.trim() || `Z-${Date.now().toString().substring(8)}`,
       color: zoneColor
     };
-    await supabase.from('zones').insert(newZ);
+    const { error } = await supabase.from('zones').insert(newZ);
+    if (error) {
+      alert('Failed to add zone: ' + error.message);
+      return;
+    }
     setZoneName('');
     setZoneCode('');
     setShowAddZone(false);
@@ -284,11 +362,15 @@ export default function WarehousesPage() {
     setZones(zRes.data || []);
   };
 
-  const handleDeleteZone = (id: string) => {
-    supabase.from('zones').delete().eq('id', id);
+  const handleDeleteZone = async (id: string) => {
+    const { error } = await supabase.from('zones').delete().eq('id', id);
+    if (error) {
+      alert('Failed to delete zone: ' + error.message);
+      return;
+    }
     if (selectedFloor) {
-      const z = supabase.from('zones').select().eq('floor_id', selectedFloor.id).data || [];
-      setZones(z);
+      const zRes = await supabase.from('zones').select().eq('floor_id', selectedFloor.id);
+      setZones(zRes.data || []);
     }
   };
 
@@ -309,7 +391,7 @@ export default function WarehousesPage() {
               <p className="text-xs sm:text-sm text-slate-400">Configure logistics centers, layouts, levels, elevators and pickup lanes.</p>
             </div>
             <button 
-              onClick={() => setShowAddWarehouse(true)}
+              onClick={() => { setWName(''); setWAddress(''); setWarehouseError(null); setShowAddWarehouse(true); }}
               className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-semibold text-slate-50 transition duration-150 shrink-0"
             >
               <Plus className="h-4 w-4" /> Add Logistics Center
@@ -505,19 +587,30 @@ export default function WarehousesPage() {
       </div>
 
       {/* Add warehouse modal */}
+      {/* Add warehouse modal */}
       {showAddWarehouse && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget) { const cancelBtn = Array.from((e.target as HTMLElement).querySelectorAll('button')).find(b => b.textContent?.match(/cancel|close/i) || b.querySelector('svg.lucide-x')); if (cancelBtn) (cancelBtn as HTMLButtonElement).click(); } }}>
+        <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget && !isSubmittingWarehouse) { setShowAddWarehouse(false); setWarehouseError(null); } }}>
           <form onSubmit={handleAddWarehouseSubmit} className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
             <h3 className="text-lg font-bold text-slate-100">Add Logistics Center</h3>
+
+            {warehouseError && (
+              <div className="p-3 bg-red-950/60 border border-red-800/80 rounded-xl flex items-start gap-2.5 text-xs text-red-300">
+                <AlertCircle className="h-4 w-4 shrink-0 text-red-400 mt-0.5" />
+                <span>{warehouseError}</span>
+              </div>
+            )}
+
             <div className="space-y-3">
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">Warehouse Name</label>
                 <input 
                   type="text" 
                   value={wName} 
-                  onChange={e => setWName(e.target.value)}
-                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-sm text-slate-100" 
+                  onChange={e => { setWName(e.target.value); setWarehouseError(null); }}
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-sm text-slate-100 focus:outline-none focus:border-blue-500" 
                   placeholder="e.g. Inbound Dock Facility"
+                  disabled={isSubmittingWarehouse}
+                  autoFocus
                 />
               </div>
               <div>
@@ -526,14 +619,34 @@ export default function WarehousesPage() {
                   type="text" 
                   value={wAddress} 
                   onChange={e => setWAddress(e.target.value)}
-                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-sm text-slate-100" 
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-sm text-slate-100 focus:outline-none focus:border-blue-500" 
                   placeholder="e.g. Sector 12 Area"
+                  disabled={isSubmittingWarehouse}
                 />
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-              <button type="button" onClick={() => setShowAddWarehouse(false)} className="px-4 py-2 text-xs font-semibold text-slate-400">Cancel</button>
-              <button type="submit" className="px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 rounded-lg">Save Facility</button>
+              <button 
+                type="button" 
+                onClick={() => { setShowAddWarehouse(false); setWarehouseError(null); }} 
+                className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-slate-200 transition"
+                disabled={isSubmittingWarehouse}
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit" 
+                disabled={isSubmittingWarehouse}
+                className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition"
+              >
+                {isSubmittingWarehouse ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving to Database...
+                  </>
+                ) : (
+                  'Save Facility'
+                )}
+              </button>
             </div>
           </form>
         </div>

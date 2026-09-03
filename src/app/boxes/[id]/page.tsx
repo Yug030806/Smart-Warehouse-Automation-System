@@ -24,22 +24,34 @@ export default function BoxDetailsPage() {
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const fetchDetails = () => {
-      const list = supabase.from('boxes').select().eq('id', boxId).data || [];
-      if (list.length > 0) {
-        const b = list[0] as Box;
-        setBox(b);
+    let isMounted = true;
+    const fetchDetails = async () => {
+      try {
+        const [bRes, lRes] = await Promise.all([
+          supabase.from('boxes').select().eq('id', boxId),
+          supabase.from('locations').select()
+        ]);
 
-        // Generate QR code base64 URL
-        QRCode.toDataURL(b.qr_code_data, { width: 200, margin: 1 }, (err, url) => {
-          if (!err) setQrUrl(url);
-        });
+        const list = (bRes.data || []) as Box[];
+        if (isMounted && list.length > 0) {
+          const b = list[0];
+          setBox(b);
+
+          // Generate QR code base64 URL
+          QRCode.toDataURL(b.qr_code_data, { width: 200, margin: 1 }, (err, url) => {
+            if (!err && isMounted) setQrUrl(url);
+          });
+        }
+        if (isMounted) {
+          setLocations((lRes.data || []) as Location[]);
+        }
+      } catch (err) {
+        console.error('Failed to load box details:', err);
       }
-      const locs = supabase.from('locations').select().data || [];
-      setLocations(locs as Location[]);
     };
 
     fetchDetails();
+    return () => { isMounted = false; };
   }, [boxId]);
 
   const handleRegenerateQr = () => {

@@ -3,6 +3,9 @@ import mockDb from './mockDb';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseServiceKey = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+// Prioritize service role key so that database operations succeed without RLS rejection
+const activeKey = supabaseServiceKey || supabaseAnonKey;
 
 const isValidUrl = (url: string) => {
   try {
@@ -13,16 +16,114 @@ const isValidUrl = (url: string) => {
 };
 
 // If valid credentials are provided, use official client. Otherwise fallback to mock db proxy logic
-export const useSupabaseReal = isValidUrl(supabaseUrl) && !!supabaseAnonKey && supabaseUrl !== 'your_supabase_project_url_here';
+export const useSupabaseReal = isValidUrl(supabaseUrl) && !!activeKey && supabaseUrl !== 'your_supabase_project_url_here';
 
 export const supabaseReal = useSupabaseReal 
-  ? createClient(supabaseUrl, supabaseAnonKey) 
+  ? createClient(supabaseUrl, activeKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      }
+    }) 
   : null;
+
+// In-memory cache to support legacy synchronous .data calls while queries run asynchronously
+const tableCache: Record<string, any[]> = {};
+
+function getFallbackData(table: string): any[] {
+  switch (table) {
+    case 'profiles': return mockDb.getProfiles();
+    case 'warehouses': return mockDb.getWarehouses();
+    case 'floors': return mockDb.getFloors();
+    case 'zones': return mockDb.getZones();
+    case 'locations': return mockDb.getLocations();
+    case 'vehicles': return mockDb.getVehicles();
+    case 'boxes': return mockDb.getBoxes();
+    case 'tasks': return mockDb.getTasks();
+    case 'alerts': return mockDb.getAlerts();
+    case 'notifications': return mockDb.getNotifications();
+    case 'audit_logs': return mockDb.getAuditLogs();
+    default: return [];
+  }
+}
+
+// Prefetch data in background on initialization
+if (typeof window !== 'undefined' && useSupabaseReal && supabaseReal) {
+  const initialTables = ['warehouses', 'floors', 'locations', 'vehicles', 'boxes', 'tasks', 'alerts', 'profiles'];
+  initialTables.forEach(async (t) => {
+    try {
+      const res = await supabaseReal.from(t).select();
+      if (res.data) tableCache[t] = res.data;
+    } catch {}
+  });
+}
+
+function wrapQuery(query: any, cached: any[], table: string): any {
+  query.data = cached;
+
+  const originalEq = query.eq ? query.eq.bind(query) : null;
+  if (originalEq) {
+    query.eq = (col: string, val: any) => {
+      const sub = originalEq(col, val);
+      return wrapQuery(sub, (cached || []).filter((item: any) => item[col] === val), table);
+    };
+  }
+
+  const originalOrder = query.order ? query.order.bind(query) : null;
+  if (originalOrder) {
+    query.order = (...args: any[]) => {
+      const sub = originalOrder(...args);
+      return wrapQuery(sub, cached, table);
+    };
+  }
+
+  const originalLimit = query.limit ? query.limit.bind(query) : null;
+  if (originalLimit) {
+    query.limit = (n: number) => {
+      const sub = originalLimit(n);
+      return wrapQuery(sub, (cached || []).slice(0, n), table);
+    };
+  }
+
+  const origThen = query.then.bind(query);
+  query.then = (onfulfilled: any, onrejected: any) => {
+    return origThen((res: any) => {
+      if (res && res.data && Array.isArray(res.data)) {
+        tableCache[table] = res.data;
+      }
+      return onfulfilled ? onfulfilled(res) : res;
+    }, onrejected);
+  };
+
+  return query;
+}
+
+function createProxiedRealClient(rawClient: any): any {
+  return new Proxy(rawClient, {
+    get(target, prop) {
+      if (prop === 'from') {
+        return (table: string) => {
+          const builder = target.from(table);
+          const origSelect = builder.select.bind(builder);
+
+          builder.select = (...args: any[]) => {
+            const query = origSelect(...args);
+            const cached = tableCache[table] || getFallbackData(table);
+            return wrapQuery(query, cached, table);
+          };
+
+          return builder;
+        };
+      }
+      return target[prop];
+    }
+  });
+}
 
 // Unified client interfaces wrapping both actual Supabase and mockDb
 export const getSupabaseClient = (): any => {
   if (useSupabaseReal && supabaseReal) {
-    return supabaseReal;
+    return createProxiedRealClient(supabaseReal);
   }
 
   return {

@@ -27,23 +27,34 @@ export default function ScannerPage() {
   const [statusMessage, setStatusMessage] = useState('');
   const [statusType, setStatusType] = useState<'IDLE' | 'SUCCESS' | 'ERROR'>('IDLE');
 
-  const loadData = () => {
-    const t = (supabase.from('tasks').select().data || []) as Task[];
-    setTasks(t);
+  const loadData = async () => {
+    try {
+      const [tRes, bRes, vRes, lRes] = await Promise.all([
+        supabase.from('tasks').select(),
+        supabase.from('boxes').select(),
+        supabase.from('vehicles').select(),
+        supabase.from('locations').select()
+      ]);
 
-    const b = (supabase.from('boxes').select().data || []) as Box[];
-    setBoxes(b);
+      const t = (tRes.data || []) as Task[];
+      setTasks(t);
 
-    const v = (supabase.from('vehicles').select().data || []) as Vehicle[];
-    setVehicles(v);
+      const b = (bRes.data || []) as Box[];
+      setBoxes(b);
 
-    const l = (supabase.from('locations').select().data || []) as Location[];
-    setLocations(l);
+      const v = (vRes.data || []) as Vehicle[];
+      setVehicles(v);
 
-    // Auto-select first active/pending task if none is selected
-    const activeTasks = t.filter(x => x.status !== 'COMPLETED' && x.status !== 'CANCELLED');
-    if (activeTasks.length > 0 && !selectedTask) {
-      setSelectedTask(activeTasks[0]);
+      const l = (lRes.data || []) as Location[];
+      setLocations(l);
+
+      // Auto-select first active/pending task if none is selected
+      const activeTasks = t.filter(x => x.status !== 'COMPLETED' && x.status !== 'CANCELLED');
+      if (activeTasks.length > 0 && !selectedTask) {
+        setSelectedTask(activeTasks[0]);
+      }
+    } catch (err) {
+      console.error('Failed to load scanner data:', err);
     }
   };
 
