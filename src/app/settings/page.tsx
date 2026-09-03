@@ -16,6 +16,7 @@ export default function SettingsPage() {
   const { user } = useAuth();
   const userRole = user?.user_metadata?.role || 'OPERATOR';
   const isAdmin = userRole === 'ADMIN';
+  const canEdit = isAdmin || userRole === 'MANAGER' || !userRole;
 
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [success, setSuccess] = useState(false);
@@ -29,27 +30,93 @@ export default function SettingsPage() {
   const [floorDuration, setFloorDuration] = useState(3);
 
   const loadSettings = async () => {
-    const res = await supabase.from('system_settings').select();
-    if (res.data && res.data.length > 0) {
-      const s = res.data[0] as SystemSettings;
-      setSettings(s);
-      setSpeed(s.default_speed);
-      setAnimSpeed(s.animation_speed);
-      setAutoStart(s.auto_start);
-      setSimMode(s.simulation_mode);
-      setFloorDuration(s.floor_transition_duration);
+    try {
+      const res = await supabase.from('system_settings').select();
+      if (res.data && res.data.length > 0) {
+        const s = res.data[0] as SystemSettings;
+        setSettings(s);
+        // Cleanly map default speed to valid preset or default 1
+        const loadedSpeed = [1, 2, 5, 10].includes(Number(s.default_speed)) ? Number(s.default_speed) : 1;
+        setSpeed(loadedSpeed);
+        setAnimSpeed([1, 2, 5, 10].includes(Number(s.animation_speed)) ? Number(s.animation_speed) : 1);
+        setAutoStart(s.auto_start ?? true);
+        setSimMode(s.simulation_mode || 'AUTO');
+        setFloorDuration(s.floor_transition_duration || 3);
+      }
+    } catch (err) {
+      console.error('Failed to load settings:', err);
     }
   };
 
   useEffect(() => {
     loadSettings();
-    const interval = setInterval(loadSettings, 2000);
-    return () => clearInterval(interval);
   }, []);
+
+  const handleSpeedSelect = async (newSpeed: number) => {
+    setSpeed(newSpeed);
+    try {
+      const targetId = settings?.id || '00000000-0000-0000-0000-000000000001';
+      await supabase.from('system_settings').update({
+        default_speed: newSpeed,
+        updated_at: new Date().toISOString()
+      }).eq('id', targetId);
+
+      const mockDb = require('@/lib/supabase/mockDb').default;
+      mockDb.saveSettings({
+        ...(settings || {
+          id: targetId,
+          default_speed: newSpeed,
+          animation_speed: animSpeed,
+          auto_start: autoStart,
+          simulation_mode: simMode,
+          floor_transition_duration: floorDuration,
+          updated_at: new Date().toISOString()
+        }),
+        default_speed: newSpeed
+      });
+
+      setSuccess(true);
+      setSaveMessage(`Default AMR Speed Multiplier updated to ${newSpeed}x`);
+      setTimeout(() => { setSuccess(false); setSaveMessage(''); }, 2000);
+    } catch (err) {
+      console.error('Failed to update speed:', err);
+    }
+  };
+
+  const handleAnimSpeedSelect = async (newAnimSpeed: number) => {
+    setAnimSpeed(newAnimSpeed);
+    try {
+      const targetId = settings?.id || '00000000-0000-0000-0000-000000000001';
+      await supabase.from('system_settings').update({
+        animation_speed: newAnimSpeed,
+        updated_at: new Date().toISOString()
+      }).eq('id', targetId);
+
+      const mockDb = require('@/lib/supabase/mockDb').default;
+      mockDb.saveSettings({
+        ...(settings || {
+          id: targetId,
+          default_speed: speed,
+          animation_speed: newAnimSpeed,
+          auto_start: autoStart,
+          simulation_mode: simMode,
+          floor_transition_duration: floorDuration,
+          updated_at: new Date().toISOString()
+        }),
+        animation_speed: newAnimSpeed
+      });
+
+      setSuccess(true);
+      setSaveMessage(`Animation Speed Multiplier updated to ${newAnimSpeed}x`);
+      setTimeout(() => { setSuccess(false); setSaveMessage(''); }, 2000);
+    } catch (err) {
+      console.error('Failed to update animation speed:', err);
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isAdmin) return;
+    if (!canEdit) return;
 
     const updated: SystemSettings = {
       id: settings?.id || '00000000-0000-0000-0000-000000000001',
@@ -84,7 +151,7 @@ export default function SettingsPage() {
   };
 
   const handleResetDemoData = () => {
-    if (!isAdmin) return;
+    if (!canEdit) return;
     mockDb.resetToSeeds();
     setSuccess(true);
     setSaveMessage('Database reset to demo seeds. Reloading...');
@@ -127,9 +194,9 @@ export default function SettingsPage() {
                       <Settings className="h-4 w-4 text-blue-400" />
                       <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider">Simulation Parameters</h3>
                     </div>
-                    {!isAdmin && (
+                    {!canEdit && (
                       <span className="text-[11px] font-semibold text-amber-400 bg-amber-950/40 border border-amber-900/50 px-2.5 py-1 rounded-lg">
-                        Read-Only (Manager)
+                        Read-Only
                       </span>
                     )}
                   </div>
@@ -141,15 +208,15 @@ export default function SettingsPage() {
                       <label className="text-xs text-slate-300 font-bold uppercase tracking-wider">Default AMR Speed Multiplier</label>
                     </div>
                     <p className="text-[11px] text-slate-500 -mt-1">
-                      Sets the initial speed multiplier when starting a new drive simulation on the Live Fleet Tracking page. A value of 2 means AMRs move at 2x the base speed.
+                      Sets the speed multiplier for AMRs on the Live Fleet Tracking simulation. Select 1x, 2x, 5x, or 10x base drive speed.
                     </p>
                     <div className="flex items-center gap-3">
                       {[1, 2, 5, 10].map((s) => (
                         <button
                           key={s}
                           type="button"
-                          disabled={!isAdmin}
-                          onClick={() => setSpeed(s)}
+                          disabled={!canEdit}
+                          onClick={() => handleSpeedSelect(s)}
                           className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 border disabled:opacity-40 disabled:cursor-not-allowed ${
                             speed === s
                               ? 'bg-blue-600 border-blue-500 text-slate-50 shadow-md shadow-blue-600/30'
@@ -179,8 +246,8 @@ export default function SettingsPage() {
                         <button
                           key={s}
                           type="button"
-                          disabled={!isAdmin}
-                          onClick={() => setAnimSpeed(s)}
+                          disabled={!canEdit}
+                          onClick={() => handleAnimSpeedSelect(s)}
                           className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 border disabled:opacity-40 disabled:cursor-not-allowed ${
                             animSpeed === s
                               ? 'bg-yellow-600 border-yellow-500 text-slate-950 shadow-md shadow-yellow-600/30'
@@ -210,7 +277,7 @@ export default function SettingsPage() {
                         <button
                           key={d}
                           type="button"
-                          disabled={!isAdmin}
+                          disabled={!canEdit}
                           onClick={() => setFloorDuration(d)}
                           className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 border disabled:opacity-40 disabled:cursor-not-allowed ${
                             floorDuration === d
@@ -236,8 +303,8 @@ export default function SettingsPage() {
                       </p>
                       <button
                         type="button"
-                        disabled={!isAdmin}
-                        onClick={() => isAdmin && setAutoStart(!autoStart)}
+                        disabled={!canEdit}
+                        onClick={() => canEdit && setAutoStart(!autoStart)}
                         className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-bold transition disabled:opacity-40 disabled:cursor-not-allowed ${
                           autoStart
                             ? 'bg-green-950/30 border-green-900/50 text-green-400'
@@ -259,8 +326,8 @@ export default function SettingsPage() {
                           <button
                             key={mode}
                             type="button"
-                            disabled={!isAdmin}
-                            onClick={() => isAdmin && setSimMode(mode)}
+                            disabled={!canEdit}
+                            onClick={() => canEdit && setSimMode(mode)}
                             className={`px-4 py-2.5 rounded-xl text-xs font-bold transition border disabled:opacity-40 disabled:cursor-not-allowed ${
                               simMode === mode
                                 ? 'bg-blue-600 border-blue-500 text-slate-50 shadow-md'
@@ -274,7 +341,7 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  {isAdmin && (
+                  {canEdit && (
                     <div className="border-t border-slate-900 pt-6 flex justify-end">
                       <button
                         type="submit"
@@ -295,7 +362,7 @@ export default function SettingsPage() {
                   <div className="space-y-3 text-xs">
                     <div className="flex justify-between items-center p-3 rounded-lg bg-slate-900/40 border border-slate-900">
                       <span className="text-slate-400">AMR Speed</span>
-                      <span className="text-blue-400 font-bold font-mono">{settings?.default_speed || 1}x</span>
+                      <span className="text-blue-400 font-bold font-mono">{speed}x</span>
                     </div>
                     <div className="flex justify-between items-center p-3 rounded-lg bg-slate-900/40 border border-slate-900">
                       <span className="text-slate-400">Animation Speed</span>

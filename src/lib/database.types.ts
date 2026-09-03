@@ -64,14 +64,14 @@ export interface Vehicle {
   y_position: number;
   speed: number; // multiplier e.g. 1, 2, 5, 10
   current_task_id: string | null;
-  last_seen: string;
+  last_seen?: string;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
   // Edge-AI fields
-  edge_ai_status: 'ONLINE' | 'DEGRADED' | 'OFFLINE';
-  sensor_suite_active: boolean;
-  last_decision_id: string | null;
-  obstacle_count: number; // lifetime obstacles detected
+  edge_ai_status?: 'ONLINE' | 'DEGRADED' | 'OFFLINE';
+  sensor_suite_active?: boolean;
+  last_decision_id?: string | null;
+  obstacle_count?: number; // lifetime obstacles detected
 }
 
 export interface Box {
@@ -108,7 +108,7 @@ export interface Task {
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 }
 
 export interface RouteSegment {

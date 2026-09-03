@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/supabase/AuthProvider';
 import { Alert } from '@/lib/database.types';
 import mockDb from '@/lib/supabase/mockDb';
+import { generateUUID } from '@/lib/uuid';
 import { 
   ShieldAlert, 
   AlertTriangle, 
@@ -81,7 +82,17 @@ export default function AlertPopupModal() {
   const { user } = useAuth();
   
   const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set();
+    try {
+      // Clear legacy permanent localStorage suppression so active alerts pop up properly
+      localStorage.removeItem('swl_dismissed_alert_popups');
+      const saved = sessionStorage.getItem('swl_dismissed_alert_popups');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
   const [currentIndex, setCurrentIndex] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const lastAlertIdRef = useRef<string | null>(null);
@@ -89,11 +100,36 @@ export default function AlertPopupModal() {
   // Do not show popup modal on auth pages or when user is logged out
   const isAuthPage = ['/login', '/signup'].includes(pathname) || !user;
 
-  // Fetch active unacknowledged alerts instantly
-  const fetchActiveAlerts = useCallback(() => {
+  // Fetch active alerts - fetches live unacknowledged alerts from Supabase and local cache
+  const fetchActiveAlerts = useCallback(async () => {
     if (isAuthPage) return;
     try {
-      const res = mockDb.getAlerts().filter(a => !a.is_acknowledged);
+      // 1. Fetch live unacknowledged alerts from Supabase database
+      const { data: dbAlerts } = await supabase
+        .from('alerts')
+        .select('*')
+        .eq('is_acknowledged', false)
+        .order('created_at', { ascending: false });
+
+      // 2. Fetch from local cache as well
+      const localAlerts = mockDb.getAlerts() || [];
+
+      // 3. Merge without duplicates (Supabase takes precedence)
+      const mergedMap = new Map<string, Alert>();
+      (dbAlerts || []).forEach((a: any) => {
+        if (!a.is_acknowledged && (!a.message || !a.message.includes('elevator calibration'))) {
+          mergedMap.set(a.id, a as Alert);
+        }
+      });
+      localAlerts.forEach((a: Alert) => {
+        if (!a.is_acknowledged && (!a.message || !a.message.includes('elevator calibration'))) {
+          if (!mergedMap.has(a.id)) {
+            mergedMap.set(a.id, a);
+          }
+        }
+      });
+
+      const res = Array.from(mergedMap.values());
       setAlerts(res);
     } catch (e) {
       console.error('Error loading alerts for pop-up:', e);
@@ -107,10 +143,38 @@ export default function AlertPopupModal() {
     }
 
     fetchActiveAlerts();
-    const interval = setInterval(fetchActiveAlerts, 1000);
+    const interval = setInterval(fetchActiveAlerts, 2500);
+
+    // Subscribe to Supabase realtime broadcast on alerts table
+    const channel = supabase
+      .channel('realtime:alerts-popup')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'alerts' },
+        (payload: any) => {
+          if (payload.eventType === 'INSERT' && payload.new) {
+            const newAlert = payload.new as Alert;
+            if (!newAlert.is_acknowledged && (!newAlert.message || !newAlert.message.includes('elevator calibration'))) {
+              setAlerts(prev => {
+                if (prev.some(a => a.id === newAlert.id)) return prev;
+                return [newAlert, ...prev];
+              });
+              setDismissedIds(prev => {
+                const next = new Set(prev);
+                next.delete(newAlert.id);
+                return next;
+              });
+              if (soundEnabled) playAlertChime(newAlert.severity || 'WARNING');
+            }
+          } else {
+            fetchActiveAlerts();
+          }
+        }
+      )
+      .subscribe();
 
     // Subscribe to mockDb reactive events for instant popups without lag
-    const unsubscribe = mockDb.subscribe((table, ev, payload) => {
+    const unsubscribe = mockDb.subscribe((table) => {
       if (table === 'alerts') {
         fetchActiveAlerts();
       }
@@ -120,9 +184,10 @@ export default function AlertPopupModal() {
     const handleNewAlertEvent = (e: Event) => {
       const customEv = e as CustomEvent<Alert>;
       if (customEv.detail) {
+        if (customEv.detail.message && customEv.detail.message.includes('elevator calibration')) return;
         setAlerts(prev => {
-          if (prev.some(a => a.id === customEv.detail.id)) return prev;
-          return [customEv.detail, ...prev];
+          const filtered = prev.filter(a => a.id !== customEv.detail.id);
+          return [customEv.detail, ...filtered];
         });
         setDismissedIds(prev => {
           const updated = new Set(prev);
@@ -134,12 +199,96 @@ export default function AlertPopupModal() {
       fetchActiveAlerts();
     };
 
+    // Reset popups listener
+    const handleResetPopups = () => {
+      setDismissedIds(new Set());
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('swl_dismissed_alert_popups');
+      }
+      fetchActiveAlerts();
+    };
+
+    // Generic error popup event listener across any section of the website
+    const handleGenericErrorPopup = (e: Event) => {
+      const customEv = e as CustomEvent<{ message: string; severity?: 'CRITICAL' | 'WARNING' | 'INFO'; type?: string }>;
+      if (customEv.detail && customEv.detail.message) {
+        const errorAlert: Alert = {
+          id: generateUUID(),
+          type: (customEv.detail.type as any) || 'SYSTEM_ERROR',
+          severity: customEv.detail.severity || 'CRITICAL',
+          message: customEv.detail.message,
+          is_acknowledged: false,
+          resolved_at: null,
+          created_at: new Date().toISOString()
+        };
+        setAlerts(prev => [errorAlert, ...prev.filter(a => a.id !== errorAlert.id)]);
+        setDismissedIds(prev => {
+          const updated = new Set(prev);
+          updated.delete(errorAlert.id);
+          return updated;
+        });
+        if (soundEnabled) playAlertChime(errorAlert.severity);
+      }
+    };
+
+    // Global browser unhandled runtime error listener
+    const handleWindowError = (e: ErrorEvent) => {
+      if (!e.message || e.message.includes('ResizeObserver') || e.message.includes('Script error')) return;
+      const errorAlert: Alert = {
+        id: generateUUID(),
+        type: 'SYSTEM_ERROR',
+        severity: 'CRITICAL',
+        message: `System Error: ${e.message}`,
+        is_acknowledged: false,
+        resolved_at: null,
+        created_at: new Date().toISOString()
+      };
+      setAlerts(prev => [errorAlert, ...prev.filter(a => a.id !== errorAlert.id)]);
+      setDismissedIds(prev => {
+        const updated = new Set(prev);
+        updated.delete(errorAlert.id);
+        return updated;
+      });
+      if (soundEnabled) playAlertChime('CRITICAL');
+    };
+
+    // Global unhandled promise rejection listener
+    const handleWindowRejection = (e: PromiseRejectionEvent) => {
+      const msg = e.reason?.message || (typeof e.reason === 'string' ? e.reason : '');
+      if (!msg || msg.includes('ResizeObserver') || msg.includes('AbortError')) return;
+      const errorAlert: Alert = {
+        id: generateUUID(),
+        type: 'SYSTEM_ERROR',
+        severity: 'WARNING',
+        message: `Unhandled Exception: ${msg}`,
+        is_acknowledged: false,
+        resolved_at: null,
+        created_at: new Date().toISOString()
+      };
+      setAlerts(prev => [errorAlert, ...prev.filter(a => a.id !== errorAlert.id)]);
+      setDismissedIds(prev => {
+        const updated = new Set(prev);
+        updated.delete(errorAlert.id);
+        return updated;
+      });
+      if (soundEnabled) playAlertChime('WARNING');
+    };
+
     window.addEventListener('swl:new-alert-popup', handleNewAlertEvent);
+    window.addEventListener('swl:reset-alert-popups', handleResetPopups);
+    window.addEventListener('swl:show-error-popup', handleGenericErrorPopup);
+    window.addEventListener('error', handleWindowError);
+    window.addEventListener('unhandledrejection', handleWindowRejection);
 
     return () => {
       clearInterval(interval);
+      supabase.removeChannel(channel);
       unsubscribe();
       window.removeEventListener('swl:new-alert-popup', handleNewAlertEvent);
+      window.removeEventListener('swl:reset-alert-popups', handleResetPopups);
+      window.removeEventListener('swl:show-error-popup', handleGenericErrorPopup);
+      window.removeEventListener('error', handleWindowError);
+      window.removeEventListener('unhandledrejection', handleWindowRejection);
     };
   }, [fetchActiveAlerts, soundEnabled, isAuthPage]);
 
@@ -183,30 +332,42 @@ export default function AlertPopupModal() {
 
   const currentAlert = activeAlerts[currentIndex] || activeAlerts[0];
 
-  const handleResolveAlert = (id: string) => {
+  const handleResolveAlert = async (id: string) => {
     try {
-      supabase.from('alerts').update({
+      await supabase.from('alerts').update({
         is_acknowledged: true,
         resolved_at: new Date().toISOString()
       }).eq('id', id);
     } catch (e) {
-      console.error('Error resolving alert:', e);
+      console.error('Error resolving alert in Supabase:', e);
     }
 
-    setAlerts(prev => prev.filter(a => a.id !== id));
-    setDismissedIds(prev => {
-      const copy = new Set(prev);
-      copy.add(id);
-      return copy;
-    });
+    try {
+      const all = mockDb.getAlerts();
+      const target = all.find(a => a.id === id);
+      if (target) {
+        mockDb.saveAlert({
+          ...target,
+          is_acknowledged: true,
+          resolved_at: new Date().toISOString()
+        });
+      }
+    } catch {}
 
-    if (currentIndex >= activeAlerts.length - 1 && currentIndex > 0) {
-      setCurrentIndex(currentIndex - 1);
-    }
+    handleDismissCurrent(id);
+    await fetchActiveAlerts();
   };
 
   const handleDismissCurrent = (id: string) => {
-    setDismissedIds(prev => new Set(prev).add(id));
+    setDismissedIds(prev => {
+      const next = new Set(prev).add(id);
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.setItem('swl_dismissed_alert_popups', JSON.stringify(Array.from(next)));
+        } catch {}
+      }
+      return next;
+    });
     if (currentIndex >= activeAlerts.length - 1 && currentIndex > 0) {
       setCurrentIndex(currentIndex - 1);
     }
@@ -318,12 +479,6 @@ export default function AlertPopupModal() {
             <p className="text-xs text-slate-200 font-medium leading-snug">
               {currentAlert.message}
             </p>
-
-            {currentAlert.vehicle_id && (
-              <p className="text-[10px] font-mono text-blue-400 pt-0.5">
-                Vehicle: {currentAlert.vehicle_id}
-              </p>
-            )}
           </div>
         </div>
 

@@ -35,38 +35,28 @@ export default function UsersPage() {
 
   const loadData = async () => {
     try {
-      const regUsersStr = localStorage.getItem('sih_registered_users');
-      if (regUsersStr) {
-        const regUsers = JSON.parse(regUsersStr) as Array<{ id: string; fullName: string; email: string; role: string }>;
-        const existingRes = await supabase.from('profiles').select();
-        const existingProfiles = (existingRes.data || []) as Profile[];
-        const existingIds = new Set(existingProfiles.map(p => p.id));
-        const existingEmails = new Set(existingProfiles.map(p => p.email.toLowerCase()));
-        
-        for (const ru of regUsers) {
-          if (!existingIds.has(ru.id) && !existingEmails.has(ru.email.toLowerCase())) {
-            await supabase.from('profiles').insert({
-              id: ru.id,
-              full_name: ru.fullName,
-              email: ru.email,
-              role: ru.role,
-              is_active: false,
-              assigned_warehouse_ids: [],
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            });
-          }
+      let list: Profile[] = [];
+      const res = await supabase.from('profiles').select();
+      if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+        list = res.data as Profile[];
+      } else {
+        // Fallback to server API to ensure cross-device sync without RLS filter
+        const apiRes = await fetch('/api/db', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'select', table: 'profiles' })
+        }).then(r => r.json());
+        if (apiRes && apiRes.data && Array.isArray(apiRes.data)) {
+          list = apiRes.data;
         }
       }
-    } catch (e) {}
+      setUsers(list.map(p => ({ ...p })));
 
-    const res = await supabase.from('profiles').select();
-    const list = res.data || [];
-    setUsers((list as Profile[]).map(p => ({ ...p })));
-
-    const wRes = await supabase.from('warehouses').select();
-    const wList = wRes.data || [];
-    setWarehouses(wList as Warehouse[]);
+      const wRes = await supabase.from('warehouses').select();
+      setWarehouses((wRes.data || []) as Warehouse[]);
+    } catch (err) {
+      console.error('Failed to load user management data:', err);
+    }
   };
 
   useEffect(() => {
@@ -112,22 +102,26 @@ export default function UsersPage() {
       return;
     }
 
-    await supabase.from('profiles').update({ is_active: !currentStatus }).eq('id', id);
+    try {
+      await fetch('/api/users/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: id,
+          updates: { is_active: !currentStatus },
+          adminEmail: user?.email
+        })
+      });
+    } catch (err) {
+      console.error('Failed to update user status via API:', err);
+      await supabase.from('profiles').update({ is_active: !currentStatus }).eq('id', id);
+    }
 
     const mockDb = require('@/lib/supabase/mockDb').default;
     const profile = mockDb.getProfiles().find((p: any) => p.id === id);
     if (profile) {
       mockDb.saveProfile({ ...profile, is_active: !currentStatus });
     }
-
-    try {
-      const regUsersStr = localStorage.getItem('sih_registered_users');
-      if (regUsersStr) {
-        const regUsers = JSON.parse(regUsersStr);
-        const updated = regUsers.map((u: any) => u.id === id ? { ...u, is_active: !currentStatus } : u);
-        localStorage.setItem('sih_registered_users', JSON.stringify(updated));
-      }
-    } catch (e) { /* ignore */ }
 
     await loadData();
   };
@@ -144,14 +138,6 @@ export default function UsersPage() {
     // Always activate if saving from edit modal when pending
     if (!editingUser.is_active) {
       updates.is_active = true;
-      try {
-        const regUsersStr = localStorage.getItem('sih_registered_users');
-        if (regUsersStr) {
-          const regUsers = JSON.parse(regUsersStr);
-          const updated = regUsers.map((u: any) => u.id === editingUser.id ? { ...u, is_active: true } : u);
-          localStorage.setItem('sih_registered_users', JSON.stringify(updated));
-        }
-      } catch (e) {}
     }
 
     if (['MANAGER'].includes(editRole)) {
@@ -160,24 +146,50 @@ export default function UsersPage() {
       updates.assigned_warehouse_ids = [];
     }
 
-    await supabase.from('profiles').update(updates).eq('id', editingUser.id);
+    try {
+      await fetch('/api/users/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: editingUser.id,
+          updates,
+          adminEmail: user?.email
+        })
+      });
+    } catch (err) {
+      console.error('Failed to update user via API:', err);
+      await supabase.from('profiles').update(updates).eq('id', editingUser.id);
+    }
 
     setEditingUser(null);
     await loadData();
   };
 
-  const handleDeleteUser = (id: string) => {
-    const mockDb = require('@/lib/supabase/mockDb').default;
-    mockDb.deleteProfile(id);
+  const handleDeleteUser = async (id: string) => {
+    if (id === user?.id) {
+      alert('You cannot delete your own admin account while logged in.');
+      return;
+    }
+
+    if (!confirm('Are you sure you want to permanently delete this user?')) return;
+
     try {
-      const regUsersStr = localStorage.getItem('sih_registered_users');
-      if (regUsersStr) {
-        const regUsers = JSON.parse(regUsersStr);
-        const filtered = regUsers.filter((u: any) => u.id !== id);
-        localStorage.setItem('sih_registered_users', JSON.stringify(filtered));
+      const res = await fetch('/api/users/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: id })
+      });
+
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        alert('Failed to delete user: ' + (data.error?.message || 'Server error'));
+        return;
       }
-    } catch (e) {}
-    loadData();
+
+      await loadData();
+    } catch (err: any) {
+      alert('Error deleting user: ' + err.message);
+    }
   };
 
   // Filter users based on search and roles

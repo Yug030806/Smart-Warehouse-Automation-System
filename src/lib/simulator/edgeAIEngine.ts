@@ -356,7 +356,7 @@ export class EdgeAIEngine {
       mockDb.saveVehicle({
         ...v,
         last_decision_id: decision.id,
-        obstacle_count: v.obstacle_count + (type === 'STOP' || type === 'EMERGENCY_STOP' ? 1 : 0)
+        obstacle_count: (v.obstacle_count || 0) + (type === 'STOP' || type === 'EMERGENCY_STOP' ? 1 : 0)
       });
     }
 

@@ -251,10 +251,10 @@ BEGIN
       created_at,
       updated_at
     ) VALUES 
-      ('00000000-0000-0000-0000-000000000000', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'authenticated', 'authenticated', 'admin@demo.com', crypt('admin123', gen_salt('bf')), NOW(), '{"provider":"email","providers":["email"]}', '{"full_name":"Admin Sarah Jenkins"}', NOW(), NOW()),
-      ('00000000-0000-0000-0000-000000000000', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'authenticated', 'authenticated', 'manager@demo.com', crypt('manager123', gen_salt('bf')), NOW(), '{"provider":"email","providers":["email"]}', '{"full_name":"Manager Marcus Vance"}', NOW(), NOW()),
-      ('00000000-0000-0000-0000-000000000000', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33', 'authenticated', 'authenticated', 'operator@demo.com', crypt('operator123', gen_salt('bf')), NOW(), '{"provider":"email","providers":["email"]}', '{"full_name":"Operator David Chen"}', NOW(), NOW()),
-      ('00000000-0000-0000-0000-000000000000', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a44', 'authenticated', 'authenticated', 'elena@demo.com', crypt('operator123', gen_salt('bf')), NOW(), '{"provider":"email","providers":["email"]}', '{"full_name":"Operator Elena Rostova"}', NOW(), NOW())
+      ('00000000-0000-0000-0000-000000000000', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'authenticated', 'authenticated', 'admin@demo.com', crypt('admin123', gen_salt('bf')), NOW(), '{"provider":"email","providers":["email"]}', '{"full_name":"Admin"}', NOW(), NOW()),
+      ('00000000-0000-0000-0000-000000000000', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'authenticated', 'authenticated', 'manager@demo.com', crypt('manager123', gen_salt('bf')), NOW(), '{"provider":"email","providers":["email"]}', '{"full_name":"Manager"}', NOW(), NOW()),
+      ('00000000-0000-0000-0000-000000000000', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33', 'authenticated', 'authenticated', 'operator@demo.com', crypt('operator123', gen_salt('bf')), NOW(), '{"provider":"email","providers":["email"]}', '{"full_name":"AMR Operator"}', NOW(), NOW()),
+      ('00000000-0000-0000-0000-000000000000', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a44', 'authenticated', 'authenticated', 'elena@demo.com', crypt('operator123', gen_salt('bf')), NOW(), '{"provider":"email","providers":["email"]}', '{"full_name":"AMR Operator"}', NOW(), NOW())
     ON CONFLICT (id) DO NOTHING;
   END IF;
 EXCEPTION WHEN OTHERS THEN
@@ -265,10 +265,10 @@ END $$;
 -- 3. Profiles
 INSERT INTO profiles (id, full_name, email, role, avatar_url, is_active)
 VALUES 
-  ('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'Admin Sarah Jenkins', 'admin@demo.com', 'ADMIN', 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150', true),
-  ('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'Manager Marcus Vance', 'manager@demo.com', 'MANAGER', 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150', true),
-  ('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33', 'Operator David Chen', 'operator@demo.com', 'OPERATOR', 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150', true),
-  ('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a44', 'Operator Elena Rostova', 'elena@demo.com', 'OPERATOR', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150', true)
+  ('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'Admin', 'admin@demo.com', 'ADMIN', 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150', true),
+  ('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'Manager', 'manager@demo.com', 'MANAGER', 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150', true),
+  ('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33', 'AMR Operator', 'operator@demo.com', 'OPERATOR', 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150', true),
+  ('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a44', 'AMR Operator', 'elena@demo.com', 'OPERATOR', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150', true)
 ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, role = EXCLUDED.role;
 
 -- 4. Warehouses

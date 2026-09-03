@@ -100,13 +100,16 @@ export default function WarehousesPage() {
         const fRes = await supabase.from('floors').select().eq('warehouse_id', selectedWarehouse.id);
         const f = fRes.data || [];
         setFloors(f as Floor[]);
-        if (f.length > 0 && !selectedFloor) {
+        if (f.length > 0 && (!selectedFloor || !f.some((item: any) => item.id === selectedFloor.id))) {
           setSelectedFloor(f[0] as Floor);
         } else if (f.length === 0) {
           setSelectedFloor(null);
         }
       };
       fetchFloors();
+    } else {
+      setFloors([]);
+      setSelectedFloor(null);
     }
   }, [selectedWarehouse]);
 

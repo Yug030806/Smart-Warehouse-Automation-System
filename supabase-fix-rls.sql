@@ -1,7 +1,7 @@
 -- ============================================================================
 -- SMART WAREHOUSE AUTONOMOUS SYSTEM (SWL) - UNIVERSAL RLS FIX SCRIPT
 -- Description: Fixes "new row violates row-level security policy" for all tables.
--- File: supabase/migrations/20260903000001_fix_rls_for_anon_and_service.sql
+-- Execution: Copy and run this entire script in Supabase Dashboard -> SQL Editor -> Run
 -- ============================================================================
 
 -- 1. DISABLE ROW LEVEL SECURITY (RLS) ACROSS ALL PUBLIC TABLES
@@ -53,3 +53,9 @@ GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
+
+-- Verification query
+SELECT tablename, rowsecurity 
+FROM pg_tables 
+WHERE schemaname = 'public'
+ORDER BY tablename;

@@ -1,5 +1,7 @@
 import { supabase } from '@/lib/supabase/client';
+import { mockDb } from '@/lib/supabase/mockDb';
 import { Alert } from '@/lib/database.types';
+import { generateUUID } from '@/lib/uuid';
 
 export interface CreateAlertInput {
   type: Alert['type'];
@@ -14,7 +16,7 @@ export interface CreateAlertInput {
  */
 export function triggerGlobalAlert(input: CreateAlertInput): Alert {
   const newAlert: Alert = {
-    id: `alert-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    id: generateUUID(),
     type: input.type,
     severity: input.severity,
     message: input.message,
@@ -25,11 +27,18 @@ export function triggerGlobalAlert(input: CreateAlertInput): Alert {
     created_at: new Date().toISOString(),
   };
 
-  // Insert into Supabase / MockDB
+  // Insert into Supabase
   try {
     supabase.from('alerts').insert(newAlert);
   } catch (err) {
-    console.error('Failed to insert alert to DB:', err);
+    console.error('Failed to insert alert to Supabase DB:', err);
+  }
+
+  // Also save to mockDb for instant local cache availability
+  try {
+    mockDb.saveAlert(newAlert);
+  } catch (err) {
+    console.error('Failed to save alert to mockDb:', err);
   }
 
   // Dispatch custom window event for real-time pop-up notification
@@ -38,4 +47,15 @@ export function triggerGlobalAlert(input: CreateAlertInput): Alert {
   }
 
   return newAlert;
+}
+
+/**
+ * Helper to display any error as a pop-up alert across any section of the website.
+ */
+export function showAppError(message: string, severity: 'CRITICAL' | 'WARNING' | 'INFO' = 'CRITICAL', type: Alert['type'] = 'SYSTEM_ERROR') {
+  return triggerGlobalAlert({
+    type,
+    severity,
+    message
+  });
 }

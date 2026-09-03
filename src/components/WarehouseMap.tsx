@@ -16,11 +16,13 @@ interface WarehouseMapProps {
   showSensorRange?: boolean;
   edgeDecisions?: EdgeAIDecision[];
   fleetMessages?: FleetMessage[];
+  warehouseName?: string;
 }
 
-export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, onGridClick, obstacles = [], showSensorRange = false, edgeDecisions = [], fleetMessages = [] }: WarehouseMapProps) {
+export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, onGridClick, obstacles = [], showSensorRange = false, edgeDecisions = [], fleetMessages = [], warehouseName }: WarehouseMapProps) {
   const [locations, setLocations] = useState<Location[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [resolvedWarehouseName, setResolvedWarehouseName] = useState<string>(warehouseName || '');
 
   useEffect(() => {
     let isMounted = true;
@@ -49,6 +51,20 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
         if (isMounted && vehRes.data) {
           const vehs = (vehRes.data || []) as Vehicle[];
           setVehicles(vehs.filter((v: any) => v.current_floor_id === activeFloorId));
+        }
+
+        if (warehouseName) {
+          if (isMounted) setResolvedWarehouseName(warehouseName);
+        } else {
+          const wRes = await supabase
+            .from('floors')
+            .select('warehouse_id, warehouses(name)')
+            .eq('id', activeFloorId)
+            .single();
+          if (isMounted && wRes.data) {
+            const wName = (wRes.data as any)?.warehouses?.name;
+            if (wName) setResolvedWarehouseName(wName);
+          }
         }
       } catch (err) {
         console.error('Failed to load map coordinates and vehicles:', err);
@@ -99,8 +115,8 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative z-10">
           <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
-            <span className="text-xs font-bold text-slate-300 uppercase tracking-widest">Warehouse Digital Twin Layout</span>
+            {resolvedWarehouseName && <span className="h-2 w-2 rounded-full bg-cyan-400 animate-ping" />}
+            <span className="text-xs font-bold text-slate-300 uppercase tracking-widest">{resolvedWarehouseName}</span>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-[11px] sm:text-xs">
             <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-blue-500/20 border border-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.3)]"></span><span className="text-slate-400 font-medium">Rack</span></div>

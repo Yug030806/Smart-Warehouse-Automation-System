@@ -222,6 +222,16 @@ class MockDB {
               }
             });
           }
+          // Auto-resolve any legacy calibration test alerts so they never persist in user storage
+          if (this.state.alerts) {
+            this.state.alerts.forEach(a => {
+              if (a.message && a.message.includes('elevator calibration')) {
+                a.is_acknowledged = true;
+                a.resolved_at = a.resolved_at || new Date().toISOString();
+                mutated = true;
+              }
+            });
+          }
           if (mutated) {
             this.save();
           }

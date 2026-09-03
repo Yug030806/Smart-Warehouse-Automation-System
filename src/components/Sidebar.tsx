@@ -7,7 +7,7 @@ import { usePreventScroll } from '@/lib/usePreventScroll';
 import { 
   LayoutDashboard, 
   Boxes, 
-  Truck, 
+  Bot, 
   ClipboardList, 
   Map, 
   ScanQrCode, 
@@ -39,7 +39,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['ADMIN', 'MANAGER', 'OPERATOR'] },
     { name: 'Warehouses', href: '/warehouses', icon: Warehouse, roles: ['ADMIN', 'MANAGER'] },
     { name: 'Boxes Management', href: '/boxes', icon: Boxes, roles: ['ADMIN', 'MANAGER', 'OPERATOR'] },
-    { name: 'Vehicles', href: '/vehicles', icon: Truck, roles: ['ADMIN', 'MANAGER', 'OPERATOR'] },
+    { name: 'AMR', href: '/vehicles', icon: Bot, roles: ['ADMIN', 'MANAGER', 'OPERATOR'] },
     { name: 'Transportation Tasks', href: '/tasks', icon: ClipboardList, roles: ['ADMIN', 'MANAGER', 'OPERATOR'] },
     { name: 'Live Map Tracking', href: '/tracking', icon: Map, roles: ['ADMIN', 'MANAGER', 'OPERATOR'] },
     { name: 'QR Scan Console', href: '/scanner', icon: ScanQrCode, roles: ['ADMIN', 'MANAGER', 'OPERATOR'] },

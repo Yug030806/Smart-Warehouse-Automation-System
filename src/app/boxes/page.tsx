@@ -8,7 +8,7 @@ import RoleGuard from '@/components/RoleGuard';
 import { useAuth } from '@/lib/supabase/AuthProvider';
 import { usePreventScroll } from '@/lib/usePreventScroll';
 import { Plus, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, FileDown, Edit3, Trash2, Link2 } from 'lucide-react';
-import { Box, Location } from '@/lib/database.types';
+import { Box, Location, Floor, Warehouse } from '@/lib/database.types';
 import { generateUUID } from '@/lib/uuid';
 import Link from 'next/link';
 
@@ -17,6 +17,8 @@ export default function BoxesPage() {
   const userRole = user?.user_metadata?.role || 'OPERATOR';
   const [boxes, setBoxes] = useState<Box[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [floors, setFloors] = useState<Floor[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   
   // Search, sorting, pagination state
   const [searchQuery, setSearchQuery] = useState('');
@@ -37,20 +39,33 @@ export default function BoxesPage() {
   const [destLoc, setDestLoc] = useState('');
   const [priority, setPriority] = useState<'NORMAL' | 'HIGH' | 'URGENT'>('NORMAL');
 
+  // Custom location entry state
+  const [srcMode, setSrcMode] = useState<'SELECT' | 'CUSTOM'>('SELECT');
+  const [destMode, setDestMode] = useState<'SELECT' | 'CUSTOM'>('SELECT');
+  const [srcCustomFloorId, setSrcCustomFloorId] = useState('');
+  const [srcCustomName, setSrcCustomName] = useState('');
+  const [destCustomFloorId, setDestCustomFloorId] = useState('');
+  const [destCustomName, setDestCustomName] = useState('');
+
   const loadBoxes = async () => {
-    const bRes = await supabase.from('boxes').select();
+    const [bRes, pRes, lRes, fRes, wRes] = await Promise.all([
+      supabase.from('boxes').select(),
+      supabase.from('profiles').select(),
+      supabase.from('locations').select(),
+      supabase.from('floors').select(),
+      supabase.from('warehouses').select()
+    ]);
+
     let list = (bRes.data || []) as any[];
-    const pRes = await supabase.from('profiles').select();
     const pList = pRes.data || [];
     const currentUserProfile = pList.find((p: any) => p.id === user?.id);
     const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
     const isRestricted = ['MANAGER'].includes(userRole as string);
-    const lRes = await supabase.from('locations').select();
-    let locs = lRes.data || [];
+    let locs = (lRes.data || []) as Location[];
+    const fls = (fRes.data || []) as Floor[];
+    const whs = (wRes.data || []) as Warehouse[];
 
     if (isRestricted && assignedWarehouses.length > 0) {
-      const fRes = await supabase.from('floors').select();
-      const fls = (fRes.data || []) as any[];
       const allowedF = fls.filter((f: any) => assignedWarehouses.includes(f.warehouse_id)).map((f: any) => f.id);
       const allowedL = locs.filter((l: any) => allowedF.includes(l.floor_id)).map((l: any) => l.id);
       
@@ -60,9 +75,22 @@ export default function BoxesPage() {
 
     setBoxes(list as Box[]);
     setLocations(locs as Location[]);
+    setFloors(fls);
+    setWarehouses(whs);
+
+    if (fls.length > 0) {
+      if (!srcCustomFloorId) setSrcCustomFloorId(fls[0].id);
+      if (!destCustomFloorId) setDestCustomFloorId(fls[1]?.id || fls[0].id);
+    }
+
     if (locs.length > 0 && !srcLoc) {
       setSrcLoc(locs[0].id);
-      setDestLoc(locs[1]?.id || locs[0].id);
+    }
+    if (locs.length > 1 && !destLoc) {
+      setDestLoc(locs[1].id);
+    } else if (locs.length <= 1 && !destLoc) {
+      // If there are 0 or only 1 location in the entire database, default destination to CUSTOM
+      setDestMode('CUSTOM');
     }
   };
 
@@ -72,59 +100,141 @@ export default function BoxesPage() {
     return () => clearInterval(interval);
   }, []);
 
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const getLocationLabel = (l: Location) => {
+    const floor = floors.find(f => f.id === l.floor_id);
+    const warehouse = warehouses.find(w => w.id === floor?.warehouse_id);
+    const floorName = floor ? (floor.name || `Floor ${floor.floor_number}`) : 'Floor 1';
+    return warehouse ? `${l.name} (${warehouse.name} - ${floorName})` : `${l.name} (${floorName})`;
+  };
+
   const handleAddBox = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!boxCode || !prodName) return;
 
-    const newId = generateUUID();
-    const newBox: Box = {
-      id: newId,
-      box_code: boxCode,
-      product_name: prodName,
-      category,
-      weight: Number(weight),
-      current_location_id: srcLoc,
-      destination_location_id: destLoc,
-      priority,
-      status: 'WAITING',
-      qr_code_data: boxCode,
-      created_by: user?.id || 'u-manager',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
+    setModalError(null);
+    setIsSubmitting(true);
 
-    await supabase.from('boxes').insert(newBox);
-    
-    // Auto-create task if box is created
-    const estDistance = 15;
-    const estDuration = 120;
-    
-    const newTask = {
-      id: generateUUID(),
-      task_code: `TSK-${Date.now().toString().substring(7)}`,
-      box_id: newBox.id,
-      vehicle_id: null,
-      source_location_id: srcLoc,
-      destination_location_id: destLoc,
-      priority,
-      status: 'PENDING',
-      priority_score: priority === 'URGENT' ? 100 : (priority === 'HIGH' ? 50 : 10),
-      estimated_distance: estDistance,
-      estimated_duration: estDuration,
-      actual_duration: null,
-      created_by: user?.id || 'u-manager',
-      assigned_at: null,
-      started_at: null,
-      completed_at: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-    await supabase.from('tasks').insert(newTask);
+    try {
+      let finalSrcLocId = srcLoc;
+      let finalDestLocId = destLoc;
 
-    setShowAddModal(false);
-    setBoxCode('');
-    setProdName('');
-    await loadBoxes();
+      // Handle custom source location creation
+      if (srcMode === 'CUSTOM' || !finalSrcLocId) {
+        if (!srcCustomName.trim()) {
+          setModalError('Please enter a source location name.');
+          setIsSubmitting(false);
+          return;
+        }
+        const newLocId = generateUUID();
+        const targetFloor = srcCustomFloorId || floors[0]?.id;
+        const { error: locErr } = await supabase.from('locations').insert({
+          id: newLocId,
+          name: srcCustomName.trim(),
+          floor_id: targetFloor,
+          type: 'PICKUP',
+          x: 1,
+          y: 1
+        });
+        if (locErr) {
+          setModalError('Failed to create source location: ' + locErr.message);
+          setIsSubmitting(false);
+          return;
+        }
+        finalSrcLocId = newLocId;
+      }
+
+      // Handle custom destination location creation
+      if (destMode === 'CUSTOM' || !finalDestLocId) {
+        if (!destCustomName.trim()) {
+          setModalError('Please enter a destination location name.');
+          setIsSubmitting(false);
+          return;
+        }
+        const newLocId = generateUUID();
+        const targetFloor = destCustomFloorId || floors[1]?.id || floors[0]?.id;
+        const { error: locErr } = await supabase.from('locations').insert({
+          id: newLocId,
+          name: destCustomName.trim(),
+          floor_id: targetFloor,
+          type: 'DELIVERY',
+          x: 6,
+          y: 6
+        });
+        if (locErr) {
+          setModalError('Failed to create destination location: ' + locErr.message);
+          setIsSubmitting(false);
+          return;
+        }
+        finalDestLocId = newLocId;
+      }
+
+      const newId = generateUUID();
+      const newBox: Box = {
+        id: newId,
+        box_code: boxCode,
+        product_name: prodName,
+        category,
+        weight: Number(weight),
+        current_location_id: finalSrcLocId,
+        destination_location_id: finalDestLocId,
+        priority,
+        status: 'WAITING',
+        qr_code_data: boxCode,
+        created_by: user?.id || 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      const { error: boxErr } = await supabase.from('boxes').insert(newBox);
+      if (boxErr) {
+        setModalError(boxErr.message);
+        setIsSubmitting(false);
+        return;
+      }
+      
+      // Auto-create task if box is created
+      const estDistance = 15;
+      const estDuration = 120;
+      
+      const newTask = {
+        id: generateUUID(),
+        task_code: `TSK-${Date.now().toString().substring(7)}`,
+        box_id: newBox.id,
+        vehicle_id: null,
+        source_location_id: finalSrcLocId,
+        destination_location_id: finalDestLocId,
+        priority,
+        status: 'PENDING',
+        priority_score: priority === 'URGENT' ? 100 : (priority === 'HIGH' ? 50 : 10),
+        estimated_distance: estDistance,
+        estimated_duration: estDuration,
+        actual_duration: null,
+        created_by: user?.id || 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+        assigned_at: null,
+        started_at: null,
+        completed_at: null,
+        created_at: new Date().toISOString()
+      };
+      
+      const { error: taskErr } = await supabase.from('tasks').insert(newTask);
+      if (taskErr) {
+        setModalError(`Box created, but task creation returned: ${taskErr.message}`);
+        await loadBoxes();
+        return;
+      }
+
+      setShowAddModal(false);
+      setBoxCode('');
+      setProdName('');
+      await loadBoxes();
+    } catch (err: any) {
+      setModalError(err?.message || 'Failed to save box.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Edit Box Modal state
@@ -459,6 +569,12 @@ export default function BoxesPage() {
           <form onSubmit={handleAddBox} className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
             <h3 className="text-lg font-bold text-slate-100">Register New Box Packet</h3>
             
+            {modalError && (
+              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-400">
+                {modalError}
+              </div>
+            )}
+
             <div className="space-y-3">
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Generated Box Code</label>
@@ -511,31 +627,121 @@ export default function BoxesPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Source Location</label>
-                  <select
-                    value={srcLoc}
-                    onChange={e => setSrcLoc(e.target.value)}
-                    className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-400"
-                  >
-                    {locations.map(l => (
-                      <option key={l.id} value={l.id}>{l.name} (Floor {l.floor_id === 'f-01' ? '1' : l.floor_id === 'f-02' ? '2' : '3'})</option>
-                    ))}
-                  </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Source Location */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Source Location</label>
+                    <button
+                      type="button"
+                      onClick={() => setSrcMode(srcMode === 'SELECT' ? 'CUSTOM' : 'SELECT')}
+                      className="text-[10px] font-semibold text-blue-400 hover:text-blue-300 underline"
+                    >
+                      {srcMode === 'SELECT' ? '+ Enter Custom' : 'Pick Existing'}
+                    </button>
+                  </div>
+
+                  {srcMode === 'SELECT' && locations.length > 0 ? (
+                    <select
+                      value={srcLoc}
+                      onChange={e => {
+                        if (e.target.value === '__custom__') {
+                          setSrcMode('CUSTOM');
+                        } else {
+                          setSrcLoc(e.target.value);
+                        }
+                      }}
+                      className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-200 outline-none"
+                    >
+                      {locations.map(l => (
+                        <option key={l.id} value={l.id}>{getLocationLabel(l)}</option>
+                      ))}
+                      <option value="__custom__">+ Enter Custom Location...</option>
+                    </select>
+                  ) : (
+                    <div className="space-y-1.5 p-2 rounded-lg bg-slate-950/60 border border-slate-800">
+                      <div>
+                        <span className="text-[9px] font-semibold text-slate-500 block mb-0.5">Floor Level</span>
+                        <select
+                          value={srcCustomFloorId}
+                          onChange={e => setSrcCustomFloorId(e.target.value)}
+                          className="w-full p-1.5 rounded border border-slate-800 bg-slate-900 text-xs text-slate-200 outline-none"
+                        >
+                          {floors.map(f => (
+                            <option key={f.id} value={f.id}>{f.name || `Floor ${f.floor_number}`}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-semibold text-slate-500 block mb-0.5">Location Name</span>
+                        <input
+                          type="text"
+                          placeholder="e.g. Inbound Dock 1"
+                          value={srcCustomName}
+                          onChange={e => setSrcCustomName(e.target.value)}
+                          className="w-full p-1.5 rounded border border-slate-800 bg-slate-900 text-xs text-slate-100 placeholder-slate-600 outline-none"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Destination Location</label>
-                  <select
-                    value={destLoc}
-                    onChange={e => setDestLoc(e.target.value)}
-                    className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-400"
-                  >
-                    {locations.map(l => (
-                      <option key={l.id} value={l.id}>{l.name} (Floor {l.floor_id === 'f-01' ? '1' : l.floor_id === 'f-02' ? '2' : '3'})</option>
-                    ))}
-                  </select>
+                {/* Destination Location */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Destination Location</label>
+                    <button
+                      type="button"
+                      onClick={() => setDestMode(destMode === 'SELECT' ? 'CUSTOM' : 'SELECT')}
+                      className="text-[10px] font-semibold text-blue-400 hover:text-blue-300 underline"
+                    >
+                      {destMode === 'SELECT' ? '+ Enter Custom' : 'Pick Existing'}
+                    </button>
+                  </div>
+
+                  {destMode === 'SELECT' && locations.length > 0 ? (
+                    <select
+                      value={destLoc}
+                      onChange={e => {
+                        if (e.target.value === '__custom__') {
+                          setDestMode('CUSTOM');
+                        } else {
+                          setDestLoc(e.target.value);
+                        }
+                      }}
+                      className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-200 outline-none"
+                    >
+                      {locations.map(l => (
+                        <option key={l.id} value={l.id}>{getLocationLabel(l)}</option>
+                      ))}
+                      <option value="__custom__">+ Enter Custom Location...</option>
+                    </select>
+                  ) : (
+                    <div className="space-y-1.5 p-2 rounded-lg bg-slate-950/60 border border-slate-800">
+                      <div>
+                        <span className="text-[9px] font-semibold text-slate-500 block mb-0.5">Floor Level</span>
+                        <select
+                          value={destCustomFloorId}
+                          onChange={e => setDestCustomFloorId(e.target.value)}
+                          className="w-full p-1.5 rounded border border-slate-800 bg-slate-900 text-xs text-slate-200 outline-none"
+                        >
+                          {floors.map(f => (
+                            <option key={f.id} value={f.id}>{f.name || `Floor ${f.floor_number}`}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-semibold text-slate-500 block mb-0.5">Location Name</span>
+                        <input
+                          type="text"
+                          placeholder="e.g. Delivery Dock 2"
+                          value={destCustomName}
+                          onChange={e => setDestCustomName(e.target.value)}
+                          className="w-full p-1.5 rounded border border-slate-800 bg-slate-900 text-xs text-slate-100 placeholder-slate-600 outline-none"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

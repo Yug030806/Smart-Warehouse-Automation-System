@@ -9,15 +9,17 @@ import {
   ClipboardList, 
   Search, 
   ArrowRight, 
+  Bot, 
   Truck, 
   Play, 
   Pause, 
-  XSquare,
-  Sparkles
+  XSquare, 
+  Sparkles 
 } from 'lucide-react';
 import { useAuth } from '@/lib/supabase/AuthProvider';
 import { usePreventScroll } from '@/lib/usePreventScroll';
-import { Task, Vehicle, Box, Location } from '@/lib/database.types';
+import { Task, Vehicle, Box, Location, Floor, RouteSegment } from '@/lib/database.types';
+import { generateUUID } from '@/lib/uuid';
 
 export default function TasksPage() {
   const { user } = useAuth();
@@ -26,15 +28,18 @@ export default function TasksPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [boxes, setBoxes] = useState<Box[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [floors, setFloors] = useState<Floor[]>([]);
 
   // Search & Recommendations
   const [searchQuery, setSearchQuery] = useState('');
   const [recommendedTask, setRecommendedTask] = useState<Task | null>(null);
   const [recReason, setRecReason] = useState('');
 
-  // Manual assignment state
+  // Assignment states
   const [manualAssignTask, setManualAssignTask] = useState<Task | null>(null);
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string>('');
+  const [selectedVehicleId, setSelectedVehicleId] = useState('');
+  const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null);
+  const [isManualAssigning, setIsManualAssigning] = useState(false);
 
   // Create Task Modal state
   const [showCreateTask, setShowCreateTask] = useState(false);
@@ -57,9 +62,10 @@ export default function TasksPage() {
     const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
     const isRestricted = ['MANAGER'].includes(userRole);
 
+    const fRes = await supabase.from('floors').select();
+    let fls = (fRes.data || []) as Floor[];
+
     if (isRestricted && assignedWarehouses.length > 0) {
-        const fRes = await supabase.from('floors').select();
-        const fls = (fRes.data || []) as any[];
         const allowedF = fls.filter((f: any) => assignedWarehouses.includes(f.warehouse_id)).map((f: any) => f.id);
         const allowedL = l.filter((loc: any) => allowedF.includes(loc.floor_id)).map((loc: any) => loc.id);
 
@@ -67,12 +73,14 @@ export default function TasksPage() {
         b = b.filter((bx: any) => allowedL.includes(bx.current_location_id));
         t = t.filter((tsk: any) => allowedL.includes(tsk.source_location_id));
         l = l.filter((loc: any) => allowedL.includes(loc.id));
+        fls = fls.filter((f: any) => allowedF.includes(f.id));
     }
 
     setTasks(t as Task[]);
     setVehicles(v as Vehicle[]);
     setBoxes(b as Box[]);
     setLocations(l as Location[]);
+    setFloors(fls);
   };
 
   useEffect(() => {
@@ -119,171 +127,215 @@ export default function TasksPage() {
   }, [tasks, boxes]);
 
   // Vehicle Selection and Task Assignment Engine
-  const handleAutoAssign = (taskId: string) => {
+  // Vehicle Selection and Task Assignment Engine
+  const handleAutoAssign = async (taskId: string) => {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
 
     // Filter available vehicles (battery > 15)
-    const candidates = vehicles.filter(v => v.status === 'AVAILABLE' && v.battery_percentage > 15);
+    const candidates = vehicles.filter(v => v.status === 'AVAILABLE' && (v.battery_percentage ?? 100) > 15);
     if (candidates.length === 0) {
-      supabase.from('alerts').insert({
-        id: `alert-${Date.now()}`,
-        type: 'SYSTEM_ERROR',
-        severity: 'CRITICAL',
-        message: `Task ${task.task_code} failed auto-assignment: No available vehicles in database.`,
-        task_id: taskId,
-        is_acknowledged: false,
-        resolved_at: null,
-        created_at: new Date().toISOString()
-      });
+      alert('No available AMR found with battery > 15%. Please commission an AMR or wait for an active AMR to become available.');
       return;
     }
 
-    const srcLoc = locations.find(l => l.id === task.source_location_id);
-    if (!srcLoc) return;
+    setAssigningTaskId(taskId);
 
-    // Selection criteria:
-    // Distance score = math grid distance + floor penalty (5 units per floor change)
-    let bestVehicle: Vehicle = candidates[0];
-    let minDistanceScore = 99999;
+    try {
+      const srcLoc = locations.find(l => l.id === task.source_location_id);
+      const destLoc = locations.find(l => l.id === task.destination_location_id);
 
-    candidates.forEach(v => {
-      // Find starting location or coordinates of candidate
-      const dx = Math.abs(v.x_position - srcLoc.x);
-      const dy = Math.abs(v.y_position - srcLoc.y);
-      const gridDist = dx + dy;
+      const srcFloor = srcLoc ? srcLoc.floor_id : (floors[0]?.id || '');
+      const srcX = srcLoc ? srcLoc.x : 1;
+      const srcY = srcLoc ? srcLoc.y : 1;
 
-      const isSameFloor = v.current_floor_id === srcLoc.floor_id;
-      const floorPenalty = isSameFloor ? 0 : 10;
-      const score = gridDist + floorPenalty;
+      const destFloor = destLoc ? destLoc.floor_id : (floors[1]?.id || floors[0]?.id || '');
+      const destX = destLoc ? destLoc.x : 6;
+      const destY = destLoc ? destLoc.y : 6;
 
-      if (score < minDistanceScore) {
-        minDistanceScore = score;
-        bestVehicle = v;
+      let bestVehicle: Vehicle = candidates[0];
+      let minDistanceScore = 99999;
+
+      candidates.forEach(v => {
+        const vx = v.x_position ?? 1;
+        const vy = v.y_position ?? 1;
+        const dx = Math.abs(vx - srcX);
+        const dy = Math.abs(vy - srcY);
+        const gridDist = dx + dy;
+
+        const isSameFloor = v.current_floor_id === srcFloor;
+        const floorPenalty = isSameFloor ? 0 : 10;
+        const score = gridDist + floorPenalty;
+
+        if (score < minDistanceScore) {
+          minDistanceScore = score;
+          bestVehicle = v;
+        }
+      });
+
+      let routePts: RouteSegment[] = [];
+      try {
+        routePts = calculateRoute(
+          bestVehicle.current_floor_id || srcFloor,
+          bestVehicle.x_position ?? 1,
+          bestVehicle.y_position ?? 1,
+          destFloor,
+          destX,
+          destY,
+          locations
+        );
+      } catch {
+        routePts = [
+          { floor_id: bestVehicle.current_floor_id || srcFloor, x: bestVehicle.x_position ?? 1, y: bestVehicle.y_position ?? 1, action: 'MOVE' },
+          { floor_id: destFloor, x: destX, y: destY, action: 'DELIVER' }
+        ];
       }
-    });
 
-    // Solve pathfinding route coordinates using A* algorithm
-    const destLoc = locations.find(l => l.id === task.destination_location_id);
-    if (!destLoc) return;
+      await Promise.all([
+        supabase.from('routes').insert({
+          id: generateUUID(),
+          task_id: taskId,
+          path_coordinates: routePts,
+          created_at: new Date().toISOString()
+        }),
+        supabase.from('vehicles').update({
+          status: 'BUSY',
+          current_task_id: taskId
+        }).eq('id', bestVehicle.id),
+        supabase.from('tasks').update({
+          status: 'ASSIGNED',
+          vehicle_id: bestVehicle.id,
+          assigned_at: new Date().toISOString()
+        }).eq('id', taskId),
+        supabase.from('boxes').update({
+          status: 'ASSIGNED'
+        }).eq('id', task.box_id),
+        supabase.from('audit_logs').insert({
+          id: generateUUID(),
+          user_email: user?.email || 'admin@demo.com',
+          action: 'TASK_ASSIGNED',
+          object_type: 'TASK',
+          object_id: taskId,
+          previous_state: { status: 'PENDING' },
+          new_state: { status: 'ASSIGNED', vehicle_id: bestVehicle.id },
+          timestamp: new Date().toISOString()
+        })
+      ]);
 
-    const routePts = calculateRoute(
-      bestVehicle.current_floor_id,
-      bestVehicle.x_position,
-      bestVehicle.y_position,
-      destLoc.floor_id,
-      destLoc.x,
-      destLoc.y,
-      locations
-    );
-
-    // Save assigned route coordinates in Routes table
-    supabase.from('routes').insert({
-      id: `route-${Date.now()}`,
-      task_id: taskId,
-      path_coordinates: routePts,
-      created_at: new Date().toISOString()
-    });
-
-    // Update vehicle properties
-    supabase.from('vehicles').update({
-      status: 'BUSY',
-      current_task_id: taskId
-    }).eq('id', bestVehicle.id);
-
-    // Update task to assigned status
-    supabase.from('tasks').update({
-      status: 'ASSIGNED',
-      vehicle_id: bestVehicle.id,
-      assigned_at: new Date().toISOString()
-    }).eq('id', taskId);
-
-    // Update box status to assigned
-    supabase.from('boxes').update({
-      status: 'ASSIGNED'
-    }).eq('id', task.box_id);
-
-    // Add Audit Log
-    supabase.from('audit_logs').insert({
-      id: `log-${Date.now()}`,
-      user_email: 'system',
-      action: 'TASK_ASSIGNED',
-      object_type: 'TASK',
-      object_id: taskId,
-      previous_state: { status: 'PENDING' },
-      new_state: { status: 'ASSIGNED', vehicle_id: bestVehicle.id },
-      timestamp: new Date().toISOString()
-    });
-
-    loadTasksData();
+      await loadTasksData();
+    } catch (err: any) {
+      console.error('Auto assign error:', err);
+      alert('Failed to auto-assign task: ' + (err?.message || 'Unknown error'));
+    } finally {
+      setAssigningTaskId(null);
+    }
   };
 
-  const handleCancelTask = (taskId: string) => {
+  const handleCancelTask = async (taskId: string) => {
     const t = tasks.find(x => x.id === taskId);
     if (!t) return;
 
     if (t.vehicle_id) {
-      supabase.from('vehicles').update({
+      await supabase.from('vehicles').update({
         status: 'AVAILABLE',
         current_task_id: null
       }).eq('id', t.vehicle_id);
     }
 
-    supabase.from('tasks').update({
+    await supabase.from('tasks').update({
       status: 'CANCELLED'
     }).eq('id', taskId);
 
-    loadTasksData();
+    if (t.box_id) {
+      await supabase.from('boxes').update({
+        status: 'WAITING'
+      }).eq('id', t.box_id);
+    }
+
+    await loadTasksData();
   };
 
   const [selectedBoxId, setSelectedBoxId] = useState<string>('');
   const [taskPriority, setTaskPriority] = useState<'NORMAL' | 'HIGH' | 'URGENT'>('NORMAL');
 
-  const handleManualAssignSubmit = (e: React.FormEvent) => {
+  const handleManualAssignSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualAssignTask || !selectedVehicleId) return;
     const chosen = vehicles.find(v => v.id === selectedVehicleId);
-    const destLoc = locations.find(l => l.id === manualAssignTask.destination_location_id);
-    if (!chosen || !destLoc) return;
+    if (!chosen) {
+      alert('Please select an active AMR vehicle.');
+      return;
+    }
 
-    const routePts = calculateRoute(
-      chosen.current_floor_id,
-      chosen.x_position,
-      chosen.y_position,
-      destLoc.floor_id,
-      destLoc.x,
-      destLoc.y,
-      locations
-    );
+    setIsManualAssigning(true);
 
-    supabase.from('routes').insert({
-      id: `route-${Date.now()}`,
-      task_id: manualAssignTask.id,
-      path_coordinates: routePts,
-      created_at: new Date().toISOString()
-    });
+    try {
+      const destLoc = locations.find(l => l.id === manualAssignTask.destination_location_id);
+      const destFloor = destLoc ? destLoc.floor_id : (floors[1]?.id || floors[0]?.id || '');
+      const destX = destLoc ? destLoc.x : 6;
+      const destY = destLoc ? destLoc.y : 6;
 
-    supabase.from('vehicles').update({
-      status: 'BUSY',
-      current_task_id: manualAssignTask.id
-    }).eq('id', chosen.id);
+      let routePts: RouteSegment[] = [];
+      try {
+        routePts = calculateRoute(
+          chosen.current_floor_id || floors[0]?.id || '',
+          chosen.x_position ?? 1,
+          chosen.y_position ?? 1,
+          destFloor,
+          destX,
+          destY,
+          locations
+        );
+      } catch {
+        routePts = [
+          { floor_id: chosen.current_floor_id || floors[0]?.id || '', x: chosen.x_position ?? 1, y: chosen.y_position ?? 1, action: 'MOVE' },
+          { floor_id: destFloor, x: destX, y: destY, action: 'DELIVER' }
+        ];
+      }
 
-    supabase.from('tasks').update({
-      vehicle_id: chosen.id,
-      status: 'ASSIGNED',
-      assigned_at: new Date().toISOString()
-    }).eq('id', manualAssignTask.id);
+      await Promise.all([
+        supabase.from('routes').insert({
+          id: generateUUID(),
+          task_id: manualAssignTask.id,
+          path_coordinates: routePts,
+          created_at: new Date().toISOString()
+        }),
+        supabase.from('vehicles').update({
+          status: 'BUSY',
+          current_task_id: manualAssignTask.id
+        }).eq('id', chosen.id),
+        supabase.from('tasks').update({
+          vehicle_id: chosen.id,
+          status: 'ASSIGNED',
+          assigned_at: new Date().toISOString()
+        }).eq('id', manualAssignTask.id),
+        supabase.from('boxes').update({
+          status: 'ASSIGNED'
+        }).eq('id', manualAssignTask.box_id),
+        supabase.from('audit_logs').insert({
+          id: generateUUID(),
+          user_email: user?.email || 'admin@demo.com',
+          action: 'TASK_MANUAL_ASSIGNED',
+          object_type: 'TASK',
+          object_id: manualAssignTask.id,
+          previous_state: { status: 'PENDING' },
+          new_state: { status: 'ASSIGNED', vehicle_id: chosen.id },
+          timestamp: new Date().toISOString()
+        })
+      ]);
 
-    supabase.from('boxes').update({
-      status: 'ASSIGNED'
-    }).eq('id', manualAssignTask.box_id);
-
-    setManualAssignTask(null);
-    setSelectedVehicleId('');
-    loadTasksData();
+      setManualAssignTask(null);
+      setSelectedVehicleId('');
+      await loadTasksData();
+    } catch (err: any) {
+      console.error('Manual assign error:', err);
+      alert('Failed to assign AMR: ' + (err?.message || 'Unknown error'));
+    } finally {
+      setIsManualAssigning(false);
+    }
   };
 
-  const handleCreateTaskSubmit = (e: React.FormEvent) => {
+  const handleCreateTaskSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedBoxId) return;
 
@@ -291,7 +343,7 @@ export default function TasksPage() {
     if (!targetBox) return;
 
     const newTask: Task = {
-      id: `task-${Date.now()}`,
+      id: generateUUID(),
       task_code: `TSK-${Date.now().toString().substring(7)}`,
       box_id: targetBox.id,
       vehicle_id: null,
@@ -303,16 +355,19 @@ export default function TasksPage() {
       estimated_distance: 15,
       estimated_duration: 120,
       actual_duration: null,
-      created_by: 'operator@demo.com',
+      created_by: user?.id || 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
       assigned_at: null,
       started_at: null,
       completed_at: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      created_at: new Date().toISOString()
     };
 
-    supabase.from('tasks').insert(newTask);
-    supabase.from('boxes').update({ status: 'WAITING', priority: taskPriority }).eq('id', targetBox.id);
+    const { error: tErr } = await supabase.from('tasks').insert(newTask);
+    if (tErr) {
+      alert(`Failed to create task: ${tErr.message}`);
+      return;
+    }
+    await supabase.from('boxes').update({ status: 'WAITING', priority: taskPriority }).eq('id', targetBox.id);
 
     setShowCreateTask(false);
     setSelectedBoxId('');
@@ -427,13 +482,18 @@ export default function TasksPage() {
                               <>
                                 <button
                                   onClick={() => handleAutoAssign(task.id)}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-[10px] font-bold text-slate-50"
+                                  disabled={assigningTaskId === task.id}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-[10px] font-bold text-slate-50 transition"
                                 >
-                                  <Truck className="h-3.5 w-3.5" /> Auto Assign
+                                  <Bot className="h-3.5 w-3.5" /> {assigningTaskId === task.id ? 'Assigning...' : 'Auto Assign'}
                                 </button>
                                 <button
-                                  onClick={() => { setManualAssignTask(task); setSelectedVehicleId(vehicles.find(v => v.status === 'AVAILABLE')?.id || ''); }}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-950 hover:bg-slate-900 text-[10px] font-bold text-slate-300"
+                                  onClick={() => { 
+                                    const avail = vehicles.filter(v => v.status === 'AVAILABLE');
+                                    setManualAssignTask(task); 
+                                    setSelectedVehicleId(avail.length > 0 ? avail[0].id : ''); 
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-950 hover:bg-slate-900 text-[10px] font-bold text-slate-300 transition"
                                 >
                                   Manual Pick
                                 </button>
@@ -443,7 +503,7 @@ export default function TasksPage() {
                             {['PENDING', 'ASSIGNED'].includes(task.status) && ['ADMIN', 'MANAGER'].includes(userRole) && (
                               <button
                                 onClick={() => handleCancelTask(task.id)}
-                                className="p-1.5 rounded bg-red-950/20 text-red-400 hover:bg-red-950/40"
+                                className="p-1.5 rounded bg-red-950/20 text-red-400 hover:bg-red-950/40 transition"
                                 title="Cancel Task"
                               >
                                 <XSquare className="h-4 w-4" />
@@ -465,7 +525,7 @@ export default function TasksPage() {
       {manualAssignTask && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget) { const cancelBtn = Array.from((e.target as HTMLElement).querySelectorAll('button')).find(b => b.textContent?.match(/cancel|close/i) || b.querySelector('svg.lucide-x')); if (cancelBtn) (cancelBtn as HTMLButtonElement).click(); } }}>
           <form onSubmit={handleManualAssignSubmit} className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-bold text-slate-100">Manual Vehicle Assignment ({manualAssignTask.task_code})</h3>
+            <h3 className="text-lg font-bold text-slate-100">Manual AMR Assignment ({manualAssignTask.task_code})</h3>
 
             <div className="space-y-3">
               <div>
@@ -473,20 +533,42 @@ export default function TasksPage() {
                 <select
                   value={selectedVehicleId}
                   onChange={e => setSelectedVehicleId(e.target.value)}
-                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-100"
+                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-100 outline-none"
                 >
-                  {vehicles.filter(v => v.status === 'AVAILABLE').map(v => (
-                    <option key={v.id} value={v.id}>
-                      {v.vehicle_code} - {v.name} (Battery: {v.battery_percentage}%, Floor {v.current_floor_id === 'f-01' ? '1' : v.current_floor_id === 'f-02' ? '2' : '3'})
-                    </option>
-                  ))}
+                  {(() => {
+                    const availableVehicles = vehicles.filter(v => v.status === 'AVAILABLE');
+                    if (availableVehicles.length === 0) {
+                      return <option value="" disabled>No available AMRs found (all busy or offline)</option>;
+                    }
+                    return availableVehicles.map(v => {
+                      const fl = floors.find(f => f.id === v.current_floor_id);
+                      const flName = fl?.name || (v.current_floor_id ? `Floor ${fl?.floor_number || 1}` : 'Unassigned');
+                      return (
+                        <option key={v.id} value={v.id}>
+                          {v.vehicle_code} - {v.name} (Battery: {v.battery_percentage}%, {flName})
+                        </option>
+                      );
+                    });
+                  })()}
                 </select>
               </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-              <button type="button" onClick={() => setManualAssignTask(null)} className="px-4 py-2 text-xs font-semibold text-slate-400">Cancel</button>
-              <button type="submit" className="px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 rounded-lg">Assign Selected AMR</button>
+              <button 
+                type="button" 
+                onClick={() => setManualAssignTask(null)} 
+                className="px-4 py-2 text-xs font-semibold text-slate-400"
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit" 
+                disabled={isManualAssigning || !selectedVehicleId}
+                className="px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg transition"
+              >
+                {isManualAssigning ? 'Assigning AMR...' : 'Assign Selected AMR'}
+              </button>
             </div>
           </form>
         </div>

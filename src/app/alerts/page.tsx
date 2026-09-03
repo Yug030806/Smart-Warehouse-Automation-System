@@ -44,6 +44,10 @@ export default function AlertsPage() {
   };
 
   const triggerTestAlert = (severity: 'CRITICAL' | 'WARNING' | 'INFO') => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('swl:reset-alert-popups'));
+    }
+
     if (severity === 'CRITICAL') {
       triggerGlobalAlert({
         type: 'BOX_MISMATCH',
@@ -62,10 +66,16 @@ export default function AlertsPage() {
       triggerGlobalAlert({
         type: 'SYSTEM_ERROR',
         severity: 'INFO',
-        message: 'System Info: Autonomous floor 2 elevator calibration scheduled in 10 mins.',
+        message: 'System Info: Automated network telemetry check completed successfully across all floors.',
       });
     }
     loadAlerts();
+  };
+
+  const handleShowPopups = () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('swl:reset-alert-popups'));
+    }
   };
 
   const filtered = alerts.filter(a => {
@@ -87,12 +97,20 @@ export default function AlertsPage() {
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-slate-100 flex items-center gap-2">
                 <span>Active System Alerts</span>
-                <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-950 text-blue-400 border border-blue-800/40 font-mono">Pop-up Enabled</span>
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-950 text-blue-400 border border-blue-800/40 font-mono">Pop-up Activated</span>
               </h1>
               <p className="text-xs sm:text-sm text-slate-400">View active system warnings, hardware anomalies, scanner mismatches and live pop-up alerts.</p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={handleShowPopups}
+                className="px-3 py-1.5 rounded-xl border border-blue-800/60 bg-blue-950/60 text-xs font-bold text-blue-300 hover:bg-blue-900/60 transition flex items-center gap-1.5 shadow-sm"
+              >
+                <BellRing className="h-3.5 w-3.5 text-blue-400 animate-pulse" />
+                Pop-up Active Alerts
+              </button>
+
               <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-900 border border-slate-800">
                 <span className="text-[10px] font-bold uppercase text-slate-400 px-2 flex items-center gap-1">
                   <Sparkles className="h-3 w-3 text-yellow-400" />

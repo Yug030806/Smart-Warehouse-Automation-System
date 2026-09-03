@@ -24,6 +24,8 @@ export default function VehiclesPage() {
   const [vName, setVName] = useState('');
   const [floorId, setFloorId] = useState('');
   const [startLocId, setStartLocId] = useState('');
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Edit Vehicle state
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
@@ -61,7 +63,11 @@ export default function VehiclesPage() {
     setVehicles(list as Vehicle[]);
 
     setFloors(fls as Floor[]);
-    if (fls.length > 0 && !floorId) setFloorId(fls[0].id);
+    if (fls.length > 0 && !floorId) {
+      setFloorId(fls[0].id);
+      const flLocs = (locs as Location[]).filter(l => l.floor_id === fls[0].id);
+      if (flLocs.length > 0 && !startLocId) setStartLocId(flLocs[0].id);
+    }
 
     setLocations(locs as Location[]);
     if (locs.length > 0 && !startLocId) setStartLocId(locs[0].id);
@@ -77,40 +83,57 @@ export default function VehiclesPage() {
 
   const handleAddVehicle = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!vCode || !vName) return;
+    if (!vCode.trim() || !vName.trim()) return;
 
-    // Find start location coordinates
-    const selectedLoc = locations.find(l => l.id === startLocId);
-    const x = selectedLoc ? selectedLoc.x : 5;
-    const y = selectedLoc ? selectedLoc.y : 1;
+    setModalError(null);
+    setIsSubmitting(true);
 
-    const newId = generateUUID();
-    const newVehicle: Vehicle = {
-      id: newId,
-      vehicle_code: vCode,
-      name: vName,
-      status: 'AVAILABLE',
-      battery_percentage: 100,
-      current_location_id: startLocId,
-      current_floor_id: floorId,
-      x_position: x,
-      y_position: y,
-      speed: 1,
-      current_task_id: null,
-      last_seen: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      edge_ai_status: 'ONLINE',
-      sensor_suite_active: true,
-      last_decision_id: null,
-      obstacle_count: 0
-    };
+    try {
+      // Find start location coordinates
+      const selectedLoc = locations.find(l => l.id === startLocId);
+      const x = selectedLoc ? selectedLoc.x : 5;
+      const y = selectedLoc ? selectedLoc.y : 1;
 
-    await supabase.from('vehicles').insert(newVehicle);
-    setShowAddModal(false);
-    setVCode('');
-    setVName('');
-    await loadVehicles();
+      const targetFloorId = floorId || (floors.length > 0 ? floors[0].id : null);
+      if (!targetFloorId) {
+        setModalError('No floor level found to commission this AMR.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const newId = generateUUID();
+      const newVehicle = {
+        id: newId,
+        vehicle_code: vCode.trim(),
+        name: vName.trim(),
+        status: 'AVAILABLE',
+        battery_percentage: 100,
+        current_location_id: startLocId ? startLocId : null,
+        current_floor_id: targetFloorId,
+        x_position: x,
+        y_position: y,
+        speed: 1,
+        current_task_id: null,
+        created_at: new Date().toISOString()
+      };
+
+      const { error } = await supabase.from('vehicles').insert(newVehicle);
+      if (error) {
+        setModalError(error.message);
+        setIsSubmitting(false);
+        return;
+      }
+
+      setShowAddModal(false);
+      setVCode('');
+      setVName('');
+      setModalError(null);
+      setIsSubmitting(false);
+      await loadVehicles();
+    } catch (err: any) {
+      setModalError(err?.message || 'Failed to commission AMR.');
+      setIsSubmitting(false);
+    }
   };
 
   const handleDeleteVehicle = async (id: string) => {
@@ -230,7 +253,12 @@ export default function VehiclesPage() {
                                 {activeTask && <p className="text-[10px] text-slate-500">Active Task: {activeTask.task_code}</p>}
                               </td>
                               <td className="py-4">
-                                <span className="font-medium text-slate-300">Floor {v.current_floor_id === 'f-01' ? '1' : v.current_floor_id === 'f-02' ? '2' : '3'}</span>
+                                <span className="font-medium text-slate-300">
+                                  {(() => {
+                                    const fl = floors.find(f => f.id === v.current_floor_id);
+                                    return fl?.name || (v.current_floor_id ? `Floor ${fl?.floor_number || 1}` : 'Unassigned');
+                                  })()}
+                                </span>
                                 <span className="block text-[10px] text-slate-500 font-mono">[{v.x_position}, {v.y_position}]</span>
                               </td>
                               <td className="py-4">
@@ -372,7 +400,13 @@ export default function VehiclesPage() {
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget) { const cancelBtn = Array.from((e.target as HTMLElement).querySelectorAll('button')).find(b => b.textContent?.match(/cancel|close/i) || b.querySelector('svg.lucide-x')); if (cancelBtn) (cancelBtn as HTMLButtonElement).click(); } }}>
           <form onSubmit={handleAddVehicle} className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-bold text-slate-100">Commission Autonomous Vehicle</h3>
+            <h3 className="text-lg font-bold text-slate-100">Commission Autonomous Vehicle (AMR)</h3>
+
+            {modalError && (
+              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold">
+                {modalError}
+              </div>
+            )}
 
             <div className="space-y-3">
               <div>
@@ -403,11 +437,16 @@ export default function VehiclesPage() {
                   <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Starting Level</label>
                   <select
                     value={floorId}
-                    onChange={e => setFloorId(e.target.value)}
-                    className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-400"
+                    onChange={e => {
+                      const newFid = e.target.value;
+                      setFloorId(newFid);
+                      const flLocs = locations.filter(l => l.floor_id === newFid);
+                      setStartLocId(flLocs.length > 0 ? flLocs[0].id : '');
+                    }}
+                    className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-200 outline-none"
                   >
                     {floors.map(f => (
-                      <option key={f.id} value={f.id}>{f.name}</option>
+                      <option key={f.id} value={f.id}>{f.name || `Floor ${f.floor_number}`}</option>
                     ))}
                   </select>
                 </div>
@@ -417,8 +456,9 @@ export default function VehiclesPage() {
                   <select
                     value={startLocId}
                     onChange={e => setStartLocId(e.target.value)}
-                    className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-400"
+                    className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-200 outline-none"
                   >
+                    <option value="">(Origin Node [5, 1])</option>
                     {locations.filter(l => l.floor_id === floorId).map(l => (
                       <option key={l.id} value={l.id}>{l.name} [{l.x},{l.y}]</option>
                     ))}
@@ -428,8 +468,23 @@ export default function VehiclesPage() {
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-              <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 text-xs font-semibold text-slate-400">Cancel</button>
-              <button type="submit" className="px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 rounded-lg">Commission & Spawn</button>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setShowAddModal(false);
+                  setModalError(null);
+                }} 
+                className="px-4 py-2 text-xs font-semibold text-slate-400"
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit" 
+                disabled={isSubmitting}
+                className="px-4 py-2 text-xs font-semibold text-slate-50 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg transition"
+              >
+                {isSubmitting ? 'Commissioning...' : 'Commission & Spawn'}
+              </button>
             </div>
           </form>
         </div>

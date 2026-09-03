@@ -14,15 +14,18 @@ import {
   Pause, 
   RotateCcw, 
   Terminal,
-  Zap,
   Brain,
   AlertTriangle,
   ShieldAlert,
   Radio,
-  Target
+  Target,
+  Gauge,
+  ArrowUpRight
 } from 'lucide-react';
-import { Vehicle, Task, Location, Box, EdgeAIDecision } from '@/lib/database.types';
+import { Vehicle, Task, Location, Box, EdgeAIDecision, Floor, Warehouse } from '@/lib/database.types';
 import { ObstacleCell } from '@/lib/simulator/edgeAIEngine';
+import { generateUUID } from '@/lib/uuid';
+import { useAuth } from '@/lib/supabase/AuthProvider';
 
 interface LogEntry {
   id: string;
@@ -36,14 +39,18 @@ const floorLabel = (fId: string) => fId === 'f-01' ? '1' : fId === 'f-02' ? '2' 
 type SimMode = 'SINGLE' | 'FLEET';
 
 export default function TrackingPage() {
+  const { user } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [boxes, setBoxes] = useState<Box[]>([]);
+  const [floors, setFloors] = useState<Floor[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('');
 
   // View & Mode State
   const [simMode, setSimMode] = useState<SimMode>('SINGLE');
-  const [selectedFloor, setSelectedFloor] = useState('f-01');
+  const [selectedFloor, setSelectedFloor] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showSensorRanges, setShowSensorRanges] = useState(true);
 
@@ -99,11 +106,13 @@ export default function TrackingPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [vRes, tRes, lRes, bRes] = await Promise.all([
+      const [vRes, tRes, lRes, bRes, fRes, wRes] = await Promise.all([
         supabase.from('vehicles').select(),
         supabase.from('tasks').select(),
         supabase.from('locations').select(),
-        supabase.from('boxes').select()
+        supabase.from('boxes').select(),
+        supabase.from('floors').select(),
+        supabase.from('warehouses').select()
       ]);
 
       const v = (vRes.data || []) as Vehicle[];
@@ -114,6 +123,24 @@ export default function TrackingPage() {
       setLocations(l);
       const b = (bRes.data || []) as Box[];
       setBoxes(b);
+      const fls = (fRes.data || []) as Floor[];
+      setFloors(fls);
+      const whs = (wRes.data || []) as Warehouse[];
+      setWarehouses(whs);
+
+      if (whs.length > 0) {
+        setSelectedWarehouseId(prev => {
+          if (prev && whs.some(w => w.id === prev)) return prev;
+          return whs[0].id;
+        });
+      }
+
+      if (fls.length > 0) {
+        setSelectedFloor(prev => {
+          if (prev && prev !== 'f-01' && fls.some(f => f.id === prev)) return prev;
+          return fls[0].id;
+        });
+      }
 
       setObstacles(fleetCoordinator.getGlobalObstacles());
       setEdgeDecisions(mockDb.getEdgeAIDecisions());
@@ -127,7 +154,9 @@ export default function TrackingPage() {
       if (!hasAutoSelected.current && v.length > 0) {
         hasAutoSelected.current = true;
         setSelectedVehicleId(v[0].id);
-        setSelectedFloor(v[0].current_floor_id);
+        if (v[0].current_floor_id) {
+          setSelectedFloor(v[0].current_floor_id);
+        }
       }
     } catch (err) {
       console.error('Failed to load tracking data:', err);
@@ -223,7 +252,7 @@ export default function TrackingPage() {
       if (!destLocation) return null;
 
       targetTask = {
-        id: `task-sim-${Date.now()}`,
+        id: generateUUID(),
         task_code: `TSK-SIM-${Date.now().toString().substring(8)}`,
         box_id: availableBox.id,
         vehicle_id: veh.id,
@@ -235,12 +264,11 @@ export default function TrackingPage() {
         estimated_distance: 15,
         estimated_duration: 120,
         actual_duration: null,
-        created_by: 'system',
+        created_by: user?.id || 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
         assigned_at: new Date().toISOString(),
         started_at: null,
         completed_at: null,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
       };
       supabase.from('tasks').insert(targetTask);
     }
@@ -294,12 +322,22 @@ export default function TrackingPage() {
     );
   }, [selectedVehicle, ensureAssignedTask, locations, simSpeed, addLog]);
 
-  const handleStartCharging = useCallback(() => {
+  const handleStartOut = useCallback(() => {
     if (!selectedVehicle) return;
-    const charger = locations.find((l) => l.floor_id === selectedVehicle.current_floor_id && l.type === 'CHARGING') || locations.find((l) => l.type === 'CHARGING');
-    if (!charger) return;
-    const pts = calculateRoute(selectedVehicle.current_floor_id, selectedVehicle.x_position, selectedVehicle.y_position, charger.floor_id, charger.x, charger.y, locations);
+    const outLoc = locations.find((l) => l.floor_id === selectedVehicle.current_floor_id && l.type === 'DELIVERY') || 
+                   locations.find((l) => l.type === 'DELIVERY') ||
+                   locations.find((l) => l.name.toUpperCase().includes('OUT'));
+    if (!outLoc) {
+      addLog('No Outbound / Delivery dock location found in warehouse map.', 'WARN');
+      return;
+    }
+
+    addLog(`Dispatching ${selectedVehicle.vehicle_code} to Outbound Dock (${outLoc.name})...`, 'INFO');
+
+    const pts = calculateRoute(selectedVehicle.current_floor_id, selectedVehicle.x_position, selectedVehicle.y_position, outLoc.floor_id, outLoc.x, outLoc.y, locations);
     setActiveRoutePts(pts);
+    addLog(`Calculated route to Out dock: ${pts.length} steps.`, 'INFO');
+
     const controller = new SimulatorVehicleController(selectedVehicle.id);
     controller.connect();
     controller.setSpeed(simSpeed);
@@ -307,15 +345,22 @@ export default function TrackingPage() {
     setIsSimulating(true);
     setIsPaused(false);
 
+    const vCode = selectedVehicle.vehicle_code;
     controller.sendMoveCommand(
       pts,
       (x, y, floorId, index) => {
         setSelectedFloor(floorId);
-        setCurrentStepLabel(`Navigating to ⚡ Charger: Step ${index + 1}/${pts.length}`);
+        setCurrentStepLabel(`Navigating to Outbound Dock: Step ${index + 1}/${pts.length} [X:${x}, Y:${y}]`);
       },
       () => {
-        setCurrentStepLabel(`Battery refueled to 100%.`);
-        supabase.from('vehicles').update({ status: 'CHARGING', battery_percentage: 100, current_location_id: charger.id, x_position: charger.x, y_position: charger.y }).eq('id', selectedVehicle.id);
+        setCurrentStepLabel(`Arrived at Outbound Dock (${outLoc.name}).`);
+        addLog(`✓ ${vCode} arrived at Outbound Dock.`, 'SUCCESS');
+        supabase.from('vehicles').update({ 
+          status: 'AVAILABLE', 
+          current_location_id: outLoc.id, 
+          x_position: outLoc.x, 
+          y_position: outLoc.y 
+        }).eq('id', selectedVehicle.id);
         loadData();
         setIsSimulating(false);
       }
@@ -496,20 +541,47 @@ export default function TrackingPage() {
             {/* Map and controls */}
             <div className="lg:col-span-3 space-y-6">
               
-              <div className="flex items-center justify-between border-b border-slate-900 pb-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-2">Floor View:</span>
-                  {['f-01', 'f-02', 'f-03'].map((fId, idx) => (
-                    <button
-                      key={fId}
-                      onClick={() => setSelectedFloor(fId)}
-                      className={`px-4 py-2 rounded-xl text-xs font-semibold transition ${
-                        selectedFloor === fId ? 'bg-blue-600 text-slate-50 shadow-md' : 'bg-slate-900 text-slate-400 hover:text-slate-200'
-                      }`}
+              <div className="flex flex-wrap items-center justify-between border-b border-slate-900 pb-3 gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  {warehouses.length > 1 && (
+                    <select
+                      value={selectedWarehouseId}
+                      onChange={(e) => {
+                        const newWid = e.target.value;
+                        setSelectedWarehouseId(newWid);
+                        const whF = floors.filter(f => f.warehouse_id === newWid);
+                        if (whF.length > 0) setSelectedFloor(whF[0].id);
+                      }}
+                      className="bg-slate-900 text-xs font-bold text-slate-200 px-3 py-1.5 rounded-xl border border-slate-800 outline-none cursor-pointer mr-2"
                     >
-                      Floor {idx + 1}
-                    </button>
-                  ))}
+                      {warehouses.map((w) => (
+                        <option key={w.id} value={w.id} className="bg-slate-900 text-slate-200">
+                          {w.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">Floor View:</span>
+                  {(() => {
+                    const whFloors = floors.filter(
+                      f => !selectedWarehouseId || f.warehouse_id === selectedWarehouseId
+                    );
+                    if (whFloors.length === 0) {
+                      return <span className="text-xs text-slate-500 italic">No levels configured</span>;
+                    }
+                    return whFloors.map((f, idx) => (
+                      <button
+                        key={f.id}
+                        onClick={() => setSelectedFloor(f.id)}
+                        className={`px-4 py-2 rounded-xl text-xs font-semibold transition ${
+                          selectedFloor === f.id ? 'bg-blue-600 text-slate-50 shadow-md' : 'bg-slate-900 text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {f.name || `Floor ${f.floor_number || idx + 1}`}
+                      </button>
+                    ));
+                  })()}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -526,6 +598,7 @@ export default function TrackingPage() {
               <div className="bg-slate-900/50 rounded-xl border border-slate-800 p-2">
                 <WarehouseMap
                   floorId={selectedFloor}
+                  warehouseName={warehouses.find(w => w.id === (floors.find(f => f.id === selectedFloor)?.warehouse_id || selectedWarehouseId))?.name}
                   selectedVehicle={simMode === 'SINGLE' ? selectedVehicle : null}
                   activeRoute={simMode === 'SINGLE' ? activeRoutePts : []}
                   obstacles={obstacles}
@@ -580,13 +653,37 @@ export default function TrackingPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      {/* Live Speed Multiplier Selector */}
+                      <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 p-1 rounded-xl">
+                        <Gauge className="h-3 w-3 text-blue-400 ml-1.5 mr-0.5" />
+                        {[1, 2, 5, 10].map((s) => (
+                          <button
+                            key={s}
+                            onClick={() => {
+                              setSimSpeed(s);
+                              if (simControllerRef.current) {
+                                simControllerRef.current.setSpeed(s);
+                              }
+                            }}
+                            title={`Set AMR Speed to ${s}x`}
+                            className={`px-2 py-1 rounded-lg text-[10px] font-bold transition ${
+                              simSpeed === s
+                                ? 'bg-blue-600 text-white shadow-sm'
+                                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                            }`}
+                          >
+                            {s}x
+                          </button>
+                        ))}
+                      </div>
+
                       {!isSimulating && !isPaused ? (
                         <>
                           <button onClick={handleStartSimulation} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-slate-50 transition-all">
                             <Play className="h-3.5 w-3.5" /> Start Drive
                           </button>
-                          <button onClick={handleStartCharging} className="flex items-center gap-1 px-4 py-2 rounded-xl bg-yellow-950/40 border border-yellow-700/60 text-yellow-400 text-xs font-bold hover:bg-yellow-900/50 transition">
-                            <Zap className="h-3.5 w-3.5" /> Charge
+                          <button onClick={handleStartOut} className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-orange-950/40 border border-orange-700/60 text-orange-400 text-xs font-bold hover:bg-orange-900/50 transition shadow-sm">
+                            <ArrowUpRight className="h-3.5 w-3.5" /> Out
                           </button>
                         </>
                       ) : (

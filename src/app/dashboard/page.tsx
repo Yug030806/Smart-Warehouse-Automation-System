@@ -54,8 +54,23 @@ export default function Dashboard() {
     if (user?.role !== 'ADMIN') return;
 
     const checkPending = async () => {
+      let profiles: Profile[] = [];
       const res = await supabase.from('profiles').select();
-      const profiles = (res.data || []) as Profile[];
+      if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+        profiles = res.data as Profile[];
+      } else {
+        try {
+          const apiRes = await fetch('/api/db', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'select', table: 'profiles' })
+          }).then(r => r.json());
+          if (apiRes && apiRes.data && Array.isArray(apiRes.data)) {
+            profiles = apiRes.data;
+          }
+        } catch {}
+      }
+
       const pending = profiles.filter(p => !p.is_active);
       if (pending.length > 0) {
         setPendingUsers(pending);
@@ -71,19 +86,32 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [user]);
 
+  const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('');
+
+  useEffect(() => {
+    if (selectedWarehouseId && floors.length > 0) {
+      const whFloors = floors.filter(f => f.warehouse_id === selectedWarehouseId);
+      if (whFloors.length > 0 && !whFloors.some(f => f.id === selectedFloor)) {
+        setSelectedFloor(whFloors[0].id);
+      }
+    }
+  }, [selectedWarehouseId, floors]);
+
   useEffect(() => {
     let isMounted = true;
 
     const fetchDashboardData = async () => {
       try {
-        const [bRes, vRes, tRes, aRes, pRes, fRes, lRes] = await Promise.all([
+        const [bRes, vRes, tRes, aRes, pRes, fRes, lRes, wRes] = await Promise.all([
           supabase.from('boxes').select(),
           supabase.from('vehicles').select(),
           supabase.from('tasks').select(),
           supabase.from('alerts').select().eq('is_acknowledged', false),
           supabase.from('profiles').select(),
           supabase.from('floors').select(),
-          supabase.from('locations').select()
+          supabase.from('locations').select(),
+          supabase.from('warehouses').select()
         ]);
 
         let boxes = (bRes.data || []) as Box[];
@@ -93,6 +121,14 @@ export default function Dashboard() {
         const pList = pRes.data || [];
         const fls = (fRes.data || []) as Floor[];
         const locs = (lRes.data || []) as any[];
+
+        if (isMounted && wRes.data) {
+          setWarehouses(wRes.data);
+          setSelectedWarehouseId(prev => {
+            if (prev && wRes.data.some((w: any) => w.id === prev)) return prev;
+            return wRes.data.length > 0 ? wRes.data[0].id : '';
+          });
+        }
 
         if (isMounted && fls.length > 0) {
           setFloors(fls);
@@ -251,20 +287,59 @@ export default function Dashboard() {
                 Autonomous fleet telemetry, inventory throughput, and AGV performance metrics.
               </p>
             </div>
-            <div className="flex items-center gap-1.5 sm:gap-2 p-1.5 rounded-2xl bg-[#141419] border border-slate-800/80 shrink-0 w-full sm:w-auto overflow-x-auto">
-              {['f-01', 'f-02', 'f-03'].map((fId, idx) => (
-                <button
-                  key={fId}
-                  onClick={() => setSelectedFloor(fId)}
-                  className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 text-center whitespace-nowrap ${
-                    selectedFloor === fId
-                      ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(59,130,246,0.4)]'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-                  }`}
-                >
-                  Floor {idx + 1}
-                </button>
-              ))}
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {/* Warehouse selector (if multiple warehouses exist) */}
+              {warehouses.length > 1 && (
+                <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-[#141419] border border-slate-800/80 shrink-0">
+                  <select
+                    value={selectedWarehouseId}
+                    onChange={(e) => {
+                      const newWid = e.target.value;
+                      setSelectedWarehouseId(newWid);
+                      const whF = floors.filter(f => f.warehouse_id === newWid);
+                      if (whF.length > 0) setSelectedFloor(whF[0].id);
+                    }}
+                    className="bg-slate-900 text-xs font-bold text-slate-200 px-3 py-1.5 rounded-xl border border-slate-800 outline-none cursor-pointer"
+                  >
+                    {warehouses.map((w) => (
+                      <option key={w.id} value={w.id} className="bg-slate-900 text-slate-200">
+                        {w.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Dynamic Floor Switcher synced to the selected warehouse */}
+              <div className="flex items-center gap-1.5 sm:gap-2 p-1.5 rounded-2xl bg-[#141419] border border-slate-800/80 shrink-0 w-full sm:w-auto overflow-x-auto">
+                {(() => {
+                  const currentWarehouseFloors = floors.filter(
+                    f => !selectedWarehouseId || f.warehouse_id === selectedWarehouseId
+                  );
+
+                  if (currentWarehouseFloors.length === 0) {
+                    return (
+                      <span className="text-[11px] text-slate-500 px-3 py-1.5 italic">
+                        No levels configured
+                      </span>
+                    );
+                  }
+
+                  return currentWarehouseFloors.map((f, idx) => (
+                    <button
+                      key={f.id}
+                      onClick={() => setSelectedFloor(f.id)}
+                      className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 text-center whitespace-nowrap ${
+                        selectedFloor === f.id
+                          ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(59,130,246,0.4)]'
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                      }`}
+                    >
+                      {f.name || `Floor ${f.floor_number || idx + 1}`}
+                    </button>
+                  ));
+                })()}
+              </div>
             </div>
           </div>
 
@@ -347,32 +422,42 @@ export default function Dashboard() {
             {/* Live Map Panel & Ranked List */}
             <div className="lg:col-span-2 space-y-6">
               {/* Floor Switcher */}
-              {floors.length > 1 && (
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#141419] border border-slate-800/80 rounded-2xl p-3 px-4 shadow-lg">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
-                    <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Floor Level:</span>
+              {(() => {
+                const whFloors = floors.filter(
+                  f => !selectedWarehouseId || f.warehouse_id === selectedWarehouseId
+                );
+                if (whFloors.length <= 1) return null;
+                return (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#141419] border border-slate-800/80 rounded-2xl p-3 px-4 shadow-lg">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
+                      <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Floor Level:</span>
+                    </div>
+                    <div className="flex items-center gap-2 overflow-x-auto">
+                      {whFloors.map(f => (
+                        <button
+                          key={f.id}
+                          onClick={() => setSelectedFloor(f.id)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                            selectedFloor === f.id
+                              ? 'bg-cyan-500/20 border border-cyan-400 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.25)]'
+                              : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          {f.name || `Floor ${f.floor_number}`}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 overflow-x-auto">
-                    {floors.map(f => (
-                      <button
-                        key={f.id}
-                        onClick={() => setSelectedFloor(f.id)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                          selectedFloor === f.id
-                            ? 'bg-cyan-500/20 border border-cyan-400 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.25)]'
-                            : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        {f.name || `Floor ${f.floor_number}`}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Card Type 5: Map / Availability Digital Twin Card */}
-              <WarehouseMap floorId={selectedFloor} />
+              {(() => {
+                const curFloor = floors.find(f => f.id === selectedFloor);
+                const curWarehouse = warehouses.find(w => w.id === curFloor?.warehouse_id);
+                return <WarehouseMap floorId={selectedFloor} warehouseName={curWarehouse?.name} />;
+              })()}
               
               {/* Active Tasks Dispatch Log Table */}
               <div className="rounded-2xl border border-slate-800/80 bg-[#141419] p-6 shadow-xl space-y-4">

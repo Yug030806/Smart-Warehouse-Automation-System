@@ -8,6 +8,7 @@ import AmbientBackground from '@/components/AmbientBackground';
 import { ArrowLeft, Download, Printer, RefreshCw, Layers, ShieldAlert } from 'lucide-react';
 import { Box, Location } from '@/lib/database.types';
 import QRCode from 'qrcode';
+import { generateUUID } from '@/lib/uuid';
 
 import { useAuth } from '@/lib/supabase/AuthProvider';
 
@@ -67,7 +68,7 @@ export default function BoxDetailsPage() {
 
     // Add log
     supabase.from('audit_logs').insert({
-      id: `log-${Date.now()}`,
+      id: generateUUID(),
       user_email: user?.email || 'manager@demo.com',
       action: 'REGENERATE_QR',
       object_type: 'BOX',

@@ -8,6 +8,8 @@ import RoleGuard from '@/components/RoleGuard';
 import { ScanQrCode, AlertTriangle, CheckCircle, HelpCircle } from 'lucide-react';
 import { Task, Box, Vehicle, Location } from '@/lib/database.types';
 import { useAuth } from '@/lib/supabase/AuthProvider';
+import { generateUUID } from '@/lib/uuid';
+import { triggerGlobalAlert } from '@/lib/alertService';
 import confetti from 'canvas-confetti';
 
 import Link from 'next/link';
@@ -72,122 +74,157 @@ export default function ScannerPage() {
   };
 
   // Verification QR scans scanner console logic
-  const handleVerifyScan = () => {
-    if (!selectedTask) return;
-    const box = boxes.find(bx => bx.id === selectedTask.box_id);
-    if (!box) return;
+  const handleVerifyScan = async () => {
+    if (!selectedTask) {
+      triggerGlobalAlert({
+        type: 'SYSTEM_ERROR',
+        severity: 'WARNING',
+        message: 'QR Scan Console Error: Please select an active transport task before verifying.'
+      });
+      return;
+    }
 
-    const correctCode = box.qr_code_data;
-    const isMatched = scanCodeInput.trim() === correctCode.trim();
+    const box = boxes.find(bx => bx.id === selectedTask.box_id);
+    if (!box) {
+      triggerGlobalAlert({
+        type: 'SYSTEM_ERROR',
+        severity: 'WARNING',
+        message: `QR Scan Console Error: Cargo payload record not found for Task ${selectedTask.task_code}.`
+      });
+      return;
+    }
+
+    const correctCode = box.qr_code_data || '';
+    const enteredCode = scanCodeInput.trim();
+
+    if (!enteredCode) {
+      setStatusType('ERROR');
+      setStatusMessage('ERROR: Empty scan code entered. Please type or scan the payload barcode.');
+      triggerGlobalAlert({
+        type: 'BOX_MISMATCH',
+        severity: 'WARNING',
+        message: `QR Scan Console Error: Empty barcode entered for Task ${selectedTask.task_code}. Expected payload "${correctCode}".`,
+        task_id: selectedTask.id
+      });
+      return;
+    }
+
+    const isMatched = enteredCode === correctCode.trim();
 
     if (isMatched) {
       setStatusType('SUCCESS');
       
       const isPickup = ['ASSIGNED', 'IN_PROGRESS', 'PICKUP_PENDING'].includes(selectedTask.status);
       
-      if (isPickup) {
-        setStatusMessage(`PICKUP_CONFIRMED: Verified code ${scanCodeInput}. Cargo payload pickup complete.`);
-        
-        // Update Task status
-        supabase.from('tasks').update({
-          status: 'PICKED_UP'
-        }).eq('id', selectedTask.id);
-
-        // Update Box status
-        supabase.from('boxes').update({
-          status: 'PICKED_UP'
-        }).eq('id', box.id);
-
-        // Add Scan Event
-        supabase.from('scan_events').insert({
-          id: `scan-${Date.now()}`,
-          task_id: selectedTask.id,
-          box_id: box.id,
-          vehicle_id: selectedTask.vehicle_id || '',
-          location_id: selectedTask.source_location_id,
-          scanned_by: 'u-operator',
-          scan_type: 'PICKUP',
-          is_verified: true,
-          scanned_code: scanCodeInput,
-          created_at: new Date().toISOString()
-        });
-
-        // Trigger haptic animation sound/confetti
-        confetti();
-      } else {
-        setStatusMessage(`DELIVERY_CONFIRMED: Verified code ${scanCodeInput}. Parcel successfully checked into Destination.`);
-
-        // Finalise Task complete
-        supabase.from('tasks').update({
-          status: 'COMPLETED',
-          completed_at: new Date().toISOString()
-        }).eq('id', selectedTask.id);
-
-        // Update Box status
-        supabase.from('boxes').update({
-          status: 'DELIVERED',
-          current_location_id: selectedTask.destination_location_id
-        }).eq('id', box.id);
-
-        // Update Vehicle status to standby available again
-        if (selectedTask.vehicle_id) {
-          const vehicleObj = vehicles.find(v => v.id === selectedTask.vehicle_id);
-          const currentCharger = locations.find(l => l.floor_id === vehicleObj?.current_floor_id && l.type === 'CHARGING');
+      try {
+        if (isPickup) {
+          setStatusMessage(`PICKUP_CONFIRMED: Verified code ${enteredCode}. Cargo payload pickup complete.`);
           
-          supabase.from('vehicles').update({
-            status: 'AVAILABLE',
-            current_task_id: null,
-            current_location_id: currentCharger ? currentCharger.id : null
-          }).eq('id', selectedTask.vehicle_id);
+          // Update Task status
+          await supabase.from('tasks').update({
+            status: 'PICKED_UP'
+          }).eq('id', selectedTask.id);
+
+          // Update Box status
+          await supabase.from('boxes').update({
+            status: 'PICKED_UP'
+          }).eq('id', box.id);
+
+          // Add Scan Event
+          await supabase.from('scan_events').insert({
+            id: generateUUID(),
+            task_id: selectedTask.id,
+            box_id: box.id,
+            vehicle_id: selectedTask.vehicle_id || null,
+            location_id: selectedTask.source_location_id,
+            scanned_by: user?.id || 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33',
+            scan_type: 'PICKUP',
+            is_verified: true,
+            scanned_code: enteredCode,
+            created_at: new Date().toISOString()
+          });
+
+          // Trigger haptic animation sound/confetti
+          confetti();
+        } else {
+          setStatusMessage(`DELIVERY_CONFIRMED: Verified code ${enteredCode}. Parcel successfully checked into Destination.`);
+
+          // Finalise Task complete
+          await supabase.from('tasks').update({
+            status: 'COMPLETED',
+            completed_at: new Date().toISOString()
+          }).eq('id', selectedTask.id);
+
+          // Update Box status
+          await supabase.from('boxes').update({
+            status: 'DELIVERED',
+            current_location_id: selectedTask.destination_location_id
+          }).eq('id', box.id);
+
+          // Update Vehicle status to standby available again
+          if (selectedTask.vehicle_id) {
+            const vehicleObj = vehicles.find(v => v.id === selectedTask.vehicle_id);
+            const currentCharger = locations.find(l => l.floor_id === vehicleObj?.current_floor_id && l.type === 'CHARGING');
+            
+            await supabase.from('vehicles').update({
+              status: 'AVAILABLE',
+              current_task_id: null,
+              current_location_id: currentCharger ? currentCharger.id : null
+            }).eq('id', selectedTask.vehicle_id);
+          }
+
+          // Add Scan Event
+          await supabase.from('scan_events').insert({
+            id: generateUUID(),
+            task_id: selectedTask.id,
+            box_id: box.id,
+            vehicle_id: selectedTask.vehicle_id || null,
+            location_id: selectedTask.destination_location_id,
+            scanned_by: user?.id || 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33',
+            scan_type: 'DELIVERY',
+            is_verified: true,
+            scanned_code: enteredCode,
+            created_at: new Date().toISOString()
+          });
+
+          // Add Audit Log
+          await supabase.from('audit_logs').insert({
+            id: generateUUID(),
+            user_email: user?.email || 'operator@demo.com',
+            action: 'DELIVERY_CONFIRMED',
+            object_type: 'TASK',
+            object_id: selectedTask.id,
+            previous_state: { status: selectedTask.status },
+            new_state: { status: 'COMPLETED' },
+            timestamp: new Date().toISOString()
+          });
+
+          confetti();
         }
-
-        // Add Scan Event
-        supabase.from('scan_events').insert({
-          id: `scan-${Date.now()}`,
-          task_id: selectedTask.id,
-          box_id: box.id,
-          vehicle_id: selectedTask.vehicle_id || '',
-          location_id: selectedTask.destination_location_id,
-          scanned_by: 'u-operator',
-          scan_type: 'DELIVERY',
-          is_verified: true,
-          scanned_code: scanCodeInput,
-          created_at: new Date().toISOString()
+      } catch (err: any) {
+        console.error('Scan processing error:', err);
+        triggerGlobalAlert({
+          type: 'SYSTEM_ERROR',
+          severity: 'CRITICAL',
+          message: `Scanner Database Error: Failed to complete scan verification: ${err?.message || 'Unknown error'}.`,
+          task_id: selectedTask.id
         });
-
-        // Add Audit Log
-        supabase.from('audit_logs').insert({
-          id: `log-${Date.now()}`,
-          user_email: user?.email || 'operator@demo.com',
-          action: 'DELIVERY_CONFIRMED',
-          object_type: 'TASK',
-          object_id: selectedTask.id,
-          previous_state: { status: selectedTask.status },
-          new_state: { status: 'COMPLETED' },
-          timestamp: new Date().toISOString()
-        });
-
-        confetti();
       }
     } else {
       setStatusType('ERROR');
-      setStatusMessage('BOX MISMATCH: Verified scan code does not match transport order payloads. Alert dispatched.');
+      setStatusMessage(`BOX MISMATCH: Verified scan code does not match transport order payloads. Alert dispatched.`);
 
-      // Insert Critical System warnings alerts
-      supabase.from('alerts').insert({
-        id: `alert-${Date.now()}`,
+      // Trigger Critical Pop-up Alert
+      triggerGlobalAlert({
         type: 'BOX_MISMATCH',
         severity: 'CRITICAL',
-        message: `Box Mismatch alert: Scanned code ${scanCodeInput} instead of expected payload ${correctCode}.`,
+        message: `Box Mismatch Alert: Scanned code "${enteredCode}" does not match expected payload "${correctCode}" on Task ${selectedTask.task_code}!`,
         vehicle_id: selectedTask.vehicle_id || undefined,
-        task_id: selectedTask.id,
-        is_acknowledged: false,
-        resolved_at: null,
-        created_at: new Date().toISOString()
+        task_id: selectedTask.id
       });
     }
 
-    loadData();
+    await loadData();
   };
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
