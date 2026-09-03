@@ -63,7 +63,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
       )}
 
       <aside 
-        className={`fixed md:static inset-y-0 left-0 z-50 w-64 shrink-0 border-r border-slate-800/80 bg-slate-950/40 backdrop-blur-md flex flex-col h-screen transition-transform duration-300 ease-in-out md:translate-x-0 overscroll-contain relative overflow-hidden ${
+        className={`fixed md:static inset-y-0 left-0 z-50 w-64 shrink-0 border-r border-slate-800/80 bg-slate-950/40 backdrop-blur-md flex flex-col h-[100dvh] max-h-[100dvh] md:h-screen md:max-h-screen transition-transform duration-300 ease-in-out md:translate-x-0 overscroll-contain relative overflow-hidden ${
           mobileOpen ? 'translate-x-0 shadow-2xl flex' : '-translate-x-full hidden md:flex'
         }`}
       >
@@ -74,14 +74,14 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
         />
         {/* Light tint overlay so background image details are clearly visible */}
         <div className="absolute inset-0 z-0 bg-slate-950/40 pointer-events-none" />
-        <div className="p-5 border-b border-slate-800/80 flex items-center justify-between relative z-10">
+        <div className="p-4 md:p-5 border-b border-slate-800/80 flex items-center justify-between relative z-10 shrink-0">
           <Link 
             href="/dashboard" 
             onClick={onMobileClose}
             className="flex items-center gap-3 font-bold text-slate-100 text-base tracking-wider flex-1 min-w-0 pr-2 group"
           >
             <div className="relative shrink-0">
-              <img src="/logo.jpg" alt="Smart Warehouse Logo" className="h-10 w-10 object-contain rounded-xl group-hover:scale-105 transition-transform duration-200" />
+              <img src="/logo.jpg" alt="Smart Warehouse Logo" className="h-9 w-9 md:h-10 md:w-10 object-contain rounded-xl group-hover:scale-105 transition-transform duration-200" />
               <div className="absolute -inset-0.5 rounded-xl bg-cyan-500/20 blur opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
             </div>
             <div className="flex flex-col leading-tight min-w-0">
@@ -101,7 +101,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
           </button>
         </div>
 
-        <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto overscroll-contain relative z-10">
+        <nav className="flex-1 min-h-0 px-3.5 py-3 md:px-4 md:py-6 space-y-1 md:space-y-1.5 overflow-y-auto overscroll-contain relative z-10">
           {menuItems.map((item) => {
             if (!item.roles.includes(userRole)) return null;
             const isActive = pathname.startsWith(item.href);
@@ -110,7 +110,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
                 key={item.name}
                 href={item.href}
                 onClick={onMobileClose}
-                className={`relative flex items-center gap-3 px-4 py-3 text-xs font-extrabold rounded-xl transition-all duration-200 group ${
+                className={`relative flex items-center gap-3 px-3.5 py-2.5 md:px-4 md:py-3 text-xs font-extrabold rounded-xl transition-all duration-200 group ${
                   isActive 
                     ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-400/50 shadow-[0_0_20px_rgba(6,182,212,0.25)] backdrop-blur-md' 
                     : 'text-slate-100 bg-slate-950/40 border border-slate-800/40 hover:text-white hover:bg-slate-900/80 hover:border-slate-700 hover:translate-x-1 shadow-sm'
@@ -121,7 +121,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
                   <span className="absolute left-0 top-2 bottom-2 w-1.5 rounded-r-full bg-cyan-400 shadow-[0_0_12px_#38bdf8]" />
                 )}
                 
-                <item.icon className={`h-4.5 w-4.5 shrink-0 stroke-[2.5] transition-transform duration-200 group-hover:scale-110 ${isActive ? 'text-cyan-300 drop-shadow-[0_0_8px_rgba(56,189,248,0.6)]' : 'text-slate-200 group-hover:text-white'}`} />
+                <item.icon className={`h-4 w-4 md:h-4.5 md:w-4.5 shrink-0 stroke-[2.5] transition-transform duration-200 group-hover:scale-110 ${isActive ? 'text-cyan-300 drop-shadow-[0_0_8px_rgba(56,189,248,0.6)]' : 'text-slate-200 group-hover:text-white'}`} />
                 <span className="truncate tracking-wide drop-shadow-sm">{item.name}</span>
               </Link>
             );
@@ -129,22 +129,36 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
         </nav>
 
         {/* Profile summary footer card */}
-        <div className="p-4 border-t border-slate-800/80 bg-slate-950/90 backdrop-blur-md relative z-10">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-9 w-9 rounded-xl bg-slate-800 flex items-center justify-center font-extrabold text-blue-400 border border-slate-700 shrink-0 shadow-md">
-              {user?.user_metadata?.full_name?.charAt(0) || 'U'}
+        <div className="p-3 md:p-4 pb-4 md:pb-4 border-t border-slate-800/80 bg-slate-950/90 backdrop-blur-md relative z-10 shrink-0">
+          <div className="flex items-center justify-between gap-2 mb-2.5 md:mb-4">
+            <div className="flex items-center gap-2.5 md:gap-3 min-w-0">
+              <div className="h-8 w-8 md:h-9 md:w-9 rounded-xl bg-slate-800 flex items-center justify-center font-extrabold text-blue-400 border border-slate-700 shrink-0 shadow-md text-xs md:text-sm">
+                {user?.user_metadata?.full_name?.charAt(0) || 'U'}
+              </div>
+              <div className="overflow-hidden min-w-0">
+                <h4 className="text-xs font-extrabold text-slate-100 truncate">{user?.user_metadata?.full_name}</h4>
+                <span className="text-[10px] uppercase font-mono font-extrabold tracking-widest text-slate-300 truncate block">{userRole}</span>
+              </div>
             </div>
-            <div className="overflow-hidden">
-              <h4 className="text-xs font-extrabold text-slate-100 truncate">{user?.user_metadata?.full_name}</h4>
-              <span className="text-[10px] uppercase font-mono font-extrabold tracking-widest text-slate-300 truncate block">{userRole}</span>
-            </div>
+            {/* Quick exit icon button visible on mobile right beside profile */}
+            <button
+              onClick={() => {
+                if (onMobileClose) onMobileClose();
+                logout();
+              }}
+              title="Exit Session"
+              className="md:hidden p-2 rounded-xl border border-red-500/40 bg-red-950/60 text-red-300 hover:bg-red-900/60 hover:text-white shrink-0 transition-colors shadow-sm"
+              aria-label="Exit Session"
+            >
+              <LogOut className="h-4 w-4 stroke-[2.5]" />
+            </button>
           </div>
           <button
             onClick={() => {
               if (onMobileClose) onMobileClose();
               logout();
             }}
-            className="flex w-full items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-red-500/30 bg-red-950/40 text-xs font-extrabold text-red-300 hover:bg-red-900/60 hover:text-white transition-all duration-150 shadow-sm"
+            className="flex w-full items-center justify-center gap-2 px-3.5 py-2 md:px-4 md:py-2.5 rounded-xl border border-red-500/30 bg-red-950/40 text-xs font-extrabold text-red-300 hover:bg-red-900/60 hover:text-white transition-all duration-150 shadow-sm"
           >
             <LogOut className="h-4 w-4 stroke-[2.5]" />
             <span>Exit Session</span>
