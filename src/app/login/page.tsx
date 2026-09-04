@@ -221,7 +221,7 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-6 text-center text-xs font-medium text-slate-400">
-          New warehouse personnel?{' '}
+          New warehouse?{' '}
           <Link href="/signup" className="font-bold text-cyan-400 hover:text-cyan-300 transition-colors">
             Create an account
           </Link>
