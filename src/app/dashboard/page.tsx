@@ -218,8 +218,18 @@ export default function Dashboard() {
     const pendingTasks = tasks.filter(t => t.status === 'PENDING').length;
     const activeTasks = tasks.filter(t => ['ASSIGNED', 'IN_PROGRESS', 'PICKUP_PENDING', 'PICKED_UP', 'DELIVERING'].includes(t.status)).length;
     const completedDeliveries = tasks.filter(t => t.status === 'COMPLETED').length;
+    const totalPipelineTasks = completedDeliveries + pendingTasks + activeTasks;
+    const taskCompletionRate = totalPipelineTasks > 0
+      ? Math.round((completedDeliveries / totalPipelineTasks) * 100)
+      : 100;
+
     const availableVehicles = vehicles.filter(v => v.status === 'AVAILABLE').length;
     const busyVehicles = vehicles.filter(v => v.status === 'BUSY').length;
+    const operationalVehicles = vehicles.filter(v => ['AVAILABLE', 'BUSY', 'CHARGING'].includes(v.status)).length;
+    const fleetUptimeHealth = vehicles.length > 0
+      ? Math.round((operationalVehicles / vehicles.length) * 100)
+      : 100;
+
     const urgentTasks = tasks.filter(t => t.priority === 'URGENT' && t.status !== 'COMPLETED').length;
     const activeAlerts = alerts.length;
     const edgeAiActive = vehicles.filter(v => v.sensor_suite_active).length;
@@ -231,8 +241,10 @@ export default function Dashboard() {
         pendingTasks,
         activeTasks,
         completedDeliveries,
+        taskCompletionRate,
         availableVehicles,
         busyVehicles,
+        fleetUptimeHealth,
         urgentTasks,
         activeAlerts,
         edgeAiActive,
@@ -571,7 +583,7 @@ export default function Dashboard() {
               <div className="rounded-2xl border border-slate-800/80 bg-gradient-to-br from-amber-950/40 via-[#141419] to-[#141419] p-6 shadow-xl space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Task Completion Rate</span>
-                  <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[10px] font-extrabold border border-amber-500/30">98% ↗</span>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[10px] font-extrabold border border-amber-500/30">{stats.taskCompletionRate}% ↗</span>
                 </div>
                 <div className="flex items-center justify-between pt-2">
                   <div className="space-y-3">
@@ -588,7 +600,7 @@ export default function Dashboard() {
                   {/* Styled Ring Representation */}
                   <div className="relative h-24 w-24 flex items-center justify-center rounded-full bg-slate-900 border-4 border-amber-500/40 shadow-[0_0_20px_rgba(245,158,11,0.2)]">
                     <div className="text-center">
-                      <div className="text-lg font-black text-amber-400">98%</div>
+                      <div className="text-lg font-black text-amber-400">{stats.taskCompletionRate}%</div>
                       <div className="text-[8px] font-bold text-slate-400 uppercase">Success</div>
                     </div>
                   </div>
@@ -599,7 +611,7 @@ export default function Dashboard() {
               <div className="rounded-2xl border border-slate-800/80 bg-gradient-to-br from-purple-950/40 via-[#141419] to-[#141419] p-6 shadow-xl space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Fleet Uptime Health</span>
-                  <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 text-[10px] font-extrabold border border-purple-500/30">100% ↗</span>
+                  <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 text-[10px] font-extrabold border border-purple-500/30">{stats.fleetUptimeHealth}% ↗</span>
                 </div>
                 <div className="flex items-center justify-between pt-2">
                   <div className="space-y-3">
@@ -616,7 +628,7 @@ export default function Dashboard() {
                   {/* Styled Ring Representation */}
                   <div className="relative h-24 w-24 flex items-center justify-center rounded-full bg-slate-900 border-4 border-purple-500/40 shadow-[0_0_20px_rgba(168,85,247,0.2)]">
                     <div className="text-center">
-                      <div className="text-lg font-black text-purple-400">100%</div>
+                      <div className="text-lg font-black text-purple-400">{stats.fleetUptimeHealth}%</div>
                       <div className="text-[8px] font-bold text-slate-400 uppercase">Uptime</div>
                     </div>
                   </div>
