@@ -338,7 +338,7 @@ export default function Dashboard() {
                 <h1 className="text-xl sm:text-2xl font-black text-slate-100 tracking-tight leading-tight min-w-0">
                   Smart Warehouse Telemetry
                 </h1>
-                <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 shrink-0">
+                <div className="system-optimal-badge hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 shrink-0">
                   <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
                   <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">System Optimal</span>
                 </div>

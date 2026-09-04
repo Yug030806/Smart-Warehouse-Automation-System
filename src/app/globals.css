@@ -365,14 +365,21 @@ body {
 .theme-light .bg-purple-950\/40,
 .theme-light .bg-purple-900\/40,
 .theme-light .bg-purple-500\/10,
-.theme-light .bg-purple-500\/20 {
+.theme-light .bg-purple-500\/20,
+.theme-light .system-optimal-badge {
   background-color: #f3e8ff !important;
-  color: #581c87 !important;
+  color: #7e22ce !important;
 }
 .theme-light .border-purple-900\/40,
 .theme-light .border-purple-500\/40,
-.theme-light .border-purple-500\/50 {
+.theme-light .border-purple-500\/50,
+.theme-light .system-optimal-badge {
   border-color: #d8b4fe !important;
+}
+.theme-light .system-optimal-badge svg,
+.theme-light .system-optimal-badge span,
+.theme-light .system-optimal-badge * {
+  color: #7e22ce !important;
 }
 
 /* Orange Badges */
