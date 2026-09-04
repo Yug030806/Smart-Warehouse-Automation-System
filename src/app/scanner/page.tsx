@@ -115,21 +115,15 @@ export default function ScannerPage() {
   // Verification QR scans scanner console logic
   const handleVerifyScan = async () => {
     if (!selectedTask) {
-      triggerGlobalAlert({
-        type: 'SYSTEM_ERROR',
-        severity: 'WARNING',
-        message: 'QR Scan Console Error: Please select an active transport task before verifying.'
-      });
+      setStatusType('ERROR');
+      setStatusMessage('Please select an active transport task before verifying.');
       return;
     }
 
     const box = boxes.find(bx => bx.id === selectedTask.box_id);
     if (!box) {
-      triggerGlobalAlert({
-        type: 'SYSTEM_ERROR',
-        severity: 'WARNING',
-        message: `QR Scan Console Error: Cargo payload record not found for Task ${selectedTask.task_code}.`
-      });
+      setStatusType('ERROR');
+      setStatusMessage(`Cargo payload record not found for Task ${selectedTask.task_code}.`);
       return;
     }
 
@@ -166,24 +160,28 @@ export default function ScannerPage() {
           setSelectedTask(prev => prev ? { ...prev, status: 'PICKED_UP' } : null);
 
           // 2. Parallel cloud persistence
-          Promise.all([
-            supabase.from('tasks').update({ status: 'PICKED_UP' }).eq('id', selectedTask.id),
-            supabase.from('boxes').update({ status: 'PICKED_UP' }).eq('id', box.id),
-            supabase.from('scan_events').insert({
-              id: generateUUID(),
-              task_id: selectedTask.id,
-              box_id: box.id,
-              vehicle_id: selectedTask.vehicle_id || null,
-              location_id: selectedTask.source_location_id,
-              scanned_by: user?.id || 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33',
-              scan_type: 'PICKUP',
-              is_verified: true,
-              scanned_code: enteredCode,
-              created_at: new Date().toISOString()
-            })
-          ]).catch(err => {
-            console.error('Pickup sync error:', err);
-          });
+          (async () => {
+            try {
+              await Promise.all([
+                supabase.from('tasks').update({ status: 'PICKED_UP' }).eq('id', selectedTask.id),
+                supabase.from('boxes').update({ status: 'PICKED_UP' }).eq('id', box.id),
+                supabase.from('scan_events').insert({
+                  id: generateUUID(),
+                  task_id: selectedTask.id,
+                  box_id: box.id,
+                  vehicle_id: selectedTask.vehicle_id || null,
+                  location_id: selectedTask.source_location_id,
+                  scanned_by: user?.id || 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33',
+                  scan_type: 'PICKUP',
+                  is_verified: true,
+                  scanned_code: enteredCode,
+                  created_at: new Date().toISOString()
+                })
+              ]);
+            } catch (err) {
+              console.error('Pickup sync error:', err);
+            }
+          })();
         } else {
           setStatusMessage(`DELIVERY_CONFIRMED: Verified code ${enteredCode}. Parcel successfully checked into Destination.`);
           confetti();
@@ -243,9 +241,13 @@ export default function ScannerPage() {
           }
 
           // 2. Parallel cloud persistence
-          Promise.all(deliveryPromises).catch(err => {
-            console.error('Delivery sync error:', err);
-          });
+          (async () => {
+            try {
+              await Promise.all(deliveryPromises);
+            } catch (err) {
+              console.error('Delivery sync error:', err);
+            }
+          })();
         }
       } catch (err: any) {
         console.error('Scan processing error:', err);

@@ -293,6 +293,75 @@ function createSelectProxy(rawQuery: any, table: string) {
           }, onrejected);
         };
       }
+      if (prop === 'catch') {
+        return (onrejected: any) => receiver.then(undefined, onrejected);
+      }
+
+      const val = Reflect.get(target, prop, receiver);
+      if (typeof val === 'function') {
+        return (...args: any[]) => {
+          const res = val.apply(target, args);
+          if (res && typeof res === 'object' && typeof res.then === 'function') {
+            return new Proxy(res, handler);
+          }
+          return res;
+        };
+      }
+      return val;
+    }
+  };
+
+  return new Proxy(rawQuery, handler);
+}
+
+function createInsertProxy(rawQuery: any, table: string, payload: any) {
+  const handler: ProxyHandler<any> = {
+    get(target, prop, receiver) {
+      if (prop === 'select') {
+        return (...args: any[]) => {
+          const res = target.select(...args);
+          return createInsertProxy(res, table, payload);
+        };
+      }
+      if (prop === 'then') {
+        return (onfulfilled?: (value: any) => any, onrejected?: (reason: any) => any) => {
+          return target.then(async (res: any) => {
+            if (isRlsError(res?.error) || res?.error) {
+              console.warn(`[RLS Fallback] Bypassing RLS insert error on ${table} via admin API`);
+              if (typeof window !== 'undefined') {
+                try {
+                  const apiRes = await fetch('/api/db', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'insert', table, payload })
+                  }).then(r => r.json());
+
+                  if (!apiRes.error && apiRes.data) {
+                    const item = Array.isArray(apiRes.data) ? apiRes.data[0] : apiRes.data;
+                    updateLocalState(table, 'INSERT', item);
+                    return onfulfilled ? onfulfilled({ data: apiRes.data, error: null }) : { data: apiRes.data, error: null };
+                  }
+                } catch (apiErr) {
+                  console.error('[RLS Fallback] Server API insert error:', apiErr);
+                }
+              }
+              // Fallback to local memory / mockDb
+              const item = Array.isArray(payload) ? payload[0] : payload;
+              updateLocalState(table, 'INSERT', item);
+              return onfulfilled ? onfulfilled({ data: [item], error: null }) : { data: [item], error: null };
+            }
+
+            if (!res?.error) {
+              const item = res?.data ? (Array.isArray(res.data) ? res.data[0] : res.data) : (Array.isArray(payload) ? payload[0] : payload);
+              updateLocalState(table, 'INSERT', item);
+            }
+            return onfulfilled ? onfulfilled(res) : res;
+          }, onrejected);
+        };
+      }
+      if (prop === 'catch') {
+        return (onrejected: any) => receiver.then(undefined, onrejected);
+      }
 
       const val = Reflect.get(target, prop, receiver);
       if (typeof val === 'function') {
@@ -361,6 +430,9 @@ function createUpdateProxy(rawQuery: any, table: string, payload: any) {
             return onfulfilled ? onfulfilled(res) : res;
           }, onrejected);
         };
+      }
+      if (prop === 'catch') {
+        return (onrejected: any) => receiver.then(undefined, onrejected);
       }
 
       const val = Reflect.get(target, prop, receiver);
@@ -431,6 +503,9 @@ function createDeleteProxy(rawQuery: any, table: string) {
           }, onrejected);
         };
       }
+      if (prop === 'catch') {
+        return (onrejected: any) => receiver.then(undefined, onrejected);
+      }
 
       const val = Reflect.get(target, prop, receiver);
       if (typeof val === 'function') {
@@ -471,42 +546,7 @@ function createProxiedRealClient(rawClient: any): any {
               updateLocalState(table, 'INSERT', optItem);
             }
             const insertQuery = origInsert(payload, options);
-            const origThen = insertQuery.then.bind(insertQuery);
-            insertQuery.then = (onfulfilled: any, onrejected: any) => {
-              return origThen(async (res: any) => {
-                if (isRlsError(res?.error) || res?.error) {
-                  console.warn(`[RLS Fallback] Bypassing RLS insert error on ${table} via admin API`);
-                  if (typeof window !== 'undefined') {
-                    try {
-                      const apiRes = await fetch('/api/db', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'insert', table, payload })
-                      }).then(r => r.json());
-
-                      if (!apiRes.error && apiRes.data) {
-                        const item = Array.isArray(apiRes.data) ? apiRes.data[0] : apiRes.data;
-                        updateLocalState(table, 'INSERT', item);
-                        return onfulfilled ? onfulfilled({ data: apiRes.data, error: null }) : { data: apiRes.data, error: null };
-                      }
-                    } catch (apiErr) {
-                      console.error('[RLS Fallback] Server API insert error:', apiErr);
-                    }
-                  }
-                  // Fallback to local memory / mockDb
-                  const item = Array.isArray(payload) ? payload[0] : payload;
-                  updateLocalState(table, 'INSERT', item);
-                  return onfulfilled ? onfulfilled({ data: [item], error: null }) : { data: [item], error: null };
-                }
-
-                if (!res?.error) {
-                  const item = res?.data ? (Array.isArray(res.data) ? res.data[0] : res.data) : (Array.isArray(payload) ? payload[0] : payload);
-                  updateLocalState(table, 'INSERT', item);
-                }
-                return onfulfilled ? onfulfilled(res) : res;
-              }, onrejected);
-            };
-            return insertQuery;
+            return createInsertProxy(insertQuery, table, payload);
           };
 
           // 3. Intercept UPDATE
@@ -531,6 +571,22 @@ function createProxiedRealClient(rawClient: any): any {
   });
 }
 
+function wrapAsThenable(obj: any, resolvedValue?: any): any {
+  if (!obj || typeof obj !== 'object') return obj;
+  const valueToResolve = resolvedValue !== undefined ? resolvedValue : obj;
+  if (!obj.then) {
+    obj.then = function(onfulfilled?: any, onrejected?: any) {
+      return Promise.resolve(valueToResolve).then(onfulfilled, onrejected);
+    };
+  }
+  if (!obj.catch) {
+    obj.catch = function(onrejected?: any) {
+      return Promise.resolve(valueToResolve).catch(onrejected);
+    };
+  }
+  return obj;
+}
+
 // Unified client interfaces wrapping both actual Supabase and mockDb
 export const getSupabaseClient = (): any => {
   if (useSupabaseReal && supabaseReal) {
@@ -539,20 +595,30 @@ export const getSupabaseClient = (): any => {
 
   return {
     auth: {
-      getUser: async () => {
-        if (typeof window === 'undefined') return { data: { user: null }, error: null };
-        const sessionStr = sessionStorage.getItem('sih_session');
-        if (!sessionStr) return { data: { user: null }, error: null };
-        try {
-          const user = JSON.parse(sessionStr);
-          return { data: { user }, error: null };
-        } catch {
-          return { data: { user: null }, error: null };
+      getSession: async () => {
+        if (typeof window === 'undefined') return { data: { session: null }, error: null };
+        const sessionStr = sessionStorage.getItem('sih_session') || localStorage.getItem('sih_session');
+        if (sessionStr) {
+          try {
+            return { data: { session: { user: JSON.parse(sessionStr) } }, error: null };
+          } catch {
+            return { data: { session: null }, error: null };
+          }
         }
+        return { data: { session: null }, error: null };
+      },
+      onAuthStateChange: (callback: any) => {
+        return {
+          data: {
+            subscription: {
+              unsubscribe: () => {}
+            }
+          }
+        };
       },
       signInWithPassword: async ({ email, password }: any) => {
-        const users = mockDb.getProfiles();
-        const found = users.find(u => u.email === email && password !== '');
+        const profiles = mockDb.getProfiles();
+        const found = profiles.find((p: any) => p.email.toLowerCase() === (email || '').toLowerCase());
         if (found) {
           const session = {
             id: found.id,
@@ -597,7 +663,6 @@ export const getSupabaseClient = (): any => {
       }
     },
     from: (table: string) => {
-      // Basic mock client implementation supporting CRUD queries
       return {
         select: (columns = '*') => {
           let data: any[] = [];
@@ -622,19 +687,22 @@ export const getSupabaseClient = (): any => {
             default: data = [];
           }
           
-          return {
-            data,
-            error: null,
-            single: () => ({ data: data[0] || null, error: data[0] ? null : { message: 'Not found' } }),
-            eq: (col: string, val: any) => {
-              const filtered = data.filter(item => item[col] === val);
-              return {
-                data: filtered,
-                error: null,
-                single: () => ({ data: filtered[0] || null, error: filtered[0] ? null : { message: 'Not found' } })
-              };
-            }
+          const createSelectResult = (arr: any[]): any => {
+            return wrapAsThenable({
+              data: arr,
+              error: null,
+              single: () => wrapAsThenable({ data: arr[0] || null, error: arr[0] ? null : { message: 'Not found' } }),
+              maybeSingle: () => wrapAsThenable({ data: arr[0] || null, error: null }),
+              eq: (col: string, val: any) => {
+                const filtered = arr.filter(item => item[col] === val);
+                return createSelectResult(filtered);
+              },
+              order: () => createSelectResult(arr),
+              limit: (n: number) => createSelectResult(arr.slice(0, n))
+            }, { data: arr, error: null });
           };
+
+          return createSelectResult(data);
         },
         insert: (payload: any) => {
           let item = { id: `id-${Date.now()}`, created_at: new Date().toISOString(), ...payload };
@@ -662,63 +730,74 @@ export const getSupabaseClient = (): any => {
             case 'edge_ai_decisions': mockDb.addEdgeAIDecision(item); break;
             case 'fleet_messages': mockDb.addFleetMessage(item); break;
           }
-          return { data: [item], error: null };
+          const res = { data: [item], error: null };
+          return wrapAsThenable({
+            ...res,
+            select: () => wrapAsThenable(res)
+          }, res);
         },
         update: (payload: any) => {
-          return {
-            eq: (col: string, val: any) => {
-              let updatedList: any[] = [];
-              if (table === 'profiles') {
-                mockDb.getProfiles().forEach(u => { if ((u as any)[col] === val) mockDb.saveProfile({ ...u, ...payload }); });
-              } else if (table === 'warehouses') {
-                mockDb.getWarehouses().forEach(w => { if ((w as any)[col] === val) mockDb.saveWarehouse({ ...w, ...payload }); });
-              } else if (table === 'floors') {
-                mockDb.getFloors().forEach(f => { if ((f as any)[col] === val) mockDb.saveFloor({ ...f, ...payload }); });
-              } else if (table === 'zones') {
-                mockDb.getZones().forEach(z => { if ((z as any)[col] === val) mockDb.saveZone({ ...z, ...payload }); });
-              } else if (table === 'locations') {
-                mockDb.getLocations().forEach(l => { if ((l as any)[col] === val) mockDb.saveLocation({ ...l, ...payload }); });
-              } else if (table === 'vehicles') {
-                mockDb.getVehicles().forEach(v => { if ((v as any)[col] === val) mockDb.saveVehicle({ ...v, ...payload }); });
-              } else if (table === 'boxes') {
-                mockDb.getBoxes().forEach(b => { if ((b as any)[col] === val) mockDb.saveBox({ ...b, ...payload }); });
-              } else if (table === 'tasks') {
-                mockDb.getTasks().forEach(t => { if ((t as any)[col] === val) mockDb.saveTask({ ...t, ...payload }); });
-              } else if (table === 'alerts') {
-                mockDb.getAlerts().forEach(a => { if ((a as any)[col] === val) mockDb.saveAlert({ ...a, ...payload }); });
-              } else if (table === 'system_settings') {
-                mockDb.saveSettings({ ...mockDb.getSettings(), ...payload });
+          const createUpdateResult = () => {
+            return wrapAsThenable({
+              eq: (col: string, val: any) => {
+                let updatedList: any[] = [];
+                if (table === 'profiles') {
+                  mockDb.getProfiles().forEach(u => { if ((u as any)[col] === val) mockDb.saveProfile({ ...u, ...payload }); });
+                } else if (table === 'warehouses') {
+                  mockDb.getWarehouses().forEach(w => { if ((w as any)[col] === val) mockDb.saveWarehouse({ ...w, ...payload }); });
+                } else if (table === 'floors') {
+                  mockDb.getFloors().forEach(f => { if ((f as any)[col] === val) mockDb.saveFloor({ ...f, ...payload }); });
+                } else if (table === 'zones') {
+                  mockDb.getZones().forEach(z => { if ((z as any)[col] === val) mockDb.saveZone({ ...z, ...payload }); });
+                } else if (table === 'locations') {
+                  mockDb.getLocations().forEach(l => { if ((l as any)[col] === val) mockDb.saveLocation({ ...l, ...payload }); });
+                } else if (table === 'vehicles') {
+                  mockDb.getVehicles().forEach(v => { if ((v as any)[col] === val) mockDb.saveVehicle({ ...v, ...payload }); });
+                } else if (table === 'boxes') {
+                  mockDb.getBoxes().forEach(b => { if ((b as any)[col] === val) mockDb.saveBox({ ...b, ...payload }); });
+                } else if (table === 'tasks') {
+                  mockDb.getTasks().forEach(t => { if ((t as any)[col] === val) mockDb.saveTask({ ...t, ...payload }); });
+                } else if (table === 'alerts') {
+                  mockDb.getAlerts().forEach(a => { if ((a as any)[col] === val) mockDb.saveAlert({ ...a, ...payload }); });
+                } else if (table === 'system_settings') {
+                  mockDb.saveSettings({ ...mockDb.getSettings(), ...payload });
+                }
+                const res = { data: updatedList, error: null };
+                return wrapAsThenable({ ...res, select: () => wrapAsThenable(res) }, res);
               }
-              
-              return { data: updatedList, error: null };
-            }
+            }, { data: [], error: null });
           };
+          return createUpdateResult();
         },
         delete: () => {
-          return {
-            eq: (col: string, val: any) => {
-              if (table === 'warehouses') {
-                mockDb.getWarehouses().filter(x => (x as any)[col] === val).forEach(x => mockDb.deleteWarehouse(x.id));
-              } else if (table === 'floors') {
-                mockDb.getFloors().filter(x => (x as any)[col] === val).forEach(x => mockDb.deleteFloor(x.id));
-              } else if (table === 'zones') {
-                mockDb.getZones().filter(x => (x as any)[col] === val).forEach(x => mockDb.deleteZone(x.id));
-              } else if (table === 'locations') {
-                mockDb.getLocations().filter(x => (x as any)[col] === val).forEach(x => mockDb.deleteLocation(x.id));
-              } else if (table === 'vehicles') {
-                mockDb.getVehicles().filter(x => (x as any)[col] === val).forEach(x => mockDb.deleteVehicle(x.id));
-              } else if (table === 'boxes') {
-                mockDb.getBoxes().filter(x => (x as any)[col] === val).forEach(x => mockDb.deleteBox(x.id));
-              } else if (table === 'tasks') {
-                mockDb.getTasks().filter(x => (x as any)[col] === val).forEach(x => mockDb.deleteTask(x.id));
-              } else if (table === 'profiles') {
-                mockDb.getProfiles().filter(x => (x as any)[col] === val).forEach(x => mockDb.deleteProfile(x.id));
-              } else if (table === 'alerts') {
-                mockDb.getAlerts().filter(x => (x as any)[col] === val).forEach(x => mockDb.deleteAlert(x.id));
+          const createDeleteResult = () => {
+            return wrapAsThenable({
+              eq: (col: string, val: any) => {
+                if (table === 'warehouses') {
+                  mockDb.getWarehouses().filter(x => (x as any)[col] === val).forEach(x => mockDb.deleteWarehouse(x.id));
+                } else if (table === 'floors') {
+                  mockDb.getFloors().filter(x => (x as any)[col] === val).forEach(x => mockDb.deleteFloor(x.id));
+                } else if (table === 'zones') {
+                  mockDb.getZones().filter(x => (x as any)[col] === val).forEach(x => mockDb.deleteZone(x.id));
+                } else if (table === 'locations') {
+                  mockDb.getLocations().filter(x => (x as any)[col] === val).forEach(x => mockDb.deleteLocation(x.id));
+                } else if (table === 'vehicles') {
+                  mockDb.getVehicles().filter(x => (x as any)[col] === val).forEach(x => mockDb.deleteVehicle(x.id));
+                } else if (table === 'boxes') {
+                  mockDb.getBoxes().filter(x => (x as any)[col] === val).forEach(x => mockDb.deleteBox(x.id));
+                } else if (table === 'tasks') {
+                  mockDb.getTasks().filter(x => (x as any)[col] === val).forEach(x => mockDb.deleteTask(x.id));
+                } else if (table === 'profiles') {
+                  mockDb.getProfiles().filter(x => (x as any)[col] === val).forEach(x => mockDb.deleteProfile(x.id));
+                } else if (table === 'alerts') {
+                  mockDb.getAlerts().filter(x => (x as any)[col] === val).forEach(x => mockDb.deleteAlert(x.id));
+                }
+                const res = { data: null, error: null };
+                return wrapAsThenable(res, res);
               }
-              return { data: null, error: null };
-            }
+            }, { data: null, error: null });
           };
+          return createDeleteResult();
         }
       };
     },

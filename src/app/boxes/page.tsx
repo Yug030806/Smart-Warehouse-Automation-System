@@ -285,15 +285,19 @@ export default function BoxesPage() {
       setIsSubmitting(false);
 
       // 3. Persist to DB concurrently in background
-      Promise.all([
-        ...locInserts,
-        supabase.from('boxes').insert(newBox),
-        supabase.from('tasks').insert(newTask)
-      ]).catch(err => {
-        console.error('Failed to save box/task to server:', err);
-        setBoxes(prev => prev.filter(b => b.id !== newBox.id));
-        alert('Failed to save box to server: ' + (err?.message || 'Database error'));
-      });
+      (async () => {
+        try {
+          await Promise.all([
+            ...locInserts,
+            supabase.from('boxes').insert(newBox),
+            supabase.from('tasks').insert(newTask)
+          ]);
+        } catch (err: any) {
+          console.error('Failed to save box/task to server:', err);
+          setBoxes(prev => prev.filter(b => b.id !== newBox.id));
+          alert('Failed to save box to server: ' + (err?.message || 'Database error'));
+        }
+      })();
     } catch (err: any) {
       setModalError(err?.message || 'Failed to save box.');
       setIsSubmitting(false);
@@ -302,16 +306,18 @@ export default function BoxesPage() {
 
   usePreventScroll(Boolean(editingBox || showAddModal));
 
-  const handleDeleteBox = (id: string) => {
+  const handleDeleteBox = async (id: string) => {
     // Instant optimistic removal
     setBoxes(prev => prev.filter(b => b.id !== id));
-    supabase.from('boxes').delete().eq('id', id).catch((err: any) => {
+    try {
+      await supabase.from('boxes').delete().eq('id', id);
+    } catch (err: any) {
       console.error('Failed to delete box:', err);
       loadBoxes(true);
-    });
+    }
   };
 
-  const handleEditBoxSubmit = (e: React.FormEvent) => {
+  const handleEditBoxSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingBox || !editProdName) return;
 
@@ -328,16 +334,18 @@ export default function BoxesPage() {
     setBoxes(prev => prev.map(b => b.id === editingBox.id ? updatedBox : b));
     setEditingBox(null);
 
-    supabase.from('boxes').update({
-      product_name: editProdName,
-      category: editCategory,
-      weight: Number(editWeight),
-      priority: editPriority,
-      updated_at: new Date().toISOString()
-    }).eq('id', editingBox.id).catch((err: any) => {
+    try {
+      await supabase.from('boxes').update({
+        product_name: editProdName,
+        category: editCategory,
+        weight: Number(editWeight),
+        priority: editPriority,
+        updated_at: new Date().toISOString()
+      }).eq('id', editingBox.id);
+    } catch (err: any) {
       console.error('Failed to update box:', err);
       loadBoxes(true);
-    });
+    }
   };
 
   // Filter, Sort, Paginate Pipeline

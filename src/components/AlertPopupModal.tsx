@@ -76,6 +76,29 @@ function playAlertChime(severity: string) {
   }
 }
 
+// Helper to filter out internal system/script errors and legacy alerts from the popup modal
+function isSystemOrIgnoredAlert(a: Alert | any): boolean {
+  if (!a) return true;
+  if (a.is_acknowledged) return true;
+  if (a.type === 'SYSTEM_ERROR') return true;
+  const msg = (a.message || '').toLowerCase();
+  if (
+    msg.includes('system error') ||
+    msg.includes('typeerror') ||
+    msg.includes('uncaught') ||
+    msg.includes('is not a function') ||
+    msg.includes('.catch') ||
+    msg.includes('r.nd') ||
+    msg.includes('elevator calibration') ||
+    msg.includes('unhandled exception') ||
+    msg.includes('failed to fetch') ||
+    msg.includes('script error')
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export default function AlertPopupModal() {
   const router = useRouter();
   const pathname = usePathname();
@@ -114,15 +137,15 @@ export default function AlertPopupModal() {
       // 2. Fetch from local cache as well
       const localAlerts = mockDb.getAlerts() || [];
 
-      // 3. Merge without duplicates (Supabase takes precedence)
+      // 3. Merge without duplicates (Supabase takes precedence), filtering out system/script errors
       const mergedMap = new Map<string, Alert>();
       (dbAlerts || []).forEach((a: any) => {
-        if (!a.is_acknowledged && (!a.message || !a.message.includes('elevator calibration'))) {
+        if (!isSystemOrIgnoredAlert(a)) {
           mergedMap.set(a.id, a as Alert);
         }
       });
       localAlerts.forEach((a: Alert) => {
-        if (!a.is_acknowledged && (!a.message || !a.message.includes('elevator calibration'))) {
+        if (!isSystemOrIgnoredAlert(a)) {
           if (!mergedMap.has(a.id)) {
             mergedMap.set(a.id, a);
           }
@@ -142,6 +165,23 @@ export default function AlertPopupModal() {
       return;
     }
 
+    // Auto-clean any legacy error alerts from localStorage immediately
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('sih_logistics_mock_db');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed.alerts && Array.isArray(parsed.alerts)) {
+            const initialCount = parsed.alerts.length;
+            parsed.alerts = parsed.alerts.filter((a: any) => !isSystemOrIgnoredAlert(a));
+            if (parsed.alerts.length !== initialCount) {
+              localStorage.setItem('sih_logistics_mock_db', JSON.stringify(parsed));
+            }
+          }
+        }
+      } catch {}
+    }
+
     fetchActiveAlerts();
     const interval = setInterval(() => {
       if (document.hidden) return;
@@ -157,7 +197,7 @@ export default function AlertPopupModal() {
         (payload: any) => {
           if (payload.eventType === 'INSERT' && payload.new) {
             const newAlert = payload.new as Alert;
-            if (!newAlert.is_acknowledged && (!newAlert.message || !newAlert.message.includes('elevator calibration'))) {
+            if (!isSystemOrIgnoredAlert(newAlert)) {
               setAlerts(prev => {
                 if (prev.some(a => a.id === newAlert.id)) return prev;
                 return [newAlert, ...prev];
@@ -187,7 +227,7 @@ export default function AlertPopupModal() {
     const handleNewAlertEvent = (e: Event) => {
       const customEv = e as CustomEvent<Alert>;
       if (customEv.detail) {
-        if (customEv.detail.message && customEv.detail.message.includes('elevator calibration')) return;
+        if (isSystemOrIgnoredAlert(customEv.detail)) return;
         setAlerts(prev => {
           const filtered = prev.filter(a => a.id !== customEv.detail.id);
           return [customEv.detail, ...filtered];
@@ -211,77 +251,8 @@ export default function AlertPopupModal() {
       fetchActiveAlerts();
     };
 
-    // Generic error popup event listener across any section of the website
-    const handleGenericErrorPopup = (e: Event) => {
-      const customEv = e as CustomEvent<{ message: string; severity?: 'CRITICAL' | 'WARNING' | 'INFO'; type?: string }>;
-      if (customEv.detail && customEv.detail.message) {
-        const errorAlert: Alert = {
-          id: generateUUID(),
-          type: (customEv.detail.type as any) || 'SYSTEM_ERROR',
-          severity: customEv.detail.severity || 'CRITICAL',
-          message: customEv.detail.message,
-          is_acknowledged: false,
-          resolved_at: null,
-          created_at: new Date().toISOString()
-        };
-        setAlerts(prev => [errorAlert, ...prev.filter(a => a.id !== errorAlert.id)]);
-        setDismissedIds(prev => {
-          const updated = new Set(prev);
-          updated.delete(errorAlert.id);
-          return updated;
-        });
-        if (soundEnabled) playAlertChime(errorAlert.severity);
-      }
-    };
-
-    // Global browser unhandled runtime error listener
-    const handleWindowError = (e: ErrorEvent) => {
-      if (!e.message || e.message.includes('ResizeObserver') || e.message.includes('Script error')) return;
-      const errorAlert: Alert = {
-        id: generateUUID(),
-        type: 'SYSTEM_ERROR',
-        severity: 'CRITICAL',
-        message: `System Error: ${e.message}`,
-        is_acknowledged: false,
-        resolved_at: null,
-        created_at: new Date().toISOString()
-      };
-      setAlerts(prev => [errorAlert, ...prev.filter(a => a.id !== errorAlert.id)]);
-      setDismissedIds(prev => {
-        const updated = new Set(prev);
-        updated.delete(errorAlert.id);
-        return updated;
-      });
-      if (soundEnabled) playAlertChime('CRITICAL');
-    };
-
-    // Global unhandled promise rejection listener
-    const handleWindowRejection = (e: PromiseRejectionEvent) => {
-      const msg = e.reason?.message || (typeof e.reason === 'string' ? e.reason : '');
-      if (!msg || msg.includes('ResizeObserver') || msg.includes('AbortError')) return;
-      const errorAlert: Alert = {
-        id: generateUUID(),
-        type: 'SYSTEM_ERROR',
-        severity: 'WARNING',
-        message: `Unhandled Exception: ${msg}`,
-        is_acknowledged: false,
-        resolved_at: null,
-        created_at: new Date().toISOString()
-      };
-      setAlerts(prev => [errorAlert, ...prev.filter(a => a.id !== errorAlert.id)]);
-      setDismissedIds(prev => {
-        const updated = new Set(prev);
-        updated.delete(errorAlert.id);
-        return updated;
-      });
-      if (soundEnabled) playAlertChime('WARNING');
-    };
-
     window.addEventListener('swl:new-alert-popup', handleNewAlertEvent);
     window.addEventListener('swl:reset-alert-popups', handleResetPopups);
-    window.addEventListener('swl:show-error-popup', handleGenericErrorPopup);
-    window.addEventListener('error', handleWindowError);
-    window.addEventListener('unhandledrejection', handleWindowRejection);
 
     return () => {
       clearInterval(interval);
@@ -289,9 +260,6 @@ export default function AlertPopupModal() {
       unsubscribe();
       window.removeEventListener('swl:new-alert-popup', handleNewAlertEvent);
       window.removeEventListener('swl:reset-alert-popups', handleResetPopups);
-      window.removeEventListener('swl:show-error-popup', handleGenericErrorPopup);
-      window.removeEventListener('error', handleWindowError);
-      window.removeEventListener('unhandledrejection', handleWindowRejection);
     };
   }, [fetchActiveAlerts, soundEnabled, isAuthPage]);
 

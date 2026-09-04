@@ -71,15 +71,17 @@ export default function VehiclesPage() {
     return () => clearInterval(interval);
   }, [showAddModal, editingVehicle]);
 
-  const handleDeleteVehicle = (id: string) => {
+  const handleDeleteVehicle = async (id: string) => {
     setVehicles(prev => prev.filter(v => v.id !== id));
-    supabase.from('vehicles').delete().eq('id', id).catch((err: any) => {
+    try {
+      await supabase.from('vehicles').delete().eq('id', id);
+    } catch (err: any) {
       console.error('Failed to delete vehicle:', err);
       loadVehicles();
-    });
+    }
   };
 
-  const handleSendToCharging = (id: string) => {
+  const handleSendToCharging = async (id: string) => {
     const v = vehicles.find(x => x.id === id);
     if (!v) return;
 
@@ -96,19 +98,21 @@ export default function VehiclesPage() {
       battery_percentage: 100
     } : item));
 
-    supabase.from('vehicles').update({
-      status: 'CHARGING',
-      x_position: charger.x,
-      y_position: charger.y,
-      current_location_id: charger.id,
-      battery_percentage: 100
-    }).eq('id', id).catch((err: any) => {
+    try {
+      await supabase.from('vehicles').update({
+        status: 'CHARGING',
+        x_position: charger.x,
+        y_position: charger.y,
+        current_location_id: charger.id,
+        battery_percentage: 100
+      }).eq('id', id);
+    } catch (err: any) {
       console.error('Failed to send vehicle to charging:', err);
       loadVehicles();
-    });
+    }
   };
 
-  const handleResetVehicle = (id: string) => {
+  const handleResetVehicle = async (id: string) => {
     const v = vehicles.find(x => x.id === id);
     if (!v) return;
 
@@ -126,20 +130,22 @@ export default function VehiclesPage() {
       battery_percentage: 95
     } : item));
 
-    supabase.from('vehicles').update({
-      status: 'AVAILABLE',
-      x_position: x,
-      y_position: y,
-      current_location_id: charger ? charger.id : null,
-      current_task_id: null,
-      battery_percentage: 95
-    }).eq('id', id).catch((err: any) => {
+    try {
+      await supabase.from('vehicles').update({
+        status: 'AVAILABLE',
+        x_position: x,
+        y_position: y,
+        current_location_id: charger ? charger.id : null,
+        current_task_id: null,
+        battery_percentage: 95
+      }).eq('id', id);
+    } catch (err: any) {
       console.error('Failed to reset vehicle:', err);
       loadVehicles();
-    });
+    }
   };
 
-  const handleEditVehicleSubmit = (e: React.FormEvent) => {
+  const handleEditVehicleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingVehicle || !editVName) return;
 
@@ -150,13 +156,15 @@ export default function VehiclesPage() {
     } : v));
     setEditingVehicle(null);
 
-    supabase.from('vehicles').update({
-      name: editVName,
-      status: editStatus
-    }).eq('id', editingVehicle.id).catch((err: any) => {
+    try {
+      await supabase.from('vehicles').update({
+        name: editVName,
+        status: editStatus
+      }).eq('id', editingVehicle.id);
+    } catch (err: any) {
       console.error('Failed to update vehicle:', err);
       loadVehicles();
-    });
+    }
   };
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -445,10 +453,14 @@ function CommissionAmrModal({ onClose, floors, locations, onSuccess }: Commissio
       onSuccess(newVehicle);
       onClose();
 
-      supabase.from('vehicles').insert(newVehicle).catch((err: any) => {
-        console.error('Failed to commission AMR in background:', err);
-        alert('Failed to commission AMR: ' + err.message);
-      });
+      (async () => {
+        try {
+          await supabase.from('vehicles').insert(newVehicle);
+        } catch (err: any) {
+          console.error('Failed to commission AMR in background:', err);
+          alert('Failed to commission AMR: ' + (err?.message || 'Database error'));
+        }
+      })();
     } catch (err: any) {
       setModalError(err?.message || 'Failed to commission AMR.');
     }

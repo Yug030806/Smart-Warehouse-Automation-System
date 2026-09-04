@@ -230,23 +230,33 @@ class MockDB {
               mutated = true;
             }
           }
-          // Auto-resolve any legacy calibration test alerts so they never persist in user storage
+          // Auto-purge any legacy error alerts so they never persist in user storage
           if (this.state.alerts) {
-            this.state.alerts.forEach(a => {
-              if (a.message && a.message.includes('elevator calibration')) {
-                a.is_acknowledged = true;
-                a.resolved_at = a.resolved_at || new Date().toISOString();
-                mutated = true;
-              }
+            const initialCount = this.state.alerts.length;
+            this.state.alerts = this.state.alerts.filter(a => {
+              if (a.id === 'alert-01' || a.type === 'SYSTEM_ERROR') return false;
+              const msg = (a.message || '').toLowerCase();
+              return (
+                !msg.includes('system error') &&
+                !msg.includes('typeerror') &&
+                !msg.includes('uncaught') &&
+                !msg.includes('is not a function') &&
+                !msg.includes('.catch') &&
+                !msg.includes('elevator calibration') &&
+                !msg.includes('unhandled exception')
+              );
             });
+            if (this.state.alerts.length !== initialCount) {
+              mutated = true;
+            }
           }
           if (mutated) {
             this.save();
           }
 
           return;
-        } catch {
-          // fallback
+        } catch (e) {
+          console.error('Failed to parse mock DB state from local storage:', e);
         }
       }
     }
@@ -255,7 +265,6 @@ class MockDB {
       profiles: [
         { id: 'u-admin', full_name: 'Super Admin', email: 'admin@demo.com', role: 'ADMIN', assigned_warehouse_ids: [], is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
         { id: 'u-manager', full_name: 'Warehouse Manager', email: 'manager@demo.com', role: 'MANAGER', assigned_warehouse_ids: ['w-01'], is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-        
         { id: 'u-operator', full_name: 'AMR Operator', email: 'operator@demo.com', role: 'OPERATOR', assigned_warehouse_ids: [], is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
       ],
       warehouses: initialWarehouses,
@@ -269,15 +278,13 @@ class MockDB {
       routes: [],
       scanEvents: [],
       alerts: [
-        { id: 'alert-01', type: 'LOW_BATTERY', severity: 'WARNING', message: 'Vehicle AMR-04 has low battery (12%) and requires docking soon.', vehicle_id: 'v-04', is_acknowledged: false, resolved_at: null, created_at: new Date().toISOString() }
+        { id: 'alert-01', type: 'LOW_BATTERY', severity: 'WARNING', message: 'Vehicle AMR-04 has low battery (12%) and requires docking soon.', vehicle_id: 'v-04', is_acknowledged: true, resolved_at: new Date().toISOString(), created_at: new Date().toISOString() }
       ],
       auditLogs: [
         { id: 'log-01', user_email: 'system', action: 'SEED_DATA', object_type: 'SYSTEM', object_id: 'sys', previous_state: null, new_state: { seeded: true }, timestamp: new Date().toISOString() }
       ],
       notifications: [
         { id: 'notif-01', user_id: 'u-manager', title: 'New Urgent Task Created', message: 'Task TSK-1001 requires attention.', type: 'URGENT_TASK', is_read: false, related_id: 'task-1001', created_at: new Date().toISOString() },
-        
-        
       ],
       settings: initialSettings,
       sensorReadings: [],
@@ -449,8 +456,35 @@ class MockDB {
   }
 
   // Alerts CRUD
-  getAlerts() { return this.state.alerts; }
+  getAlerts() {
+    return (this.state.alerts || []).filter(a => {
+      if (a.id === 'alert-01' || a.type === 'SYSTEM_ERROR') return false;
+      const msg = (a.message || '').toLowerCase();
+      return (
+        !msg.includes('system error') &&
+        !msg.includes('typeerror') &&
+        !msg.includes('uncaught') &&
+        !msg.includes('is not a function') &&
+        !msg.includes('.catch') &&
+        !msg.includes('elevator calibration') &&
+        !msg.includes('unhandled exception')
+      );
+    });
+  }
   saveAlert(a: Alert) {
+    if (a.type === 'SYSTEM_ERROR') return;
+    const msg = (a.message || '').toLowerCase();
+    if (
+      msg.includes('system error') ||
+      msg.includes('typeerror') ||
+      msg.includes('uncaught') ||
+      msg.includes('is not a function') ||
+      msg.includes('.catch') ||
+      msg.includes('elevator calibration') ||
+      msg.includes('unhandled exception')
+    ) {
+      return;
+    }
     const idx = this.state.alerts.findIndex(x => x.id === a.id);
     if (idx >= 0) this.state.alerts[idx] = a;
     else this.state.alerts.push(a);

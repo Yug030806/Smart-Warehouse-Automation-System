@@ -304,39 +304,43 @@ export default function TasksPage() {
       setSelectedVehicleId('');
       setIsManualAssigning(false);
 
-      Promise.all([
-        supabase.from('routes').insert({
-          id: generateUUID(),
-          task_id: manualAssignTask.id,
-          path_coordinates: routePts,
-          created_at: new Date().toISOString()
-        }),
-        supabase.from('vehicles').update({
-          status: 'BUSY',
-          current_task_id: manualAssignTask.id
-        }).eq('id', chosen.id),
-        supabase.from('tasks').update({
-          vehicle_id: chosen.id,
-          status: 'ASSIGNED',
-          assigned_at: new Date().toISOString()
-        }).eq('id', manualAssignTask.id),
-        supabase.from('boxes').update({
-          status: 'ASSIGNED'
-        }).eq('id', manualAssignTask.box_id),
-        supabase.from('audit_logs').insert({
-          id: generateUUID(),
-          user_email: user?.email || 'admin@demo.com',
-          action: 'TASK_MANUAL_ASSIGNED',
-          object_type: 'TASK',
-          object_id: manualAssignTask.id,
-          previous_state: { status: 'PENDING' },
-          new_state: { status: 'ASSIGNED', vehicle_id: chosen.id },
-          timestamp: new Date().toISOString()
-        })
-      ]).catch(err => {
-        console.error('Manual assign background sync error:', err);
-        loadTasksData();
-      });
+      (async () => {
+        try {
+          await Promise.all([
+            supabase.from('routes').insert({
+              id: generateUUID(),
+              task_id: manualAssignTask.id,
+              path_coordinates: routePts,
+              created_at: new Date().toISOString()
+            }),
+            supabase.from('vehicles').update({
+              status: 'BUSY',
+              current_task_id: manualAssignTask.id
+            }).eq('id', chosen.id),
+            supabase.from('tasks').update({
+              vehicle_id: chosen.id,
+              status: 'ASSIGNED',
+              assigned_at: new Date().toISOString()
+            }).eq('id', manualAssignTask.id),
+            supabase.from('boxes').update({
+              status: 'ASSIGNED'
+            }).eq('id', manualAssignTask.box_id),
+            supabase.from('audit_logs').insert({
+              id: generateUUID(),
+              user_email: user?.email || 'admin@demo.com',
+              action: 'TASK_MANUAL_ASSIGNED',
+              object_type: 'TASK',
+              object_id: manualAssignTask.id,
+              previous_state: { status: 'PENDING' },
+              new_state: { status: 'ASSIGNED', vehicle_id: chosen.id },
+              timestamp: new Date().toISOString()
+            })
+          ]);
+        } catch (err: any) {
+          console.error('Manual assign background sync error:', err);
+          loadTasksData();
+        }
+      })();
     } catch (err: any) {
       console.error('Manual assign error:', err);
       alert('Failed to assign AMR: ' + (err?.message || 'Unknown error'));
@@ -378,14 +382,18 @@ export default function TasksPage() {
     setSelectedBoxId('');
 
     // Persist in background
-    Promise.all([
-      supabase.from('tasks').insert(newTask),
-      supabase.from('boxes').update({ status: 'WAITING', priority: taskPriority }).eq('id', targetBox.id)
-    ]).catch(err => {
-      console.error('Task creation background error:', err);
-      setTasks(prev => prev.filter(t => t.id !== newTask.id));
-      alert(`Failed to save task: ${err?.message || 'Error'}`);
-    });
+    (async () => {
+      try {
+        await Promise.all([
+          supabase.from('tasks').insert(newTask),
+          supabase.from('boxes').update({ status: 'WAITING', priority: taskPriority }).eq('id', targetBox.id)
+        ]);
+      } catch (err: any) {
+        console.error('Task creation background error:', err);
+        setTasks(prev => prev.filter(t => t.id !== newTask.id));
+        alert(`Failed to save task: ${err?.message || 'Error'}`);
+      }
+    })();
   };
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);

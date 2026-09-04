@@ -91,11 +91,15 @@ export default function UsersPage() {
     setName('');
     setAssignedWarehouses([]);
 
-    supabase.from('profiles').insert(newProfile).catch((err: any) => {
-      console.error('Failed to add profile:', err);
-      setUsers(prev => prev.filter(u => u.id !== newId));
-      alert('Failed to save user profile: ' + err.message);
-    });
+    (async () => {
+      try {
+        await supabase.from('profiles').insert(newProfile);
+      } catch (err: any) {
+        console.error('Failed to add profile:', err);
+        setUsers(prev => prev.filter(u => u.id !== newId));
+        alert('Failed to save user profile: ' + (err?.message || 'Database error'));
+      }
+    })();
   };
 
   const handleDeactivate = (id: string, currentStatus: boolean, profileRole: string) => {
@@ -114,20 +118,27 @@ export default function UsersPage() {
     // Optimistically update user status
     setUsers(prev => prev.map(u => u.id === id ? { ...u, is_active: !currentStatus } : u));
 
-    fetch('/api/users/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId: id,
-        updates: { is_active: !currentStatus },
-        adminEmail: user?.email
-      })
-    }).catch(() => {
-      supabase.from('profiles').update({ is_active: !currentStatus }).eq('id', id).catch((err: any) => {
-        console.error('Failed to update user status:', err);
-        loadData();
-      });
-    });
+    (async () => {
+      try {
+        const res = await fetch('/api/users/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: id,
+            updates: { is_active: !currentStatus },
+            adminEmail: user?.email
+          })
+        });
+        if (!res.ok) throw new Error('API update failed');
+      } catch {
+        try {
+          await supabase.from('profiles').update({ is_active: !currentStatus }).eq('id', id);
+        } catch (err: any) {
+          console.error('Failed to update user status:', err);
+          loadData();
+        }
+      }
+    })();
 
     try {
       const mockDb = require('@/lib/supabase/mockDb').default;
@@ -162,20 +173,27 @@ export default function UsersPage() {
     setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, ...updates } : u));
     setEditingUser(null);
 
-    fetch('/api/users/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId: editingUser.id,
-        updates,
-        adminEmail: user?.email
-      })
-    }).catch(() => {
-      supabase.from('profiles').update(updates).eq('id', editingUser.id).catch((err: any) => {
-        console.error('Failed to update user via supabase:', err);
-        loadData();
-      });
-    });
+    (async () => {
+      try {
+        const res = await fetch('/api/users/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: editingUser.id,
+            updates,
+            adminEmail: user?.email
+          })
+        });
+        if (!res.ok) throw new Error('API update failed');
+      } catch {
+        try {
+          await supabase.from('profiles').update(updates).eq('id', editingUser.id);
+        } catch (err: any) {
+          console.error('Failed to update user via supabase:', err);
+          loadData();
+        }
+      }
+    })();
   };
 
   const handleDeleteUser = (id: string) => {

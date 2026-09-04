@@ -105,6 +105,7 @@ export default function WarehousesPage() {
           const fRes = await supabase.from('floors').select().eq('warehouse_id', selectedWarehouse.id);
           if (isCancelled) return;
           const f = (fRes.data || []) as Floor[];
+          f.sort((a, b) => (Number(a.floor_number) || 0) - (Number(b.floor_number) || 0));
           setFloors(f);
           if (f.length > 0) {
             setSelectedFloor(prev => {
@@ -207,42 +208,43 @@ export default function WarehousesPage() {
       setIsSubmittingWarehouse(false);
 
       // 2. Persist to cloud database in background
-      Promise.all([
-        supabase.from('warehouses').insert(newW),
-        supabase.from('floors').insert(newFloor)
-      ]).then(async () => {
-        // Update user profile assigned_warehouse_ids if user is restricted
-        if (user?.id || user?.email) {
-          try {
-            const pRes = await supabase.from('profiles').select();
-            const pList = pRes.data || [];
-            const currentUserProfile = pList.find(
-              (p: any) => p.id === user?.id || (user?.email && p.email?.toLowerCase() === user?.email?.toLowerCase())
-            );
-            if (currentUserProfile) {
-              const assigned = currentUserProfile.assigned_warehouse_ids || [];
-              if (!assigned.includes(newId)) {
-                await supabase.from('profiles').update({
-                  assigned_warehouse_ids: [...assigned, newId]
-                }).eq('id', currentUserProfile.id);
+      (async () => {
+        try {
+          await supabase.from('warehouses').insert(newW);
+          await supabase.from('floors').insert(newFloor);
+          // Update user profile assigned_warehouse_ids if user is restricted
+          if (user?.id || user?.email) {
+            try {
+              const pRes = await supabase.from('profiles').select();
+              const pList = pRes.data || [];
+              const currentUserProfile = pList.find(
+                (p: any) => p.id === user?.id || (user?.email && p.email?.toLowerCase() === user?.email?.toLowerCase())
+              );
+              if (currentUserProfile) {
+                const assigned = currentUserProfile.assigned_warehouse_ids || [];
+                if (!assigned.includes(newId)) {
+                  await supabase.from('profiles').update({
+                    assigned_warehouse_ids: [...assigned, newId]
+                  }).eq('id', currentUserProfile.id);
+                }
               }
+            } catch (pErr) {
+              console.warn('Profile warehouse assignment notice:', pErr);
             }
-          } catch (pErr) {
-            console.warn('Profile warehouse assignment notice:', pErr);
           }
+        } catch (err: any) {
+          console.error('Failed to create warehouse in background:', err);
+          setWarehouses(prev => prev.filter(w => w.id !== newId));
+          alert('Failed to save logistics center: ' + (err?.message || 'Database error'));
         }
-      }).catch(err => {
-        console.error('Failed to create warehouse in background:', err);
-        setWarehouses(prev => prev.filter(w => w.id !== newId));
-        alert('Failed to save logistics center: ' + (err?.message || 'Database error'));
-      });
+      })();
     } catch (err: any) {
       setWarehouseError(err?.message || 'Failed to save logistics center.');
       setIsSubmittingWarehouse(false);
     }
   };
 
-  const handleEditWarehouseSubmit = (e: React.FormEvent) => {
+  const handleEditWarehouseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingWarehouse || !editWName.trim()) return;
 
@@ -254,56 +256,77 @@ export default function WarehousesPage() {
     setSelectedWarehouse(prev => prev && prev.id === editingWarehouse.id ? { ...prev, name: trimmedName, address: trimmedAddress } : prev);
     setEditingWarehouse(null);
 
-    supabase.from('warehouses').update({
-      name: trimmedName,
-      address: trimmedAddress
-    }).eq('id', editingWarehouse.id).catch((err: any) => {
+    try {
+      await supabase.from('warehouses').update({
+        name: trimmedName,
+        address: trimmedAddress
+      }).eq('id', editingWarehouse.id);
+    } catch (err: any) {
       console.error('Failed to update warehouse:', err);
       loadData();
-    });
+    }
   };
 
-  const handleDeleteWarehouse = (id: string) => {
+  const handleDeleteWarehouse = async (id: string) => {
     if (!confirm('Are you sure you want to delete this logistics facility?')) return;
 
     // Optimistically delete
     setWarehouses(prev => prev.filter(w => w.id !== id));
     setSelectedWarehouse(prev => prev && prev.id === id ? null : prev);
 
-    supabase.from('warehouses').delete().eq('id', id).catch((err: any) => {
+    try {
+      await supabase.from('warehouses').delete().eq('id', id);
+    } catch (err: any) {
       console.error('Failed to delete warehouse:', err);
       loadData();
-    });
+    }
   };
 
-  const handleAddFloorSubmit = (e: React.FormEvent) => {
+  const handleAddFloorSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedWarehouse || !floorName.trim()) return;
+    if (!selectedWarehouse) {
+      alert('Please select a logistics center first.');
+      return;
+    }
+
+    const targetFloorNum = Number(floorNum) || (floors.length + 1);
+    const trimmedName = floorName.trim() || `Floor ${targetFloorNum}`;
     const newId = generateUUID();
     const newF: Floor = {
       id: newId,
       warehouse_id: selectedWarehouse.id,
-      floor_number: Number(floorNum),
-      name: floorName.trim(),
+      floor_number: targetFloorNum,
+      name: trimmedName,
       grid_width: 12,
       grid_height: 8
     };
 
     // Optimistically add floor
-    setFloors(prev => [...prev, newF]);
+    setFloors(prev => {
+      const updated = [...prev, newF];
+      updated.sort((a, b) => (Number(a.floor_number) || 0) - (Number(b.floor_number) || 0));
+      return updated;
+    });
     setSelectedFloor(newF);
     setFloorName('');
-    setFloorNum(floors.length + 2);
+    setFloorNum(targetFloorNum + 1);
     setShowAddFloor(false);
 
-    supabase.from('floors').insert(newF).catch((err: any) => {
+    try {
+      const res = await supabase.from('floors').insert(newF);
+      if (res?.error) {
+        console.error('Failed to add floor:', res.error);
+        setFloors(prev => prev.filter(f => f.id !== newId));
+        alert('Failed to add floor level: ' + res.error.message);
+      }
+    } catch (err: any) {
       console.error('Failed to add floor:', err);
       setFloors(prev => prev.filter(f => f.id !== newId));
-      alert('Failed to add floor level: ' + err.message);
-    });
+      alert('Failed to add floor level: ' + (err?.message || 'Error'));
+    }
   };
 
-  const handleEditFloorSubmit = (e: React.FormEvent) => {
+  const handleEditFloorSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingFloor || !editFloorName.trim()) return;
     const trimmedName = editFloorName.trim();
@@ -313,26 +336,38 @@ export default function WarehousesPage() {
     setSelectedFloor(prev => prev && prev.id === editingFloor.id ? { ...prev, name: trimmedName } : prev);
     setEditingFloor(null);
 
-    supabase.from('floors').update({ name: trimmedName }).eq('id', editingFloor.id).catch((err: any) => {
+    try {
+      const res = await supabase.from('floors').update({ name: trimmedName }).eq('id', editingFloor.id);
+      if (res?.error) {
+        console.error('Failed to update floor:', res.error);
+        alert('Failed to update floor: ' + res.error.message);
+      }
+    } catch (err: any) {
       console.error('Failed to update floor:', err);
-      alert('Failed to update floor: ' + err.message);
-    });
+      alert('Failed to update floor: ' + (err?.message || 'Error'));
+    }
   };
 
-  const handleDeleteFloor = (id: string) => {
+  const handleDeleteFloor = async (id: string) => {
     if (!confirm('Are you sure you want to delete this floor level?')) return;
 
     // Optimistically remove floor
     setFloors(prev => prev.filter(f => f.id !== id));
     setSelectedFloor(prev => prev && prev.id === id ? (floors.find(f => f.id !== id) || null) : prev);
 
-    supabase.from('floors').delete().eq('id', id).catch((err: any) => {
+    try {
+      const res = await supabase.from('floors').delete().eq('id', id);
+      if (res?.error) {
+        console.error('Failed to delete floor:', res.error);
+        alert('Failed to delete floor: ' + res.error.message);
+      }
+    } catch (err: any) {
       console.error('Failed to delete floor:', err);
-      alert('Failed to delete floor: ' + err.message);
-    });
+      alert('Failed to delete floor: ' + (err?.message || 'Error'));
+    }
   };
 
-  const handleAddLocSubmit = (e: React.FormEvent) => {
+  const handleAddLocSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFloor || !locName.trim()) return;
 
@@ -354,14 +389,21 @@ export default function WarehousesPage() {
     setLocY(0);
     setShowAddLoc(false);
 
-    supabase.from('locations').insert(newLoc).catch((err: any) => {
+    try {
+      const res = await supabase.from('locations').insert(newLoc);
+      if (res?.error) {
+        console.error('Failed to add location:', res.error);
+        setLocations(prev => prev.filter(l => l.id !== newId));
+        alert('Failed to add location: ' + res.error.message);
+      }
+    } catch (err: any) {
       console.error('Failed to add location:', err);
       setLocations(prev => prev.filter(l => l.id !== newId));
-      alert('Failed to add location: ' + err.message);
-    });
+      alert('Failed to add location: ' + (err?.message || 'Error'));
+    }
   };
 
-  const handleEditLocSubmit = (e: React.FormEvent) => {
+  const handleEditLocSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingLoc || !editLocName.trim()) return;
 
@@ -377,27 +419,39 @@ export default function WarehousesPage() {
     setLocations(prev => prev.map(l => l.id === editingLoc.id ? updatedLoc : l));
     setEditingLoc(null);
 
-    supabase.from('locations').update({
-      name: editLocName.trim(),
-      type: editLocType,
-      x: Number(editLocX),
-      y: Number(editLocY)
-    }).eq('id', editingLoc.id).catch((err: any) => {
+    try {
+      const res = await supabase.from('locations').update({
+        name: editLocName.trim(),
+        type: editLocType,
+        x: Number(editLocX),
+        y: Number(editLocY)
+      }).eq('id', editingLoc.id);
+      if (res?.error) {
+        console.error('Failed to update location:', res.error);
+        alert('Failed to update location: ' + res.error.message);
+      }
+    } catch (err: any) {
       console.error('Failed to update location:', err);
-      alert('Failed to update location: ' + err.message);
-    });
+      alert('Failed to update location: ' + (err?.message || 'Error'));
+    }
   };
 
-  const handleDeleteLocation = (id: string) => {
+  const handleDeleteLocation = async (id: string) => {
     // Optimistically remove location
     setLocations(prev => prev.filter(l => l.id !== id));
-    supabase.from('locations').delete().eq('id', id).catch((err: any) => {
+    try {
+      const res = await supabase.from('locations').delete().eq('id', id);
+      if (res?.error) {
+        console.error('Failed to delete location:', res.error);
+        alert('Failed to delete location: ' + res.error.message);
+      }
+    } catch (err: any) {
       console.error('Failed to delete location:', err);
-      alert('Failed to delete location: ' + err.message);
-    });
+      alert('Failed to delete location: ' + (err?.message || 'Error'));
+    }
   };
 
-  const handleAddZoneSubmit = (e: React.FormEvent) => {
+  const handleAddZoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFloor || !zoneName.trim()) return;
     const newId = generateUUID();
@@ -415,19 +469,31 @@ export default function WarehousesPage() {
     setZoneCode('');
     setShowAddZone(false);
 
-    supabase.from('zones').insert(newZ).catch((err: any) => {
+    try {
+      const res = await supabase.from('zones').insert(newZ);
+      if (res?.error) {
+        console.error('Failed to add zone:', res.error);
+        alert('Failed to add zone: ' + res.error.message);
+      }
+    } catch (err: any) {
       console.error('Failed to add zone:', err);
-      alert('Failed to add zone: ' + err.message);
-    });
+      alert('Failed to add zone: ' + (err?.message || 'Error'));
+    }
   };
 
-  const handleDeleteZone = (id: string) => {
+  const handleDeleteZone = async (id: string) => {
     // Optimistic update
     setZones(prev => prev.filter(z => z.id !== id));
-    supabase.from('zones').delete().eq('id', id).catch((err: any) => {
+    try {
+      const res = await supabase.from('zones').delete().eq('id', id);
+      if (res?.error) {
+        console.error('Failed to delete zone:', res.error);
+        alert('Failed to delete zone: ' + res.error.message);
+      }
+    } catch (err: any) {
       console.error('Failed to delete zone:', err);
-      alert('Failed to delete zone: ' + err.message);
-    });
+      alert('Failed to delete zone: ' + (err?.message || 'Error'));
+    }
   };
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -512,7 +578,12 @@ export default function WarehousesPage() {
                       <p className="text-xs text-slate-400">Configure zones and layouts for elevators and sorting routes.</p>
                     </div>
                     <button 
-                      onClick={() => setShowAddFloor(true)}
+                      onClick={() => {
+                        const nextNum = floors.length + 1;
+                        setFloorNum(nextNum);
+                        setFloorName(`Floor ${nextNum}`);
+                        setShowAddFloor(true);
+                      }}
                       className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-[11px] font-semibold text-white shadow-[0_0_12px_rgba(59,130,246,0.3)] transition"
                     >
                       <Plus className="h-3.5 w-3.5" /> Add Level
@@ -528,7 +599,7 @@ export default function WarehousesPage() {
                         <p className="text-[11px] text-slate-500 mt-1">This warehouse facility currently has no floor levels configured.</p>
                       </div>
                       <button 
-                        onClick={() => { setFloorName(''); setFloorNum(1); setShowAddFloor(true); }}
+                        onClick={() => { setFloorNum(1); setFloorName('Floor 1'); setShowAddFloor(true); }}
                         className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white shadow-[0_0_12px_rgba(59,130,246,0.3)] transition"
                       >
                         <Plus className="h-3.5 w-3.5" /> Add First Level
