@@ -95,38 +95,75 @@ export default function WarehousesPage() {
   }, [user]);
 
   useEffect(() => {
-    if (selectedWarehouse) {
+    let isCancelled = false;
+    if (selectedWarehouse?.id) {
       const fetchFloors = async () => {
-        const fRes = await supabase.from('floors').select().eq('warehouse_id', selectedWarehouse.id);
-        const f = fRes.data || [];
-        setFloors(f as Floor[]);
-        if (f.length > 0 && (!selectedFloor || !f.some((item: any) => item.id === selectedFloor.id))) {
-          setSelectedFloor(f[0] as Floor);
-        } else if (f.length === 0) {
-          setSelectedFloor(null);
+        try {
+          const fRes = await supabase.from('floors').select().eq('warehouse_id', selectedWarehouse.id);
+          if (isCancelled) return;
+          const f = (fRes.data || []) as Floor[];
+          setFloors(f);
+          if (f.length > 0) {
+            setSelectedFloor(prev => {
+              if (prev && f.some((item: any) => item.id === prev.id)) {
+                return prev;
+              }
+              return f[0];
+            });
+          } else {
+            setSelectedFloor(null);
+            setLocations([]);
+            setZones([]);
+          }
+        } catch (err) {
+          if (!isCancelled) {
+            setFloors([]);
+            setSelectedFloor(null);
+            setLocations([]);
+            setZones([]);
+          }
         }
       };
       fetchFloors();
     } else {
       setFloors([]);
       setSelectedFloor(null);
+      setLocations([]);
+      setZones([]);
     }
-  }, [selectedWarehouse]);
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedWarehouse?.id]);
 
   useEffect(() => {
-    const fetchData = async () => {
-      if (selectedFloor) {
-        const lRes = await supabase.from('locations').select().eq('floor_id', selectedFloor.id);
-        setLocations((lRes.data || []) as Location[]);
-        const zRes = await supabase.from('zones').select().eq('floor_id', selectedFloor.id);
-        setZones(zRes.data || []);
-      } else {
-        setLocations([]);
-        setZones([]);
-      }
+    let isCancelled = false;
+    if (selectedFloor?.id) {
+      const fetchData = async () => {
+        try {
+          const [lRes, zRes] = await Promise.all([
+            supabase.from('locations').select().eq('floor_id', selectedFloor.id),
+            supabase.from('zones').select().eq('floor_id', selectedFloor.id)
+          ]);
+          if (isCancelled) return;
+          setLocations((lRes.data || []) as Location[]);
+          setZones(zRes.data || []);
+        } catch (err) {
+          if (!isCancelled) {
+            setLocations([]);
+            setZones([]);
+          }
+        }
+      };
+      fetchData();
+    } else {
+      setLocations([]);
+      setZones([]);
+    }
+    return () => {
+      isCancelled = true;
     };
-    fetchData();
-  }, [selectedFloor]);
+  }, [selectedFloor?.id]);
 
   const handleAddWarehouseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -244,10 +281,13 @@ export default function WarehousesPage() {
       return;
     }
     setFloorName('');
-    setFloorNum(floors.length + 1);
+    setFloorNum(floors.length + 2);
     setShowAddFloor(false);
     const fRes = await supabase.from('floors').select().eq('warehouse_id', selectedWarehouse.id);
-    setFloors((fRes.data || []) as Floor[]);
+    const updatedFloors = (fRes.data || []) as Floor[];
+    setFloors(updatedFloors);
+    const createdFloor = updatedFloors.find(x => x.id === newId) || (newF as Floor);
+    setSelectedFloor(createdFloor);
   };
 
   const handleEditFloorSubmit = async (e: React.FormEvent) => {
@@ -415,7 +455,18 @@ export default function WarehousesPage() {
                         : 'border-slate-800/60 bg-slate-900/60 text-slate-300 hover:border-slate-700'
                     }`}
                   >
-                    <button onClick={() => setSelectedWarehouse(w)} className="text-left flex-1">
+                    <button 
+                      onClick={() => {
+                        if (selectedWarehouse?.id !== w.id) {
+                          setSelectedWarehouse(w);
+                          setFloors([]);
+                          setSelectedFloor(null);
+                          setLocations([]);
+                          setZones([]);
+                        }
+                      }} 
+                      className="text-left flex-1"
+                    >
                       <span className="text-sm font-bold block">{w.name}</span>
                       <span className="text-[10px] block mt-1">{w.address || 'No Address'}</span>
                     </button>
@@ -456,38 +507,54 @@ export default function WarehousesPage() {
                   </div>
 
                   {/* Floor Level selector buttons */}
-                  <div className="flex flex-wrap gap-2.5">
-                    {floors.map(f => (
-                      <div key={f.id} className="flex items-center gap-1">
-                        <button
-                          onClick={() => setSelectedFloor(f)}
-                          className={`px-4 py-2 rounded-xl text-xs font-semibold transition duration-150 ${
-                            selectedFloor?.id === f.id
-                              ? 'bg-blue-600 text-slate-50'
-                              : 'bg-slate-900 text-slate-400 hover:text-slate-200'
-                          }`}
-                        >
-                          {f.name}
-                        </button>
-                        {selectedFloor?.id === f.id && (
-                          <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl">
-                            <button
-                              onClick={() => { setEditingFloor(f); setEditFloorName(f.name); }}
-                              className="text-slate-400 hover:text-slate-200 p-1"
-                            >
-                              <Edit2 className="h-3 w-3" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteFloor(f.id)}
-                              className="text-red-400 hover:text-red-300 p-1"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </button>
-                          </div>
-                        )}
+                  {floors.length === 0 ? (
+                    <div className="py-8 px-4 border border-dashed border-slate-800 rounded-xl text-center space-y-3 bg-slate-950/40">
+                      <Layers className="h-8 w-8 text-slate-600 mx-auto" />
+                      <div>
+                        <p className="text-xs font-bold text-slate-300">No floor levels configured for {selectedWarehouse.name}</p>
+                        <p className="text-[11px] text-slate-500 mt-1">This warehouse facility currently has no floor levels configured.</p>
                       </div>
-                    ))}
-                  </div>
+                      <button 
+                        onClick={() => { setFloorName(''); setFloorNum(1); setShowAddFloor(true); }}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white shadow-[0_0_12px_rgba(59,130,246,0.3)] transition"
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Add First Level
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2.5">
+                      {floors.map(f => (
+                        <div key={f.id} className="flex items-center gap-1">
+                          <button
+                            onClick={() => setSelectedFloor(f)}
+                            className={`px-4 py-2 rounded-xl text-xs font-semibold transition duration-150 ${
+                              selectedFloor?.id === f.id
+                                ? 'bg-blue-600 text-slate-50'
+                                : 'bg-slate-900 text-slate-400 hover:text-slate-200'
+                            }`}
+                          >
+                            {f.name}
+                          </button>
+                          {selectedFloor?.id === f.id && (
+                            <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl">
+                              <button
+                                onClick={() => { setEditingFloor(f); setEditFloorName(f.name); }}
+                                className="text-slate-400 hover:text-slate-200 p-1"
+                              >
+                                <Edit2 className="h-3 w-3" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteFloor(f.id)}
+                                className="text-red-400 hover:text-red-300 p-1"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {selectedFloor && (
                     <div className="space-y-6 pt-4">

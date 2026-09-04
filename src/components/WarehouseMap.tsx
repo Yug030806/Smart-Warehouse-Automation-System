@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { Location, Vehicle, RouteSegment, EdgeAIDecision, FleetMessage } from '@/lib/database.types';
 import { ObstacleCell } from '@/lib/simulator/edgeAIEngine';
-import { Bot, Zap, ArrowUpRight, AlertTriangle } from 'lucide-react';
+import { Bot, Zap, ArrowUpRight, AlertTriangle, Layers } from 'lucide-react';
 import * as Tooltip from '@radix-ui/react-tooltip';
 
 interface WarehouseMapProps {
@@ -45,18 +45,17 @@ export default function WarehouseMap({
 
     const loadMapElements = async () => {
       try {
-        let activeFloorId = floorId;
+        const activeFloorId = floorId;
 
-        // If floorId is not provided, find the first real floor
+        // If floorId is not provided, do not fall back to other warehouses' floors!
         if (!activeFloorId) {
-          const fRes = await supabase.from('floors').select();
-          const fls = fRes.data || [];
-          if (fls.length > 0) {
-            activeFloorId = fls[0].id;
+          if (isMounted) {
+            setLocations([]);
+            setVehicles([]);
+            if (warehouseName) setResolvedWarehouseName(warehouseName);
           }
+          return;
         }
-
-        if (!activeFloorId) return;
 
         const locRes = await supabase.from('locations').select().eq('floor_id', activeFloorId);
         if (isMounted && locRes.data) {
@@ -95,7 +94,34 @@ export default function WarehouseMap({
     };
   }, [floorId, warehouseName]);
 
-  const currentFloorId = floorId || 'f-01';
+  // If no floor is configured or selected for this facility, show clean empty state
+  if (!floorId) {
+    return (
+      <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-xl p-8 sm:p-12 shadow-2xl flex flex-col items-center justify-center text-center space-y-4 overflow-hidden min-h-[360px]">
+        <div className="absolute inset-0 bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:16px_16px] opacity-5 pointer-events-none" />
+        <div className="h-14 w-14 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 relative z-10">
+          <Layers className="h-7 w-7 opacity-70" />
+        </div>
+        <div className="space-y-1 relative z-10 max-w-md">
+          <h3 className="text-base font-bold text-slate-200">
+            {resolvedWarehouseName ? `No Levels Configured for ${resolvedWarehouseName}` : 'No Floor Level Selected'}
+          </h3>
+          <p className="text-xs text-slate-400">
+            This facility currently has no floor topology or grid levels configured. Add a floor level in Facilities to activate live digital twin monitoring.
+          </p>
+        </div>
+        <a
+          href="/warehouses"
+          className="relative z-10 inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors shadow-lg shadow-blue-600/20"
+        >
+          <span>Configure Levels in Facilities</span>
+          <ArrowUpRight className="h-3.5 w-3.5" />
+        </a>
+      </div>
+    );
+  }
+
+  const currentFloorId = floorId;
   const gridWidth = 12;
   const gridHeight = 8;
 

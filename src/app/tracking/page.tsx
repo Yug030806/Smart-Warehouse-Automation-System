@@ -195,7 +195,7 @@ export default function TrackingPage() {
       if (fls.length > 0) {
         setSelectedFloor(prev => {
           if (prev && fls.some(f => f.id === prev)) return prev;
-          return fls[0].id;
+          return prev;
         });
       }
 
@@ -226,6 +226,19 @@ export default function TrackingPage() {
     const interval = setInterval(loadData, 2000);
     return () => clearInterval(interval);
   }, [loadData]);
+
+  useEffect(() => {
+    if (selectedWarehouseId) {
+      const whFloors = floors.filter(f => f.warehouse_id === selectedWarehouseId);
+      if (whFloors.length > 0) {
+        if (!whFloors.some(f => f.id === selectedFloor)) {
+          setSelectedFloor(whFloors[0].id);
+        }
+      } else {
+        setSelectedFloor('');
+      }
+    }
+  }, [selectedWarehouseId, floors]);
 
   const handleMapClick = (x: number, y: number) => {
     // Check if obstacle already exists here
@@ -1375,7 +1388,7 @@ export default function TrackingPage() {
                         const newWid = e.target.value;
                         setSelectedWarehouseId(newWid);
                         const whF = floors.filter(f => f.warehouse_id === newWid);
-                        if (whF.length > 0) setSelectedFloor(whF[0].id);
+                        setSelectedFloor(whF.length > 0 ? whF[0].id : '');
                       }}
                       className="bg-slate-900 text-xs font-bold text-slate-200 px-3 py-1.5 rounded-xl border border-slate-800 outline-none cursor-pointer mr-2"
                     >
@@ -1634,34 +1647,53 @@ export default function TrackingPage() {
                   {simMode === 'FLEET' ? 'Active Fleet' : 'Select AMR'}
                 </span>
                 <div className="space-y-3">
-                  {vehicles.map((v) => (
-                    <button
-                      key={v.id}
-                      disabled={v.status === 'OFFLINE'}
-                      onClick={() => handleSelectVehicle(v)}
-                      className={`w-full text-left p-4 rounded-xl border transition-all duration-200 ${
-                        v.status === 'OFFLINE' ? 'opacity-30 cursor-not-allowed' : ''
-                      } ${
-                        selectedVehicleId === v.id
-                          ? (simMode === 'FLEET'
-                              ? 'border-purple-500 bg-purple-600/10 text-slate-100 shadow-lg ring-1 ring-purple-500/50'
-                              : 'border-blue-500 bg-blue-600/10 text-slate-100 shadow-lg ring-1 ring-blue-500/50')
-                          : 'border-slate-900 bg-slate-950/40 text-slate-400 hover:border-slate-700 hover:bg-slate-900/30'
-                      }`}
-                    >
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="font-bold text-xs font-mono">{v.vehicle_code}</span>
-                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded ${v.status === 'AVAILABLE' ? 'bg-green-950 text-green-400' : 'bg-blue-950 text-blue-400'}`}>
-                          {v.status}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-300 font-semibold">{v.name}</p>
-                      <div className="flex justify-between items-center mt-2 text-[10px] text-slate-500 font-mono">
-                        <span>Floor {floorLabel(v.current_floor_id)}</span>
-                        <span>🔋 {v.battery_percentage}%</span>
-                      </div>
-                    </button>
-                  ))}
+                  {(() => {
+                    const isFirstWarehouse = warehouses.length > 0 && selectedWarehouseId === warehouses[0].id;
+                    const whFloors = floors.filter(f => f.warehouse_id === selectedWarehouseId);
+                    const whFloorIds = new Set(whFloors.map(f => f.id));
+                    const facilityVehicles = vehicles.filter(v => 
+                      !selectedWarehouseId ||
+                      (v.current_floor_id && whFloorIds.has(v.current_floor_id)) || 
+                      (!v.current_floor_id && isFirstWarehouse)
+                    );
+
+                    if (facilityVehicles.length === 0) {
+                      return (
+                        <p className="text-xs text-slate-500 italic p-3 text-center">
+                          No AMRs found in this facility.
+                        </p>
+                      );
+                    }
+
+                    return facilityVehicles.map((v) => (
+                      <button
+                        key={v.id}
+                        disabled={v.status === 'OFFLINE'}
+                        onClick={() => handleSelectVehicle(v)}
+                        className={`w-full text-left p-4 rounded-xl border transition-all duration-200 ${
+                          v.status === 'OFFLINE' ? 'opacity-30 cursor-not-allowed' : ''
+                        } ${
+                          selectedVehicleId === v.id
+                            ? (simMode === 'FLEET'
+                                ? 'border-purple-500 bg-purple-600/10 text-slate-100 shadow-lg ring-1 ring-purple-500/50'
+                                : 'border-blue-500 bg-blue-600/10 text-slate-100 shadow-lg ring-1 ring-blue-500/50')
+                            : 'border-slate-900 bg-slate-950/40 text-slate-400 hover:border-slate-700 hover:bg-slate-900/30'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="font-bold text-xs font-mono">{v.vehicle_code}</span>
+                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded ${v.status === 'AVAILABLE' ? 'bg-green-950 text-green-400' : 'bg-blue-950 text-blue-400'}`}>
+                            {v.status}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-300 font-semibold">{v.name}</p>
+                        <div className="flex justify-between items-center mt-2 text-[10px] text-slate-500 font-mono">
+                          <span>Floor {floorLabel(v.current_floor_id)}</span>
+                          <span>🔋 {v.battery_percentage}%</span>
+                        </div>
+                      </button>
+                    ));
+                  })()}
                 </div>
               </div>
             </div>

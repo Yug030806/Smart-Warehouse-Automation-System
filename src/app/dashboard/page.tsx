@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/supabase/AuthProvider';
@@ -14,13 +14,13 @@ import {
   ClipboardList, 
   AlertTriangle, 
   Activity, 
-  CheckCircle,
-  Clock,
-  Navigation,
-  UserCheck,
-  X,
-  Brain,
-  ShieldCheck
+  CheckCircle, 
+  Clock, 
+  Navigation, 
+  UserCheck, 
+  X, 
+  Brain, 
+  ShieldCheck 
 } from 'lucide-react';
 import { Box, Vehicle, Task, Alert, Profile, Floor } from '@/lib/database.types';
 
@@ -32,22 +32,13 @@ export default function Dashboard() {
   const [pendingUsers, setPendingUsers] = useState<Profile[]>([]);
   const [floors, setFloors] = useState<Floor[]>([]);
   const [selectedFloor, setSelectedFloor] = useState('');
-  const [stats, setStats] = useState({
-    totalBoxes: 0,
-    pendingTasks: 0,
-    activeTasks: 0,
-    completedDeliveries: 0,
-    availableVehicles: 0,
-    busyVehicles: 0,
-    urgentTasks: 0,
-    activeAlerts: 0,
-    edgeAiActive: 0,
-    obstaclesToday: 0
-  });
 
-  const [activeTasksList, setActiveTasksList] = useState<Task[]>([]);
-  const [vehiclesList, setVehiclesList] = useState<Vehicle[]>([]);
-  const [alertsList, setAlertsList] = useState<Alert[]>([]);
+  const [rawBoxes, setRawBoxes] = useState<Box[]>([]);
+  const [rawVehicles, setRawVehicles] = useState<Vehicle[]>([]);
+  const [rawTasks, setRawTasks] = useState<Task[]>([]);
+  const [rawAlerts, setRawAlerts] = useState<Alert[]>([]);
+  const [rawLocations, setRawLocations] = useState<any[]>([]);
+  const [rawProfiles, setRawProfiles] = useState<Profile[]>([]);
 
   // Check for pending approval requests when admin logs in (query live DB & poll)
   useEffect(() => {
@@ -90,10 +81,14 @@ export default function Dashboard() {
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('');
 
   useEffect(() => {
-    if (selectedWarehouseId && floors.length > 0) {
+    if (selectedWarehouseId) {
       const whFloors = floors.filter(f => f.warehouse_id === selectedWarehouseId);
-      if (whFloors.length > 0 && !whFloors.some(f => f.id === selectedFloor)) {
-        setSelectedFloor(whFloors[0].id);
+      if (whFloors.length > 0) {
+        if (!whFloors.some(f => f.id === selectedFloor)) {
+          setSelectedFloor(whFloors[0].id);
+        }
+      } else {
+        setSelectedFloor('');
       }
     }
   }, [selectedWarehouseId, floors]);
@@ -114,74 +109,33 @@ export default function Dashboard() {
           supabase.from('warehouses').select()
         ]);
 
-        let boxes = (bRes.data || []) as Box[];
-        let vehicles = (vRes.data || []) as Vehicle[];
-        let tasks = (tRes.data || []) as Task[];
-        let alerts = (aRes.data || []) as Alert[];
-        const pList = pRes.data || [];
+        const boxes = (bRes.data || []) as Box[];
+        const vehicles = (vRes.data || []) as Vehicle[];
+        const tasks = (tRes.data || []) as Task[];
+        const alerts = (aRes.data || []) as Alert[];
+        const pList = (pRes.data || []) as Profile[];
         const fls = (fRes.data || []) as Floor[];
         const locs = (lRes.data || []) as any[];
 
-        if (isMounted && wRes.data) {
-          setWarehouses(wRes.data);
-          setSelectedWarehouseId(prev => {
-            if (prev && wRes.data.some((w: any) => w.id === prev)) return prev;
-            return wRes.data.length > 0 ? wRes.data[0].id : '';
-          });
-        }
-
-        if (isMounted && fls.length > 0) {
-          setFloors(fls);
-          setSelectedFloor(prev => {
-            if (prev && fls.some(f => f.id === prev)) return prev;
-            return fls[0].id;
-          });
-        }
-
-        const currentUserProfile = pList.find(
-          (p: any) => p.id === user?.id || (user?.email && p.email?.toLowerCase() === user?.email?.toLowerCase())
-        );
-        const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
-        const userRole = user?.user_metadata?.role || (user as any)?.role || 'OPERATOR';
-        const isRestricted = ['MANAGER'].includes(userRole);
-
-        if (isRestricted && assignedWarehouses.length > 0) {
-          const allowedF = fls.filter((f: any) => assignedWarehouses.includes(f.warehouse_id)).map((f: any) => f.id);
-          const allowedL = locs.filter((l: any) => allowedF.includes(l.floor_id)).map((l: any) => l.id);
-
-          vehicles = vehicles.filter((v: any) => allowedF.includes(v.current_floor_id));
-          boxes = boxes.filter((b: any) => allowedL.includes(b.current_location_id));
-          tasks = tasks.filter((t: any) => allowedL.includes(t.source_location_id));
-        }
-
-        const totalBoxes = boxes.length;
-        const pendingTasks = tasks.filter(t => t.status === 'PENDING').length;
-        const activeTasks = tasks.filter(t => ['ASSIGNED', 'IN_PROGRESS', 'PICKUP_PENDING', 'PICKED_UP', 'DELIVERING'].includes(t.status)).length;
-        const completedDeliveries = tasks.filter(t => t.status === 'COMPLETED').length;
-        const availableVehicles = vehicles.filter(v => v.status === 'AVAILABLE').length;
-        const busyVehicles = vehicles.filter(v => v.status === 'BUSY').length;
-        const urgentTasks = tasks.filter(t => t.priority === 'URGENT' && t.status !== 'COMPLETED').length;
-        const activeAlerts = alerts.length;
-        const edgeAiActive = vehicles.filter(v => v.sensor_suite_active).length;
-        const obstaclesToday = vehicles.reduce((sum, v) => sum + (v.obstacle_count || 0), 0);
-
         if (isMounted) {
-          setStats({
-            totalBoxes,
-            pendingTasks,
-            activeTasks,
-            completedDeliveries,
-            availableVehicles,
-            busyVehicles,
-            urgentTasks,
-            activeAlerts,
-            edgeAiActive,
-            obstaclesToday
-          });
+          if (wRes.data) {
+            setWarehouses(wRes.data);
+            setSelectedWarehouseId(prev => {
+              if (prev && wRes.data.some((w: any) => w.id === prev)) return prev;
+              return wRes.data.length > 0 ? wRes.data[0].id : '';
+            });
+          }
 
-          setActiveTasksList(tasks.filter(t => t.status !== 'COMPLETED' && t.status !== 'CANCELLED').slice(0, 5) as Task[]);
-          setVehiclesList(vehicles as Vehicle[]);
-          setAlertsList(alerts.slice(0, 5) as Alert[]);
+          if (fls) {
+            setFloors(fls);
+          }
+
+          setRawBoxes(boxes);
+          setRawVehicles(vehicles);
+          setRawTasks(tasks);
+          setRawAlerts(alerts);
+          setRawProfiles(pList);
+          setRawLocations(locs);
         }
       } catch (err) {
         console.error('Error fetching dashboard live data:', err);
@@ -195,6 +149,90 @@ export default function Dashboard() {
       clearInterval(interval);
     };
   }, [user]);
+
+  // Dynamically compute stats and rosters filtered by the selected warehouse
+  const { stats, activeTasksList, vehiclesList, alertsList } = useMemo(() => {
+    const isFirstWarehouse = warehouses.length > 0 && selectedWarehouseId === warehouses[0].id;
+    const whFloors = floors.filter(f => f.warehouse_id === selectedWarehouseId);
+    const whFloorIds = new Set(whFloors.map(f => f.id));
+    const whLocs = rawLocations.filter(l => whFloorIds.has(l.floor_id));
+    const whLocIds = new Set(whLocs.map(l => l.id));
+
+    // Role restriction (for MANAGER)
+    const currentUserProfile = rawProfiles.find(
+      (p: any) => p.id === user?.id || (user?.email && p.email?.toLowerCase() === user?.email?.toLowerCase())
+    );
+    const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
+    const userRole = user?.user_metadata?.role || (user as any)?.role || 'OPERATOR';
+    const isRestricted = ['MANAGER'].includes(userRole);
+
+    let boxes = rawBoxes;
+    let vehicles = rawVehicles;
+    let tasks = rawTasks;
+    let alerts = rawAlerts;
+
+    if (isRestricted && assignedWarehouses.length > 0) {
+      const allowedF = floors.filter((f: any) => assignedWarehouses.includes(f.warehouse_id)).map((f: any) => f.id);
+      const allowedL = rawLocations.filter((l: any) => allowedF.includes(l.floor_id)).map((l: any) => l.id);
+
+      vehicles = vehicles.filter((v: any) => allowedF.includes(v.current_floor_id));
+      boxes = boxes.filter((b: any) => allowedL.includes(b.current_location_id));
+      tasks = tasks.filter((t: any) => allowedL.includes(t.source_location_id));
+    }
+
+    if (selectedWarehouseId) {
+      vehicles = vehicles.filter(v => 
+        (v.current_floor_id && whFloorIds.has(v.current_floor_id)) || 
+        (!v.current_floor_id && isFirstWarehouse)
+      );
+      boxes = boxes.filter(b => 
+        (b.current_location_id && whLocIds.has(b.current_location_id)) || 
+        (b.destination_location_id && whLocIds.has(b.destination_location_id)) ||
+        (!b.current_location_id && !b.destination_location_id && isFirstWarehouse)
+      );
+      tasks = tasks.filter(t => 
+        (t.source_location_id && whLocIds.has(t.source_location_id)) || 
+        (t.destination_location_id && whLocIds.has(t.destination_location_id)) ||
+        (!t.source_location_id && !t.destination_location_id && isFirstWarehouse)
+      );
+      const vehIdSet = new Set(vehicles.map(v => v.id));
+      const taskIdSet = new Set(tasks.map(t => t.id));
+      alerts = alerts.filter(a => 
+        (a.vehicle_id && vehIdSet.has(a.vehicle_id)) || 
+        (a.task_id && taskIdSet.has(a.task_id)) ||
+        (!a.vehicle_id && !a.task_id && isFirstWarehouse)
+      );
+    }
+
+    const totalBoxes = boxes.length;
+    const pendingTasks = tasks.filter(t => t.status === 'PENDING').length;
+    const activeTasks = tasks.filter(t => ['ASSIGNED', 'IN_PROGRESS', 'PICKUP_PENDING', 'PICKED_UP', 'DELIVERING'].includes(t.status)).length;
+    const completedDeliveries = tasks.filter(t => t.status === 'COMPLETED').length;
+    const availableVehicles = vehicles.filter(v => v.status === 'AVAILABLE').length;
+    const busyVehicles = vehicles.filter(v => v.status === 'BUSY').length;
+    const urgentTasks = tasks.filter(t => t.priority === 'URGENT' && t.status !== 'COMPLETED').length;
+    const activeAlerts = alerts.length;
+    const edgeAiActive = vehicles.filter(v => v.sensor_suite_active).length;
+    const obstaclesToday = vehicles.reduce((sum, v) => sum + (v.obstacle_count || 0), 0);
+
+    return {
+      stats: {
+        totalBoxes,
+        pendingTasks,
+        activeTasks,
+        completedDeliveries,
+        availableVehicles,
+        busyVehicles,
+        urgentTasks,
+        activeAlerts,
+        edgeAiActive,
+        obstaclesToday
+      },
+      activeTasksList: tasks.filter(t => t.status !== 'COMPLETED' && t.status !== 'CANCELLED').slice(0, 5) as Task[],
+      vehiclesList: vehicles as Vehicle[],
+      alertsList: alerts.slice(0, 5) as Alert[]
+    };
+  }, [selectedWarehouseId, warehouses, floors, rawLocations, rawProfiles, user, rawBoxes, rawVehicles, rawTasks, rawAlerts]);
 
   return (
     <div className="md:flex h-screen w-full overflow-hidden bg-slate-950 relative">
@@ -297,7 +335,7 @@ export default function Dashboard() {
                       const newWid = e.target.value;
                       setSelectedWarehouseId(newWid);
                       const whF = floors.filter(f => f.warehouse_id === newWid);
-                      if (whF.length > 0) setSelectedFloor(whF[0].id);
+                      setSelectedFloor(whF.length > 0 ? whF[0].id : '');
                     }}
                     className="bg-slate-900 text-xs font-bold text-slate-200 px-3 py-1.5 rounded-xl border border-slate-800 outline-none cursor-pointer"
                   >
@@ -582,22 +620,28 @@ export default function Dashboard() {
                   <span className="text-[10px] font-bold text-cyan-400">{vehiclesList.length} Units</span>
                 </div>
                 <div className="space-y-2.5">
-                  {vehiclesList.map(v => (
-                    <div key={v.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-800/60 bg-slate-900/60 hover:border-slate-700 transition-colors">
-                      <div>
-                        <div className="text-xs font-black text-slate-100">{v.vehicle_code}</div>
-                        <div className="text-[10px] font-medium text-slate-400">{v.name}</div>
-                      </div>
-                      <div className="text-right">
-                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${
-                          v.status === 'AVAILABLE' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : (v.status === 'BUSY' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30')
-                        }`}>{v.status}</span>
-                        <div className="text-[10px] font-bold text-slate-400 mt-1">
-                          Battery: {v.battery_percentage}%
+                  {vehiclesList.length === 0 ? (
+                    <div className="py-6 text-center text-slate-500 text-xs font-medium">
+                      No AGVs assigned to this facility.
+                    </div>
+                  ) : (
+                    vehiclesList.map(v => (
+                      <div key={v.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-800/60 bg-slate-900/60 hover:border-slate-700 transition-colors">
+                        <div>
+                          <div className="text-xs font-black text-slate-100">{v.vehicle_code}</div>
+                          <div className="text-[10px] font-medium text-slate-400">{v.name}</div>
+                        </div>
+                        <div className="text-right">
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${
+                            v.status === 'AVAILABLE' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : (v.status === 'BUSY' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30')
+                          }`}>{v.status}</span>
+                          <div className="text-[10px] font-bold text-slate-400 mt-1">
+                            Battery: {v.battery_percentage}%
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             </div>

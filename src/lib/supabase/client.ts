@@ -165,185 +165,238 @@ if (typeof window !== 'undefined' && useSupabaseReal && supabaseReal) {
   });
 }
 
-function wrapSelectQuery(query: any, cached: any[], table: string, filters: Record<string, any> = {}, isSingle: boolean = false): any {
-  query.data = cached;
+function createSelectProxy(rawQuery: any, table: string) {
+  const match: Record<string, any> = {};
+  let isSingle = false;
 
-  const originalEq = query.eq ? query.eq.bind(query) : null;
-  if (originalEq) {
-    query.eq = (col: string, val: any) => {
-      const sub = originalEq(col, val);
-      const newFilters = { ...filters, [col]: val };
-      return wrapSelectQuery(sub, (cached || []).filter((item: any) => item[col] === val), table, newFilters, isSingle);
-    };
-  }
-
-  const originalSingle = query.single ? query.single.bind(query) : null;
-  if (originalSingle) {
-    query.single = () => {
-      const sub = originalSingle();
-      return wrapSelectQuery(sub, cached, table, filters, true);
-    };
-  }
-
-  const originalMaybeSingle = query.maybeSingle ? query.maybeSingle.bind(query) : null;
-  if (originalMaybeSingle) {
-    query.maybeSingle = () => {
-      const sub = originalMaybeSingle();
-      return wrapSelectQuery(sub, cached, table, filters, true);
-    };
-  }
-
-  const originalOrder = query.order ? query.order.bind(query) : null;
-  if (originalOrder) {
-    query.order = (...args: any[]) => {
-      const sub = originalOrder(...args);
-      return wrapSelectQuery(sub, cached, table, filters, isSingle);
-    };
-  }
-
-  const originalLimit = query.limit ? query.limit.bind(query) : null;
-  if (originalLimit) {
-    query.limit = (n: number) => {
-      const sub = originalLimit(n);
-      return wrapSelectQuery(sub, (cached || []).slice(0, n), table, filters, isSingle);
-    };
-  }
-
-  const origThen = query.then.bind(query);
-  query.then = (onfulfilled: any, onrejected: any) => {
-    return origThen(async (res: any) => {
-      // 1. If Supabase succeeded and returned a single object (from .single() or .maybeSingle())
-      if (res && res.data && typeof res.data === 'object' && !Array.isArray(res.data)) {
-        return onfulfilled ? onfulfilled(res) : res;
+  const handler: ProxyHandler<any> = {
+    get(target, prop, receiver) {
+      if (prop === 'eq') {
+        return (col: string, val: any) => {
+          match[col] = val;
+          const res = target.eq(col, val);
+          return new Proxy(res, handler);
+        };
       }
-
-      // 2. If Supabase succeeded and returned an array of rows
-      if (res && res.data && Array.isArray(res.data) && res.data.length > 0) {
-        tableCache[table] = res.data;
-        if (isSingle) {
-          const item = res.data[0] || null;
-          return onfulfilled ? onfulfilled({ data: item, error: null }) : { data: item, error: null };
-        }
-        return onfulfilled ? onfulfilled(res) : res;
+      if (prop === 'match') {
+        return (queryMatch: Record<string, any>) => {
+          if (queryMatch && typeof queryMatch === 'object') {
+            Object.assign(match, queryMatch);
+          }
+          const res = target.match(queryMatch);
+          return new Proxy(res, handler);
+        };
       }
-      
-      // 3. Fallback to /api/db if RLS blocked results or client query returned empty
-      if (typeof window !== 'undefined') {
-        try {
-          const apiRes = await fetch('/api/db', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'select', table, match: Object.keys(filters).length > 0 ? filters : undefined })
-          }).then(r => r.json());
+      if (prop === 'single') {
+        return () => {
+          isSingle = true;
+          const res = target.single();
+          return new Proxy(res, handler);
+        };
+      }
+      if (prop === 'maybeSingle') {
+        return () => {
+          isSingle = true;
+          const res = target.maybeSingle();
+          return new Proxy(res, handler);
+        };
+      }
+      if (prop === 'then') {
+        return (onfulfilled?: (value: any) => any, onrejected?: (reason: any) => any) => {
+          return target.then(async (res: any) => {
+            // If query succeeded without error, return the real result directly!
+            // Notice: res.data being an empty array [] is a valid success response (0 rows found).
+            if (res && !res.error && res.data !== undefined) {
+              return onfulfilled ? onfulfilled(res) : res;
+            }
 
-          if (apiRes && apiRes.data) {
-            let list = Array.isArray(apiRes.data) ? apiRes.data : [apiRes.data];
-            Object.entries(filters).forEach(([k, v]) => {
-              list = list.filter((item: any) => item[k] === v);
-            });
+            // Fallback to /api/db ONLY if an error occurred (e.g. RLS code 42501 or network error)
+            const isRls = isRlsError(res?.error);
+            if ((isRls || res?.error) && typeof window !== 'undefined') {
+              try {
+                const apiRes = await fetch('/api/db', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    action: 'select',
+                    table,
+                    match: Object.keys(match).length > 0 ? match : undefined
+                  })
+                }).then(r => r.json());
 
-            if (list.length > 0) {
-              if (isSingle) {
-                return onfulfilled ? onfulfilled({ data: list[0], error: null }) : { data: list[0], error: null };
+                if (apiRes && !apiRes.error && apiRes.data !== undefined) {
+                  let list = Array.isArray(apiRes.data) ? apiRes.data : [apiRes.data];
+                  Object.entries(match).forEach(([k, v]) => {
+                    list = list.filter((item: any) => item[k] === v);
+                  });
+
+                  if (isSingle) {
+                    const singleData = list[0] || null;
+                    const singleRes = { data: singleData, error: singleData ? null : { message: 'Row not found' } };
+                    return onfulfilled ? onfulfilled(singleRes) : singleRes;
+                  }
+                  const finalRes = { data: list, error: null };
+                  return onfulfilled ? onfulfilled(finalRes) : finalRes;
+                }
+              } catch (apiErr) {
+                console.error('[RLS Fallback] Server API select error:', apiErr);
               }
-              tableCache[table] = list;
-              return onfulfilled ? onfulfilled({ data: list, error: null }) : { data: list, error: null };
             }
-          }
-        } catch {}
+
+            return onfulfilled ? onfulfilled(res) : res;
+          }, onrejected);
+        };
       }
-      return onfulfilled ? onfulfilled(res) : res;
-    }, onrejected);
+
+      const val = Reflect.get(target, prop, receiver);
+      if (typeof val === 'function') {
+        return (...args: any[]) => {
+          const res = val.apply(target, args);
+          if (res && typeof res === 'object' && typeof res.then === 'function') {
+            return new Proxy(res, handler);
+          }
+          return res;
+        };
+      }
+      return val;
+    }
   };
 
-  return query;
+  return new Proxy(rawQuery, handler);
 }
 
-function wrapUpdateQuery(query: any, table: string, payload: any, match: Record<string, any>): any {
-  const origEq = query.eq ? query.eq.bind(query) : null;
-  if (origEq) {
-    query.eq = (col: string, val: any) => {
-      match[col] = val;
-      const sub = origEq(col, val);
-      return wrapUpdateQuery(sub, table, payload, match);
-    };
-  }
+function createUpdateProxy(rawQuery: any, table: string, payload: any) {
+  const match: Record<string, any> = {};
 
-  const origThen = query.then.bind(query);
-  query.then = (onfulfilled: any, onrejected: any) => {
-    return origThen(async (res: any) => {
-      const isBlocked = isRlsError(res?.error) || (!res?.error && (!res?.data || (Array.isArray(res.data) && res.data.length === 0)));
-      if (isBlocked && typeof window !== 'undefined') {
-        try {
-          const apiRes = await fetch('/api/db', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'update', table, payload, match })
-          }).then(r => r.json());
-
-          if (!apiRes.error && apiRes.data) {
-            updateLocalState(table, 'UPDATE', apiRes.data, match);
-            return onfulfilled ? onfulfilled({ data: apiRes.data, error: null }) : { data: apiRes.data, error: null };
+  const handler: ProxyHandler<any> = {
+    get(target, prop, receiver) {
+      if (prop === 'eq') {
+        return (col: string, val: any) => {
+          match[col] = val;
+          const res = target.eq(col, val);
+          return new Proxy(res, handler);
+        };
+      }
+      if (prop === 'match') {
+        return (queryMatch: Record<string, any>) => {
+          if (queryMatch && typeof queryMatch === 'object') {
+            Object.assign(match, queryMatch);
           }
-        } catch (apiErr) {
-          console.error('[Admin Fallback] API route error:', apiErr);
-        }
+          const res = target.match(queryMatch);
+          return new Proxy(res, handler);
+        };
+      }
+      if (prop === 'then') {
+        return (onfulfilled?: (value: any) => any, onrejected?: (reason: any) => any) => {
+          return target.then(async (res: any) => {
+            const isBlocked = isRlsError(res?.error) || Boolean(res?.error);
+            if (isBlocked && typeof window !== 'undefined') {
+              try {
+                const apiRes = await fetch('/api/db', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: 'update', table, payload, match })
+                }).then(r => r.json());
+
+                if (!apiRes.error && apiRes.data !== undefined) {
+                  updateLocalState(table, 'UPDATE', apiRes.data, match);
+                  return onfulfilled ? onfulfilled({ data: apiRes.data, error: null }) : { data: apiRes.data, error: null };
+                }
+              } catch (apiErr) {
+                console.error('[Admin Fallback] API route update error:', apiErr);
+              }
+            }
+
+            if (!res?.error) {
+              updateLocalState(table, 'UPDATE', res?.data || payload, match);
+            }
+            return onfulfilled ? onfulfilled(res) : res;
+          }, onrejected);
+        };
       }
 
-      if (!res?.error) {
-        updateLocalState(table, 'UPDATE', res?.data || payload, match);
+      const val = Reflect.get(target, prop, receiver);
+      if (typeof val === 'function') {
+        return (...args: any[]) => {
+          const res = val.apply(target, args);
+          if (res && typeof res === 'object' && typeof res.then === 'function') {
+            return new Proxy(res, handler);
+          }
+          return res;
+        };
       }
-      return onfulfilled ? onfulfilled(res) : res;
-    }, onrejected);
+      return val;
+    }
   };
 
-  return query;
+  return new Proxy(rawQuery, handler);
 }
 
-function wrapDeleteQuery(query: any, table: string, match: Record<string, any>): any {
-  const origEq = query.eq ? query.eq.bind(query) : null;
-  if (origEq) {
-    query.eq = (col: string, val: any) => {
-      match[col] = val;
-      const sub = origEq(col, val);
-      return wrapDeleteQuery(sub, table, match);
-    };
-  }
+function createDeleteProxy(rawQuery: any, table: string) {
+  const match: Record<string, any> = {};
 
-  const origThen = query.then.bind(query);
-  query.then = (onfulfilled: any, onrejected: any) => {
-    return origThen(async (res: any) => {
-      if (isRlsError(res?.error)) {
-        console.warn(`[RLS Fallback] Bypassing RLS delete error on ${table} via admin API`);
-        if (typeof window !== 'undefined') {
-          try {
-            const apiRes = await fetch('/api/db', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'delete', table, match })
-            }).then(r => r.json());
+  const handler: ProxyHandler<any> = {
+    get(target, prop, receiver) {
+      if (prop === 'eq') {
+        return (col: string, val: any) => {
+          match[col] = val;
+          const res = target.eq(col, val);
+          return new Proxy(res, handler);
+        };
+      }
+      if (prop === 'match') {
+        return (queryMatch: Record<string, any>) => {
+          if (queryMatch && typeof queryMatch === 'object') {
+            Object.assign(match, queryMatch);
+          }
+          const res = target.match(queryMatch);
+          return new Proxy(res, handler);
+        };
+      }
+      if (prop === 'then') {
+        return (onfulfilled?: (value: any) => any, onrejected?: (reason: any) => any) => {
+          return target.then(async (res: any) => {
+            const isBlocked = isRlsError(res?.error) || Boolean(res?.error);
+            if (isBlocked && typeof window !== 'undefined') {
+              try {
+                const apiRes = await fetch('/api/db', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: 'delete', table, match })
+                }).then(r => r.json());
 
-            if (!apiRes.error) {
+                if (!apiRes.error) {
+                  updateLocalState(table, 'DELETE', null, match);
+                  return onfulfilled ? onfulfilled({ data: null, error: null }) : { data: null, error: null };
+                }
+              } catch (apiErr) {
+                console.error('[RLS Fallback] API delete error:', apiErr);
+              }
+            }
+
+            if (!res?.error) {
               updateLocalState(table, 'DELETE', null, match);
-              return onfulfilled ? onfulfilled({ data: null, error: null }) : { data: null, error: null };
             }
-          } catch (apiErr) {
-            console.error('[RLS Fallback] API delete error:', apiErr);
-          }
-        }
-        // Fallback to local memory / mockDb
-        updateLocalState(table, 'DELETE', null, match);
-        return onfulfilled ? onfulfilled({ data: null, error: null }) : { data: null, error: null };
+            return onfulfilled ? onfulfilled(res) : res;
+          }, onrejected);
+        };
       }
 
-      if (!res?.error) {
-        updateLocalState(table, 'DELETE', null, match);
+      const val = Reflect.get(target, prop, receiver);
+      if (typeof val === 'function') {
+        return (...args: any[]) => {
+          const res = val.apply(target, args);
+          if (res && typeof res === 'object' && typeof res.then === 'function') {
+            return new Proxy(res, handler);
+          }
+          return res;
+        };
       }
-      return onfulfilled ? onfulfilled(res) : res;
-    }, onrejected);
+      return val;
+    }
   };
 
-  return query;
+  return new Proxy(rawQuery, handler);
 }
 
 function createProxiedRealClient(rawClient: any): any {
@@ -357,8 +410,7 @@ function createProxiedRealClient(rawClient: any): any {
           const origSelect = builder.select.bind(builder);
           builder.select = (...args: any[]) => {
             const query = origSelect(...args);
-            const cached = tableCache[table] || getFallbackData(table);
-            return wrapSelectQuery(query, cached, table);
+            return createSelectProxy(query, table);
           };
 
           // 2. Intercept INSERT
@@ -368,7 +420,7 @@ function createProxiedRealClient(rawClient: any): any {
             const origThen = insertQuery.then.bind(insertQuery);
             insertQuery.then = (onfulfilled: any, onrejected: any) => {
               return origThen(async (res: any) => {
-                if (isRlsError(res?.error)) {
+                if (isRlsError(res?.error) || res?.error) {
                   console.warn(`[RLS Fallback] Bypassing RLS insert error on ${table} via admin API`);
                   if (typeof window !== 'undefined') {
                     try {
@@ -407,16 +459,14 @@ function createProxiedRealClient(rawClient: any): any {
           const origUpdate = builder.update.bind(builder);
           builder.update = (payload: any, options?: any) => {
             const updateQuery = origUpdate(payload, options);
-            const matchFilter: Record<string, any> = {};
-            return wrapUpdateQuery(updateQuery, table, payload, matchFilter);
+            return createUpdateProxy(updateQuery, table, payload);
           };
 
           // 4. Intercept DELETE
           const origDelete = builder.delete.bind(builder);
           builder.delete = (options?: any) => {
             const deleteQuery = origDelete(options);
-            const matchFilter: Record<string, any> = {};
-            return wrapDeleteQuery(deleteQuery, table, matchFilter);
+            return createDeleteProxy(deleteQuery, table);
           };
 
           return builder;
