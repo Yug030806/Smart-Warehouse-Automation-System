@@ -31,7 +31,8 @@ export function calculateRoute(
   allLocations: any[], // To determine layout types and positions
   gridWidth = 12,
   gridHeight = 8,
-  dynamicObstacles: DynamicObstacle[] = []
+  dynamicObstacles: DynamicObstacle[] = [],
+  otherVehicles: any[] = []
 ): RouteSegment[] {
   
   // If start floor is different from target floor, we must route:
@@ -40,10 +41,10 @@ export function calculateRoute(
     const startElevator = allLocations.find(l => l.floor_id === startFloorId && l.type === 'ELEVATOR');
     const targetElevator = allLocations.find(l => l.floor_id === targetFloorId && l.type === 'ELEVATOR');
     
-    const elevX = startElevator ? startElevator.x : 10;
-    const elevY = startElevator ? startElevator.y : 4;
+    const elevX = startElevator ? startElevator.x : (targetElevator ? targetElevator.x : 9);
+    const elevY = startElevator ? startElevator.y : (targetElevator ? targetElevator.y : 3);
 
-    const segment1 = solveSingleFloor(startFloorId, startX, startY, elevX, elevY, allLocations, gridWidth, gridHeight, [], dynamicObstacles);
+    const segment1 = solveSingleFloor(startFloorId, startX, startY, elevX, elevY, allLocations, gridWidth, gridHeight, otherVehicles, dynamicObstacles);
     
     // Elevator exit event
     const transitSegment: RouteSegment = {
@@ -53,17 +54,21 @@ export function calculateRoute(
       action: 'ELEVATOR_EXIT'
     };
     
-    const segment2 = solveSingleFloor(targetFloorId, elevX, elevY, targetX, targetY, allLocations, gridWidth, gridHeight, [], dynamicObstacles);
+    const segment2 = solveSingleFloor(targetFloorId, elevX, elevY, targetX, targetY, allLocations, gridWidth, gridHeight, otherVehicles, dynamicObstacles);
     
     // Add actions
     if (segment1.length > 0) {
       segment1[segment1.length - 1].action = 'ELEVATOR_ENTER';
     }
     
-    return [...segment1, transitSegment, ...segment2];
+    const cleanedSegment2 = (segment2.length > 0 && segment2[0].x === elevX && segment2[0].y === elevY)
+      ? segment2.slice(1)
+      : segment2;
+
+    return [...segment1, transitSegment, ...cleanedSegment2];
   }
 
-  return solveSingleFloor(startFloorId, startX, startY, targetX, targetY, allLocations, gridWidth, gridHeight, [], dynamicObstacles);
+  return solveSingleFloor(startFloorId, startX, startY, targetX, targetY, allLocations, gridWidth, gridHeight, otherVehicles, dynamicObstacles);
 }
 
 function solveSingleFloor(

@@ -38,7 +38,7 @@ export interface ObstacleCell {
 export class EdgeAIEngine {
   private vehicleId: string;
   private isActive: boolean = false;
-  private obstacleProbability: number = 0.12; // ~12% chance per step
+  private obstacleProbability: number = 0; // Default 0: deterministic route tracking, halts only for real obstacles / vehicles
   private callbacks: EdgeAICallbacks = {};
   private activeObstacles: ObstacleCell[] = [];
   private decisionCount: number = 0;
@@ -272,7 +272,8 @@ export class EdgeAIEngine {
       v.id !== this.vehicleId &&
       v.current_floor_id === floorId &&
       v.x_position === nextX &&
-      v.y_position === nextY
+      v.y_position === nextY &&
+      v.status !== 'OFFLINE'
     );
 
     let detection_type: SensorReading['detection_type'] = 'CLEAR';

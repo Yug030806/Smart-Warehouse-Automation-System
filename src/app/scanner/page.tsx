@@ -5,7 +5,7 @@ import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
 import AmbientBackground from '@/components/AmbientBackground';
 import RoleGuard from '@/components/RoleGuard';
-import { ScanQrCode, AlertTriangle, CheckCircle, HelpCircle } from 'lucide-react';
+import { ScanQrCode, AlertTriangle, CheckCircle, HelpCircle, Flame } from 'lucide-react';
 import { Task, Box, Vehicle, Location } from '@/lib/database.types';
 import { useAuth } from '@/lib/supabase/AuthProvider';
 import { generateUUID } from '@/lib/uuid';
@@ -24,6 +24,7 @@ export default function ScannerPage() {
   // Selection states
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [scanCodeInput, setScanCodeInput] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState<'ALL' | 'URGENT' | 'HIGH' | 'NORMAL'>('ALL');
   
   // Verification states
   const [statusMessage, setStatusMessage] = useState('');
@@ -50,11 +51,24 @@ export default function ScannerPage() {
       const l = (lRes.data || []) as Location[];
       setLocations(l);
 
-      // Auto-select first active/pending task if none is selected
-      const activeTasks = t.filter(x => x.status !== 'COMPLETED' && x.status !== 'CANCELLED');
-      if (activeTasks.length > 0 && !selectedTask) {
-        setSelectedTask(activeTasks[0]);
-      }
+      // Auto-select highest urgency active/pending task if none is selected
+      const sorted = t
+        .filter(x => x.status !== 'COMPLETED' && x.status !== 'CANCELLED')
+        .sort((a, b) => {
+          const pRank = (p?: string) => (p === 'URGENT' ? 3 : p === 'HIGH' ? 2 : 1);
+          const diff = pRank(b.priority) - pRank(a.priority);
+          if (diff !== 0) return diff;
+          const scoreA = a.priority_score ?? (pRank(a.priority) * 10);
+          const scoreB = b.priority_score ?? (pRank(b.priority) * 10);
+          if (scoreB !== scoreA) return scoreB - scoreA;
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        });
+
+      setSelectedTask(prev => {
+        if (!prev) return sorted[0] || null;
+        // Keep selected task updated with latest data, or fallback to first if completed
+        return sorted.find(x => x.id === prev.id) || sorted[0] || null;
+      });
     } catch (err) {
       console.error('Failed to load scanner data:', err);
     }
@@ -65,6 +79,28 @@ export default function ScannerPage() {
     const interval = setInterval(loadData, 2000);
     return () => clearInterval(interval);
   }, []);
+
+  const priorityWeight = (p?: string) => {
+    if (p === 'URGENT') return 3;
+    if (p === 'HIGH') return 2;
+    return 1;
+  };
+
+  // Active tasks aligned strictly by urgency: URGENT -> HIGH -> NORMAL
+  const activeTasks = tasks
+    .filter(t => t.status !== 'COMPLETED' && t.status !== 'CANCELLED')
+    .sort((a, b) => {
+      const diff = priorityWeight(b.priority) - priorityWeight(a.priority);
+      if (diff !== 0) return diff;
+      const scoreA = a.priority_score ?? (priorityWeight(a.priority) * 10);
+      const scoreB = b.priority_score ?? (priorityWeight(b.priority) * 10);
+      if (scoreB !== scoreA) return scoreB - scoreA;
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    });
+
+  const filteredTasks = priorityFilter === 'ALL'
+    ? activeTasks
+    : activeTasks.filter(t => t.priority === priorityFilter);
 
   const handleSelectTask = (task: Task) => {
     setSelectedTask(task);
@@ -282,14 +318,27 @@ export default function ScannerPage() {
                 <div className="rounded-xl border border-slate-900 bg-slate-950 p-6 space-y-6">
                   <div className="border-b border-slate-900 pb-4">
                     <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest block font-mono">Order Verification Panel</span>
-                    <h3 className="text-base font-bold text-slate-200 mt-1">Verifying Task: {selectedTask.task_code}</h3>
+                    <div className="flex flex-wrap items-center justify-between gap-2 mt-1">
+                      <h3 className="text-base font-bold text-slate-200">Verifying Task: {selectedTask.task_code}</h3>
+                      <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 ${
+                        selectedTask.priority === 'URGENT'
+                          ? 'bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse'
+                          : selectedTask.priority === 'HIGH'
+                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                          : 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
+                      }`}>
+                        {selectedTask.priority === 'URGENT' && <Flame className="h-3 w-3 text-red-400 shrink-0" />}
+                        {selectedTask.priority === 'HIGH' && <AlertTriangle className="h-3 w-3 text-amber-400 shrink-0" />}
+                        {selectedTask.priority || 'NORMAL'} PRIORITY
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs">
                     <div>
                       <span className="text-slate-500 block mb-1">Expected QR Code Payload:</span>
                       <span className="font-mono font-bold text-slate-100 bg-slate-900 px-2 py-1 rounded select-all">
-                        {boxes.find(b => b.id === selectedTask.box_id)?.qr_code_data}
+                        {boxes.find(b => b.id === selectedTask.box_id)?.qr_code_data || 'N/A'}
                       </span>
                     </div>
 
@@ -297,6 +346,15 @@ export default function ScannerPage() {
                       <span className="text-slate-500 block mb-1">Scanning Phase:</span>
                       <span className="font-bold text-blue-400">
                         {['ASSIGNED', 'IN_PROGRESS', 'PICKUP_PENDING'].includes(selectedTask.status) ? 'PICKUP DISPATCH' : 'DELIVERY DISPATCH'}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-500 block mb-1">Queue Urgency:</span>
+                      <span className={`font-bold ${
+                        selectedTask.priority === 'URGENT' ? 'text-red-400' : selectedTask.priority === 'HIGH' ? 'text-amber-400' : 'text-blue-400'
+                      }`}>
+                        {selectedTask.priority || 'NORMAL'}
                       </span>
                     </div>
                   </div>
@@ -368,25 +426,112 @@ export default function ScannerPage() {
 
             {/* Right side active logs scheduler queue */}
             <div className="rounded-xl border border-slate-900 bg-slate-950 p-6 space-y-4">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Operational Queue Backlog</span>
-              <div className="space-y-3">
-                {tasks.filter(t => t.status !== 'COMPLETED' && t.status !== 'CANCELLED').map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => handleSelectTask(t)}
-                    className={`w-full text-left p-3.5 rounded-xl border transition duration-150 ${
-                      selectedTask?.id === t.id
-                        ? 'border-blue-500 bg-blue-600/10 text-slate-100 shadow-md'
-                        : 'border-slate-900 bg-slate-950/40 text-slate-400 hover:border-slate-800'
-                    }`}
-                  >
-                    <div className="flex justify-between items-center mb-1 font-mono text-xs">
-                      <span className="font-bold">{t.task_code}</span>
-                      <span className="text-[10px] text-slate-500 font-bold uppercase">{t.status}</span>
-                    </div>
-                    <p className="text-[10px] text-slate-500">Payload: {boxes.find(b => b.id === t.box_id)?.box_code}</p>
-                  </button>
-                ))}
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-widest block">Operational Queue Backlog</span>
+                  <span className="text-[10px] text-cyan-400 font-semibold flex items-center gap-1 mt-0.5">
+                    <Flame className="h-3 w-3 text-red-400" /> Aligned by Urgency (Urgent First)
+                  </span>
+                </div>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-slate-400">
+                  {activeTasks.length} active
+                </span>
+              </div>
+
+              {/* Urgency Filter Tabs */}
+              <div className="flex gap-1.5 p-1 rounded-xl bg-slate-900/60 border border-slate-800/80 text-[10px] font-semibold">
+                {(['ALL', 'URGENT', 'HIGH', 'NORMAL'] as const).map(p => {
+                  const count = p === 'ALL' ? activeTasks.length : activeTasks.filter(t => t.priority === p).length;
+                  return (
+                    <button
+                      key={p}
+                      onClick={() => setPriorityFilter(p)}
+                      className={`flex-1 py-1 px-2 rounded-lg transition text-center ${
+                        priorityFilter === p
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                      }`}
+                    >
+                      {p} {count > 0 && <span className="opacity-75">({count})</span>}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Task list aligned by urgency */}
+              <div className="space-y-3 max-h-[540px] overflow-y-auto pr-1">
+                {filteredTasks.length === 0 ? (
+                  <div className="p-6 text-center text-slate-500 text-xs border border-dashed border-slate-900 rounded-xl">
+                    No {priorityFilter !== 'ALL' ? priorityFilter.toLowerCase() : 'active'} tasks in queue.
+                  </div>
+                ) : (
+                  filteredTasks.map((t, index) => {
+                    const box = boxes.find(b => b.id === t.box_id);
+                    const isUrgent = t.priority === 'URGENT';
+                    const isHigh = t.priority === 'HIGH';
+                    const isSelected = selectedTask?.id === t.id;
+
+                    return (
+                      <button
+                        key={t.id}
+                        onClick={() => handleSelectTask(t)}
+                        className={`w-full text-left p-3.5 rounded-xl border transition duration-150 relative overflow-hidden ${
+                          isSelected
+                            ? 'border-blue-500 bg-blue-600/10 text-slate-100 shadow-md ring-1 ring-blue-500/30'
+                            : isUrgent
+                            ? 'border-red-900/50 bg-red-950/15 hover:border-red-600/60 hover:bg-red-950/25 text-slate-300'
+                            : isHigh
+                            ? 'border-amber-900/40 bg-amber-950/15 hover:border-amber-600/50 hover:bg-amber-950/25 text-slate-300'
+                            : 'border-slate-900 bg-slate-950/40 text-slate-400 hover:border-slate-800'
+                        }`}
+                      >
+                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${
+                          isUrgent ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]' : (isHigh ? 'bg-amber-500' : 'bg-slate-700')
+                        }`} />
+
+                        <div className="pl-1.5">
+                          <div className="flex justify-between items-center mb-1.5 font-mono text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-slate-500 font-bold">#{index + 1}</span>
+                              <span className="font-bold text-slate-100">{t.task_code}</span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider flex items-center gap-1 ${
+                                isUrgent
+                                  ? 'bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse'
+                                  : isHigh
+                                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                                  : 'bg-slate-800 text-slate-400 border border-slate-700/60'
+                              }`}>
+                                {isUrgent && <Flame className="h-2.5 w-2.5 text-red-400 shrink-0" />}
+                                {isHigh && <AlertTriangle className="h-2.5 w-2.5 text-amber-400 shrink-0" />}
+                                {t.priority || 'NORMAL'}
+                              </span>
+
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                                t.status === 'PICKED_UP'
+                                  ? 'bg-purple-950/60 text-purple-300 border border-purple-800/50'
+                                  : t.status === 'PICKUP_PENDING'
+                                  ? 'bg-cyan-950/60 text-cyan-300 border border-cyan-800/50'
+                                  : 'bg-slate-900 text-slate-400 border border-slate-800'
+                              }`}>
+                                {t.status}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px] text-slate-400">
+                            <span>Payload: <span className="font-mono font-semibold text-slate-200">{box?.box_code || 'N/A'}</span></span>
+                            {box?.product_name && (
+                              <span className="text-[10px] text-slate-500 truncate max-w-[140px]">{box.product_name}</span>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
               </div>
             </div>
           </div>

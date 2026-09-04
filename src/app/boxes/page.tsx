@@ -73,26 +73,40 @@ export default function BoxesPage() {
       locs = locs.filter((l: any) => allowedL.includes(l.id));
     }
 
+    // Sort locations by floor number and name for a consistent and grouped dropdown
+    locs.sort((a, b) => {
+      const fA = fls.find(f => f.id === a.floor_id)?.floor_number ?? 0;
+      const fB = fls.find(f => f.id === b.floor_id)?.floor_number ?? 0;
+      if (fA !== fB) return fA - fB;
+      return a.name.localeCompare(b.name);
+    });
+
     setBoxes(list as Box[]);
     setLocations(locs as Location[]);
     setFloors(fls);
     setWarehouses(whs);
-
-    if (fls.length > 0) {
-      if (!srcCustomFloorId) setSrcCustomFloorId(fls[0].id);
-      if (!destCustomFloorId) setDestCustomFloorId(fls[1]?.id || fls[0].id);
-    }
-
-    if (locs.length > 0 && !srcLoc) {
-      setSrcLoc(locs[0].id);
-    }
-    if (locs.length > 1 && !destLoc) {
-      setDestLoc(locs[1].id);
-    } else if (locs.length <= 1 && !destLoc) {
-      // If there are 0 or only 1 location in the entire database, default destination to CUSTOM
-      setDestMode('CUSTOM');
-    }
   };
+
+  // Initialize default location and floor selections once when data is loaded, without overwriting user choices
+  useEffect(() => {
+    if (locations.length > 0) {
+      setSrcLoc(prev => (prev && locations.some(l => l.id === prev) ? prev : locations[0].id));
+      setDestLoc(prev => {
+        if (prev && locations.some(l => l.id === prev)) return prev;
+        return locations.length > 1 ? locations[1].id : locations[0].id;
+      });
+    }
+  }, [locations]);
+
+  useEffect(() => {
+    if (floors.length > 0) {
+      setSrcCustomFloorId(prev => (prev && floors.some(f => f.id === prev) ? prev : floors[0].id));
+      setDestCustomFloorId(prev => {
+        if (prev && floors.some(f => f.id === prev)) return prev;
+        return floors[1]?.id || floors[0].id;
+      });
+    }
+  }, [floors]);
 
   useEffect(() => {
     loadBoxes();
@@ -108,6 +122,28 @@ export default function BoxesPage() {
     const warehouse = warehouses.find(w => w.id === floor?.warehouse_id);
     const floorName = floor ? (floor.name || `Floor ${floor.floor_number}`) : 'Floor 1';
     return warehouse ? `${l.name} (${warehouse.name} - ${floorName})` : `${l.name} (${floorName})`;
+  };
+
+  const handleOpenAddModal = () => {
+    setBoxCode(`BX-${Math.floor(Math.random() * 9000 + 1000)}`);
+    setProdName('');
+    setCategory('Electronics');
+    setWeight(1.5);
+    setPriority('NORMAL');
+    setSrcMode('SELECT');
+    setDestMode('SELECT');
+    if (!srcLoc && locations.length > 0) {
+      setSrcLoc(locations[0].id);
+    }
+    if (!destLoc && locations.length > 1) {
+      setDestLoc(locations[1].id);
+    } else if (!destLoc && locations.length === 1) {
+      setDestLoc(locations[0].id);
+    }
+    setSrcCustomName('');
+    setDestCustomName('');
+    setModalError(null);
+    setShowAddModal(true);
   };
 
   const handleAddBox = async (e: React.FormEvent) => {
@@ -320,10 +356,7 @@ export default function BoxesPage() {
             </div>
             {['ADMIN', 'MANAGER', 'OPERATOR'].includes(userRole) && (
               <button
-                onClick={() => {
-                  setBoxCode(`BX-${Math.floor(Math.random() * 9000 + 1000)}`);
-                  setShowAddModal(true);
-                }}
+                onClick={handleOpenAddModal}
                 className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-semibold text-slate-50 transition duration-150 shrink-0"
               >
                 <Plus className="h-4 w-4" /> Register Box Packet

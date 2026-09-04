@@ -39,6 +39,11 @@ export default function MotionBackground() {
 
 
   const isAesthetic = theme === 'aesthetic';
+  const isLight = theme === 'light';
+  const orbClass = (num: number) => isAesthetic ? `orb-aesthetic-${num}` : isLight ? `orb-light-${num}` : `orb-dark-${num}`;
+  const streamClass = isAesthetic ? 'stream-aesthetic' : isLight ? 'stream-light' : 'stream-dark';
+  const nodeClass = isAesthetic ? 'node-aesthetic' : isLight ? 'node-light' : 'node-dark';
+  const particleClass = isAesthetic ? 'particle-aesthetic' : isLight ? 'particle-light' : 'particle-dark';
 
   return (
     <div className="motion-bg-container pointer-events-none fixed inset-0 z-0 overflow-hidden">
@@ -48,24 +53,24 @@ export default function MotionBackground() {
         style={{ transform: 'scale(1.05)', transition: 'transform 0.1s ease-out' }}
       >
         {/* Dynamic Glowing Ambient Orbs */}
-        <div className={`motion-orb orb-1 ${isAesthetic ? 'orb-aesthetic-1' : 'orb-dark-1'}`} />
-        <div className={`motion-orb orb-2 ${isAesthetic ? 'orb-aesthetic-2' : 'orb-dark-2'}`} />
-        <div className={`motion-orb orb-3 ${isAesthetic ? 'orb-aesthetic-3' : 'orb-dark-3'}`} />
+        <div className={`motion-orb orb-1 ${orbClass(1)}`} />
+        <div className={`motion-orb orb-2 ${orbClass(2)}`} />
+        <div className={`motion-orb orb-3 ${orbClass(3)}`} />
 
         {/* Animated Circuit Streams */}
-        <div className={`circuit-stream stream-1 ${isAesthetic ? 'stream-aesthetic' : 'stream-dark'}`} />
-        <div className={`circuit-stream stream-2 ${isAesthetic ? 'stream-aesthetic' : 'stream-dark'}`} />
-        <div className={`circuit-stream stream-3 ${isAesthetic ? 'stream-aesthetic' : 'stream-dark'}`} />
+        <div className={`circuit-stream stream-1 ${streamClass}`} />
+        <div className={`circuit-stream stream-2 ${streamClass}`} />
+        <div className={`circuit-stream stream-3 ${streamClass}`} />
 
         {/* Tech Circuit Node Pulses */}
-        <div className={`circuit-node node-1 ${isAesthetic ? 'node-aesthetic' : 'node-dark'}`} />
-        <div className={`circuit-node node-2 ${isAesthetic ? 'node-aesthetic' : 'node-dark'}`} />
+        <div className={`circuit-node node-1 ${nodeClass}`} />
+        <div className={`circuit-node node-2 ${nodeClass}`} />
 
         {/* Floating Particles */}
         {Array.from({ length: 8 }).map((_, i) => (
           <div
             key={i}
-            className={`floating-particle particle-${i + 1} ${isAesthetic ? 'particle-aesthetic' : 'particle-dark'}`}
+            className={`floating-particle particle-${i + 1} ${particleClass}`}
           />
         ))}
       </div>

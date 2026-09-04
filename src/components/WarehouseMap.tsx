@@ -11,15 +11,31 @@ interface WarehouseMapProps {
   floorId: string;
   selectedVehicle?: Vehicle | null;
   activeRoute?: RouteSegment[] | null;
+  activeStepIndex?: number;
   onGridClick?: (x: number, y: number) => void;
   obstacles?: ObstacleCell[];
   showSensorRange?: boolean;
   edgeDecisions?: EdgeAIDecision[];
   fleetMessages?: FleetMessage[];
   warehouseName?: string;
+  vehicles?: Vehicle[];
+  locations?: Location[];
 }
 
-export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, onGridClick, obstacles = [], showSensorRange = false, edgeDecisions = [], fleetMessages = [], warehouseName }: WarehouseMapProps) {
+export default function WarehouseMap({ 
+  floorId, 
+  selectedVehicle, 
+  activeRoute, 
+  activeStepIndex, 
+  onGridClick, 
+  obstacles = [], 
+  showSensorRange = false, 
+  edgeDecisions = [], 
+  fleetMessages = [], 
+  warehouseName,
+  vehicles: vehiclesProp,
+  locations: locationsProp
+}: WarehouseMapProps) {
   const [locations, setLocations] = useState<Location[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [resolvedWarehouseName, setResolvedWarehouseName] = useState<string>(warehouseName || '');
@@ -31,8 +47,8 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
       try {
         let activeFloorId = floorId;
 
-        // If floorId is not provided or set to mock fallback, find the first real floor
-        if (!activeFloorId || activeFloorId === 'f-01') {
+        // If floorId is not provided, find the first real floor
+        if (!activeFloorId) {
           const fRes = await supabase.from('floors').select();
           const fls = fRes.data || [];
           if (fls.length > 0) {
@@ -77,24 +93,49 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
       isMounted = false;
       clearInterval(interval);
     };
-  }, [floorId]);
+  }, [floorId, warehouseName]);
 
+  const currentFloorId = floorId || 'f-01';
   const gridWidth = 12;
   const gridHeight = 8;
+
+  // Use vehicles prop from parent if supplied, otherwise internal polled vehicles
+  const sourceVehicles = vehiclesProp && vehiclesProp.length > 0 ? vehiclesProp : vehicles;
+
+  // Build list of vehicles for current floor, ensuring selectedVehicle's real-time position takes precedence
+  const displayVehicles = sourceVehicles
+    .filter(veh => {
+      const vFloor = (selectedVehicle && veh.id === selectedVehicle.id) ? selectedVehicle.current_floor_id : veh.current_floor_id;
+      return vFloor === currentFloorId;
+    })
+    .map(veh => {
+      if (selectedVehicle && veh.id === selectedVehicle.id) {
+        return selectedVehicle;
+      }
+      return veh;
+    });
+
+  if (selectedVehicle && selectedVehicle.current_floor_id === currentFloorId && !displayVehicles.some(v => v.id === selectedVehicle.id)) {
+    displayVehicles.push(selectedVehicle);
+  }
 
   // Build 2D grid matrix representation
   const grid: any[][] = Array.from({ length: gridHeight }, () =>
     Array.from({ length: gridWidth }, () => null)
   );
 
-  // Map items to coordinates
-  locations.forEach(loc => {
+  // Map items to coordinates using passed locationsProp if available for instant floor switching
+  const displayLocations = locationsProp && locationsProp.length > 0
+    ? locationsProp.filter(l => l.floor_id === currentFloorId)
+    : locations;
+
+  displayLocations.forEach(loc => {
     if (loc.x >= 0 && loc.x < gridWidth && loc.y >= 0 && loc.y < gridHeight) {
       grid[loc.y][loc.x] = { type: 'location', data: loc };
     }
   });
 
-  vehicles.forEach(veh => {
+  displayVehicles.forEach(veh => {
     if (veh.x_position >= 0 && veh.x_position < gridWidth && veh.y_position >= 0 && veh.y_position < gridHeight) {
       const existing = grid[veh.y_position][veh.x_position];
       const existingLoc = existing?.type === 'location' ? (existing.data as Location) : undefined;
@@ -104,7 +145,7 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
 
   const getRouteIndex = (x: number, y: number) => {
     if (!activeRoute) return -1;
-    return activeRoute.findIndex(pt => pt.x === x && pt.y === y && pt.floor_id === floorId);
+    return activeRoute.findIndex(pt => pt.x === x && pt.y === y && pt.floor_id === currentFloorId);
   };
 
   return (
@@ -135,17 +176,17 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
               row.map((cell, x) => {
                 const routeIdx = getRouteIndex(x, y);
                 const hasRoute = routeIdx !== -1;
-                const isSelectedVehicleCoord = selectedVehicle && selectedVehicle.x_position === x && selectedVehicle.y_position === y && selectedVehicle.current_floor_id === floorId;
+                const isSelectedVehicleCoord = selectedVehicle && selectedVehicle.x_position === x && selectedVehicle.y_position === y && selectedVehicle.current_floor_id === currentFloorId;
 
                 let cellColor = 'bg-slate-900/40 border border-slate-800/60 hover:border-cyan-500/40 hover:bg-slate-800/40';
                 let text = '';
                 let cellLabel = `Coordinate [${x}, ${y}]`;
                 
-                const isObstacle = obstacles.find(o => o.x === x && o.y === y && o.floor_id === floorId);
+                const isObstacle = obstacles.find(o => o.x === x && o.y === y && o.floor_id === currentFloorId);
                 
                 let isSensorRange = false;
                 if (showSensorRange) {
-                  for (const veh of vehicles) {
+                  for (const veh of displayVehicles) {
                     const dist = Math.max(Math.abs(veh.x_position - x), Math.abs(veh.y_position - y));
                     if (dist > 0 && dist <= 2) { isSensorRange = true; break; }
                   }
@@ -243,8 +284,12 @@ export default function WarehouseMap({ floorId, selectedVehicle, activeRoute, on
                         
                         {/* Route marker overlay */}
                         {hasRoute && cell?.type !== 'vehicle' && (
-                          <span className="absolute inset-0 flex items-center justify-center bg-cyan-500/25 border-2 border-cyan-400 rounded-xl animate-pulse shadow-[0_0_15px_rgba(6,182,212,0.4)]">
-                            <span className="text-[9px] text-cyan-200 font-mono font-extrabold">{routeIdx}</span>
+                          <span className={`absolute inset-0 flex items-center justify-center rounded-xl transition-all duration-300 ${
+                            activeStepIndex !== undefined && routeIdx < activeStepIndex
+                              ? 'bg-cyan-950/20 border border-cyan-800/30 text-cyan-600/50'
+                              : 'bg-cyan-500/25 border-2 border-cyan-400 animate-pulse shadow-[0_0_15px_rgba(6,182,212,0.4)] text-cyan-200'
+                          }`}>
+                            <span className="text-[9px] font-mono font-extrabold">{routeIdx}</span>
                           </span>
                         )}
                       </button>

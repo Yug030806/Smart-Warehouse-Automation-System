@@ -78,7 +78,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
           <Link 
             href="/dashboard" 
             onClick={onMobileClose}
-            className="flex items-center gap-3 font-bold text-slate-100 text-base tracking-wider flex-1 min-w-0 pr-2 group"
+            className="flex items-center gap-3 font-bold text-slate-100 text-base tracking-wider flex-1 min-w-0 pr-2 group bg-transparent hover:bg-transparent border-0 shadow-none"
           >
             <div className="relative shrink-0">
               <img src="/logo.jpg" alt="Smart Warehouse Logo" className="h-9 w-9 md:h-10 md:w-10 object-contain rounded-xl group-hover:scale-105 transition-transform duration-200" />

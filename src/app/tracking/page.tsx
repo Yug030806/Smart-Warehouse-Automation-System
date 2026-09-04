@@ -22,7 +22,7 @@ import {
   Gauge,
   ArrowUpRight
 } from 'lucide-react';
-import { Vehicle, Task, Location, Box, EdgeAIDecision, Floor, Warehouse } from '@/lib/database.types';
+import { Vehicle, Task, Location, Box, EdgeAIDecision, Floor, Warehouse, RouteSegment } from '@/lib/database.types';
 import { ObstacleCell } from '@/lib/simulator/edgeAIEngine';
 import { generateUUID } from '@/lib/uuid';
 import { useAuth } from '@/lib/supabase/AuthProvider';
@@ -34,7 +34,14 @@ interface LogEntry {
   type: 'INFO' | 'SUCCESS' | 'WARN' | 'ERROR';
 }
 
-const floorLabel = (fId: string) => fId === 'f-01' ? '1' : fId === 'f-02' ? '2' : '3';
+const formatFloorName = (fId: string, floorsList: Floor[] = []) => {
+  const found = floorsList.find(f => f.id === fId);
+  if (found) return found.name || `Floor ${found.floor_number}`;
+  if (fId === 'f-01') return 'Floor 1';
+  if (fId === 'f-02') return 'Floor 2';
+  if (fId === 'f-03') return 'Floor 3';
+  return 'Floor 1';
+};
 
 type SimMode = 'SINGLE' | 'FLEET';
 
@@ -56,18 +63,38 @@ export default function TrackingPage() {
 
   // --- Single AMR State ---
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+  const selectedVehicleIdRef = useRef<string | null>(null);
   const hasAutoSelected = useRef(false);
   const [activeRoutePts, setActiveRoutePts] = useState<any[]>([]);
   const [simSpeed, setSimSpeed] = useState(1);
   const simControllerRef = useRef<SimulatorVehicleController | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
+  const isSimulatingRef = useRef(false);
   const [isPaused, setIsPaused] = useState(false);
   const [currentStepLabel, setCurrentStepLabel] = useState('Ready for drive simulation');
+  const [activeStepIndex, setActiveStepIndex] = useState<number>(-1);
+
+  const floorLabel = useCallback((fId: string) => formatFloorName(fId, floors), [floors]);
+
+  // Keep isSimulatingRef in sync
+  useEffect(() => {
+    isSimulatingRef.current = isSimulating;
+  }, [isSimulating]);
+
+  useEffect(() => {
+    selectedVehicleIdRef.current = selectedVehicleId;
+  }, [selectedVehicleId]);
 
   // --- Fleet Mode State ---
   const [isSimulatingAll, setIsSimulatingAll] = useState(false);
+  const isSimulatingAllRef = useRef(false);
   const fleetControllersRef = useRef<{ [vehicleId: string]: SimulatorVehicleController }>({});
+  const [fleetRoutes, setFleetRoutes] = useState<Record<string, { pts: RouteSegment[]; stepIndex: number }>>({});
   const [fleetMetrics, setFleetMetrics] = useState<FleetMetrics | null>(null);
+
+  useEffect(() => {
+    isSimulatingAllRef.current = isSimulatingAll;
+  }, [isSimulatingAll]);
 
   // --- Shared Edge-AI State ---
   const [obstacles, setObstacles] = useState<ObstacleCell[]>([]);
@@ -116,7 +143,37 @@ export default function TrackingPage() {
       ]);
 
       const v = (vRes.data || []) as Vehicle[];
-      setVehicles(v);
+      const activeFleetIds = new Set(Object.keys(fleetControllersRef.current));
+      v.forEach(veh => {
+        if (isSimulatingRef.current && selectedVehicleIdRef.current === veh.id) {
+          return;
+        }
+        if (activeFleetIds.has(veh.id)) {
+          return;
+        }
+        mockDb.saveVehicle(veh);
+      });
+
+      setVehicles(prev => {
+        const activeVehId = selectedVehicleIdRef.current;
+        let result = v;
+        if (isSimulatingRef.current && activeVehId) {
+          const moving = prev.find(veh => veh.id === activeVehId);
+          if (moving) {
+            result = result.map(veh => veh.id === activeVehId ? moving : veh);
+          }
+        }
+        if (activeFleetIds.size > 0) {
+          result = result.map(veh => {
+            if (activeFleetIds.has(veh.id)) {
+              const moving = prev.find(p => p.id === veh.id);
+              return moving || veh;
+            }
+            return veh;
+          });
+        }
+        return result;
+      });
       const t = (tRes.data || []) as Task[];
       setTasks(t);
       const l = (lRes.data || []) as Location[];
@@ -137,7 +194,7 @@ export default function TrackingPage() {
 
       if (fls.length > 0) {
         setSelectedFloor(prev => {
-          if (prev && prev !== 'f-01' && fls.some(f => f.id === prev)) return prev;
+          if (prev && fls.some(f => f.id === prev)) return prev;
           return fls[0].id;
         });
       }
@@ -154,6 +211,7 @@ export default function TrackingPage() {
       if (!hasAutoSelected.current && v.length > 0) {
         hasAutoSelected.current = true;
         setSelectedVehicleId(v[0].id);
+        selectedVehicleIdRef.current = v[0].id;
         if (v[0].current_floor_id) {
           setSelectedFloor(v[0].current_floor_id);
         }
@@ -177,10 +235,16 @@ export default function TrackingPage() {
       // Remove obstacle
       fleetCoordinator.removeGlobalObstacle(x, y, selectedFloor);
       if (simMode === 'FLEET') {
-        Object.values(fleetControllersRef.current).forEach(c => (c as any).getEdgeAIEngine?.().removeManualObstacle(x, y, selectedFloor));
+        Object.values(fleetControllersRef.current).forEach(c => {
+          (c as any).getEdgeAIEngine?.().removeManualObstacle(x, y, selectedFloor);
+          c.notifyObstacleChanged();
+        });
       } else if (simControllerRef.current) {
         (simControllerRef.current as any).getEdgeAIEngine?.().removeManualObstacle(x, y, selectedFloor);
+        simControllerRef.current.notifyObstacleChanged();
       }
+      const updated = fleetCoordinator.getGlobalObstacles();
+      setObstacles(updated);
       addLog(`Removed obstacle at [${x},${y}].`, 'INFO');
     } else {
       // Add obstacle globally so it appears immediately
@@ -192,12 +256,17 @@ export default function TrackingPage() {
       
       // Also notify active edge engines so they react instantly
       if (simMode === 'FLEET') {
-        Object.values(fleetControllersRef.current).forEach(c => (c as any).getEdgeAIEngine?.().addManualObstacle(x, y, selectedFloor));
+        Object.values(fleetControllersRef.current).forEach(c => {
+          (c as any).getEdgeAIEngine?.().addManualObstacle(x, y, selectedFloor);
+          c.notifyObstacleChanged();
+        });
       } else if (simControllerRef.current) {
         (simControllerRef.current as any).getEdgeAIEngine?.().addManualObstacle(x, y, selectedFloor);
+        simControllerRef.current.notifyObstacleChanged();
       }
-      
-      addLog(`Dropped manual obstacle at [${x},${y}]. AMRs will reroute if they encounter it.`, 'WARN');
+      const updated = fleetCoordinator.getGlobalObstacles();
+      setObstacles(updated);
+      addLog(`Dropped manual obstacle at [${x},${y}]. AMR will halt and wait 3s before rerouting.`, 'WARN');
     }
   };
 
@@ -205,6 +274,7 @@ export default function TrackingPage() {
 
   // --- SINGLE AMR LOGIC ---
   const stopCurrentSimulation = useCallback(() => {
+    isSimulatingRef.current = false;
     if (simControllerRef.current) {
       simControllerRef.current.stop();
       simControllerRef.current = null;
@@ -212,71 +282,122 @@ export default function TrackingPage() {
     setIsSimulating(false);
     setIsPaused(false);
     setActiveRoutePts([]);
-  }, []);
+    setActiveStepIndex(-1);
+    setCurrentStepLabel('Simulation stopped.');
+    if (selectedVehicleId) {
+      const cur = vehicles.find(v => v.id === selectedVehicleId);
+      if (cur) {
+        supabase.from('vehicles').update({ 
+          status: 'AVAILABLE',
+          x_position: cur.x_position,
+          y_position: cur.y_position,
+          current_floor_id: cur.current_floor_id
+        }).eq('id', selectedVehicleId).then(() => {});
+        mockDb.saveVehicle({ ...cur, status: 'AVAILABLE' });
+      } else {
+        supabase.from('vehicles').update({ status: 'AVAILABLE' }).eq('id', selectedVehicleId).then(() => {});
+      }
+      setVehicles(prev => prev.map(v => v.id === selectedVehicleId ? { ...v, status: 'AVAILABLE' } : v));
+    }
+    loadData();
+  }, [selectedVehicleId, vehicles, loadData]);
 
   const handleSelectVehicle = useCallback((v: Vehicle) => {
     if (isSimulatingAll) {
-      addLog('Cannot select individual vehicles while Fleet Mode is running.', 'WARN');
+      // In Fleet Mode, clicking a vehicle focuses inspection on it without stopping simulation
+      setSelectedVehicleId(v.id);
+      selectedVehicleIdRef.current = v.id;
+      setSelectedFloor(v.current_floor_id);
+      const fr = fleetRoutes[v.id];
+      if (fr) {
+        setActiveRoutePts(fr.pts);
+        setActiveStepIndex(fr.stepIndex);
+        setCurrentStepLabel(`[${v.vehicle_code}] Following vehicle: Step ${fr.stepIndex + 1}/${fr.pts.length} on ${floorLabel(v.current_floor_id)}`);
+      } else {
+        setActiveRoutePts([]);
+        setActiveStepIndex(-1);
+        setCurrentStepLabel(`[${v.vehicle_code}] Focused on ${floorLabel(v.current_floor_id)}.`);
+      }
       return;
     }
     stopCurrentSimulation();
     setSelectedVehicleId(v.id);
+    selectedVehicleIdRef.current = v.id;
     setSelectedFloor(v.current_floor_id);
     setCurrentStepLabel(`Selected ${v.vehicle_code}. Ready for simulation.`);
-    addLog(`Selected ${v.vehicle_code} (${v.name}) on Floor ${floorLabel(v.current_floor_id)}.`, 'INFO');
-  }, [stopCurrentSimulation, addLog, isSimulatingAll]);
+    addLog(`Selected ${v.vehicle_code} (${v.name}) on ${floorLabel(v.current_floor_id)}.`, 'INFO');
+  }, [stopCurrentSimulation, addLog, isSimulatingAll, fleetRoutes, floorLabel]);
 
-  const ensureAssignedTask = useCallback((veh: Vehicle): { task: Task; box: Box } | null => {
-    if (veh.current_task_id) {
+  const ensureAssignedTask = useCallback((veh: Vehicle, excludedTaskIds: string[] = [], excludedBoxIds: string[] = []): { task: Task; box: Box } | null => {
+    if (veh.current_task_id && !excludedTaskIds.includes(veh.current_task_id)) {
       const existingTask = tasks.find((t) => t.id === veh.current_task_id);
       const existingBox = existingTask ? boxes.find((b) => b.id === existingTask.box_id) : null;
-      if (existingTask && existingBox) return { task: existingTask, box: existingBox };
+      if (existingTask && existingBox && existingTask.status !== 'COMPLETED' && existingTask.status !== 'PICKUP_PENDING') {
+        const destLoc = locations.find(l => l.id === existingTask.destination_location_id);
+        if (destLoc && !(destLoc.x === veh.x_position && destLoc.y === veh.y_position && destLoc.floor_id === veh.current_floor_id)) {
+          return { task: existingTask, box: existingBox };
+        }
+      }
     }
-    const pending = tasks.filter((t) => t.status === 'PENDING');
+    const pending = tasks.filter((t) => t.status === 'PENDING' && !excludedTaskIds.includes(t.id));
     let targetTask: Task;
     const sameFloorPending = pending.find((t) => {
       const destLoc = locations.find((l) => l.id === t.destination_location_id);
-      return destLoc && destLoc.floor_id === veh.current_floor_id;
+      return destLoc && destLoc.floor_id === veh.current_floor_id && !(destLoc.x === veh.x_position && destLoc.y === veh.y_position);
     });
 
     if (sameFloorPending) {
       targetTask = sameFloorPending;
-    } else if (pending.length > 0) {
-      targetTask = pending[0];
     } else {
-      const availableBox = boxes.find((b) => b.status === 'WAITING') || boxes[0];
-      if (!availableBox) return null;
-      const sameFloorDest = locations.find(l => l.floor_id === veh.current_floor_id && (l.type === 'DELIVERY' || l.type === 'RACK') && !(l.x === veh.x_position && l.y === veh.y_position));
-      const fallbackDest = locations.find(l => l.floor_id === veh.current_floor_id && !(l.x === veh.x_position && l.y === veh.y_position));
-      const destLocation = sameFloorDest || fallbackDest;
-      if (!destLocation) return null;
+      const otherFloorPending = pending.find((t) => {
+        const destLoc = locations.find((l) => l.id === t.destination_location_id);
+        return destLoc && !(destLoc.x === veh.x_position && destLoc.y === veh.y_position && destLoc.floor_id === veh.current_floor_id);
+      });
+      if (otherFloorPending) {
+        targetTask = otherFloorPending;
+      } else {
+        const availableBox = boxes.find((b) => b.status === 'WAITING' && !excludedBoxIds.includes(b.id)) || 
+                             boxes.find((b) => !excludedBoxIds.includes(b.id)) || 
+                             boxes[0];
+        if (!availableBox) return null;
+        
+        const availableDestinations = locations.filter(l => 
+          l.floor_id === veh.current_floor_id && 
+          (l.type === 'DELIVERY' || l.type === 'RACK') && 
+          !(l.x === veh.x_position && l.y === veh.y_position)
+        );
+        
+        const destIndex = Math.abs(veh.vehicle_code.charCodeAt(veh.vehicle_code.length - 1)) % Math.max(1, availableDestinations.length);
+        const destLocation = availableDestinations[destIndex] || locations.find(l => l.floor_id === veh.current_floor_id && !(l.x === veh.x_position && l.y === veh.y_position));
+        if (!destLocation) return null;
 
-      targetTask = {
-        id: generateUUID(),
-        task_code: `TSK-SIM-${Date.now().toString().substring(8)}`,
-        box_id: availableBox.id,
-        vehicle_id: veh.id,
-        source_location_id: veh.current_location_id || locations.find(l => l.floor_id === veh.current_floor_id)?.id || 'loc-f1-pickup',
-        destination_location_id: destLocation.id,
-        priority: 'HIGH',
-        status: 'PENDING',
-        priority_score: 50,
-        estimated_distance: 15,
-        estimated_duration: 120,
-        actual_duration: null,
-        created_by: user?.id || 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
-        assigned_at: new Date().toISOString(),
-        started_at: null,
-        completed_at: null,
-        created_at: new Date().toISOString(),
-      };
-      supabase.from('tasks').insert(targetTask);
+        targetTask = {
+          id: generateUUID(),
+          task_code: `TSK-SIM-${Date.now().toString().substring(8)}-${veh.vehicle_code.substring(4)}`,
+          box_id: availableBox.id,
+          vehicle_id: veh.id,
+          source_location_id: veh.current_location_id || locations.find(l => l.floor_id === veh.current_floor_id)?.id || 'loc-f1-pickup',
+          destination_location_id: destLocation.id,
+          priority: 'HIGH',
+          status: 'PENDING',
+          priority_score: 50,
+          estimated_distance: 15,
+          estimated_duration: 120,
+          actual_duration: null,
+          created_by: user?.id || 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+          assigned_at: new Date().toISOString(),
+          started_at: null,
+          completed_at: null,
+          created_at: new Date().toISOString(),
+        };
+        supabase.from('tasks').insert(targetTask);
+      }
     }
     supabase.from('vehicles').update({ status: 'BUSY', current_task_id: targetTask.id }).eq('id', veh.id);
     supabase.from('tasks').update({ status: 'ASSIGNED', vehicle_id: veh.id, assigned_at: new Date().toISOString() }).eq('id', targetTask.id);
     const targetBox = boxes.find((b) => b.id === targetTask.box_id) || boxes[0];
     return { task: targetTask, box: targetBox };
-  }, [tasks, boxes, locations]);
+  }, [tasks, boxes, locations, user]);
 
   const handleStartSimulation = useCallback(() => {
     if (!selectedVehicle) return;
@@ -291,14 +412,39 @@ export default function TrackingPage() {
     const destLoc = locations.find((l) => l.id === task.destination_location_id);
     if (!destLoc) return;
 
-    const pts = calculateRoute(selectedVehicle.current_floor_id, selectedVehicle.x_position, selectedVehicle.y_position, destLoc.floor_id, destLoc.x, destLoc.y, locations);
+    const otherVehs = vehicles.filter(v => v.id !== selectedVehicle.id);
+    const pts = calculateRoute(
+      selectedVehicle.current_floor_id, 
+      selectedVehicle.x_position, 
+      selectedVehicle.y_position, 
+      destLoc.floor_id, 
+      destLoc.x, 
+      destLoc.y, 
+      locations,
+      12,
+      8,
+      obstacles,
+      otherVehs
+    );
+    if (!pts || pts.length === 0) {
+      addLog(`No valid route found to ${destLoc.name}. Route blocked.`, 'WARN');
+      return;
+    }
+
     setActiveRoutePts(pts);
+    setActiveStepIndex(0);
     addLog(`Calculated route: ${pts.length} steps to ${destLoc.name}.`, 'INFO');
 
-    const controller = new SimulatorVehicleController(selectedVehicle.id);
+    // For single AMR mode, obstacleProbability is 0 (runs cleanly without artificial halts)
+    const controller = new SimulatorVehicleController(selectedVehicle.id, 0);
+    controller.setInitialVehicle(selectedVehicle);
+    controller.setLocations(locations);
+    controller.setOtherVehicles(otherVehs);
     controller.connect();
     controller.setSpeed(simSpeed);
     simControllerRef.current = controller;
+    isSimulatingRef.current = true;
+    selectedVehicleIdRef.current = selectedVehicle.id;
     setIsSimulating(true);
     setIsPaused(false);
 
@@ -306,21 +452,108 @@ export default function TrackingPage() {
     supabase.from('boxes').update({ status: 'IN_TRANSIT' }).eq('id', box.id);
 
     const vCode = selectedVehicle.vehicle_code;
+    const vId = selectedVehicle.id;
+
     controller.sendMoveCommand(
       pts,
-      (x, y, floorId, index) => {
+      (x, y, floorId, index, totalSteps) => {
+        const total = totalSteps || pts.length;
+        // Step-by-step updates for Single AMR mode
         setSelectedFloor(floorId);
-        setCurrentStepLabel(`Step ${index + 1}/${pts.length}: [X:${x}, Y:${y}] Floor ${floorLabel(floorId)}`);
+        setActiveStepIndex(index);
+        setCurrentStepLabel(`Step ${index + 1}/${total}: [X:${x}, Y:${y}] ${floorLabel(floorId)}`);
+
+        // Real-time React state update so map immediately moves AMR
+        setVehicles(prev => prev.map(v => 
+          v.id === vId 
+            ? { ...v, x_position: x, y_position: y, current_floor_id: floorId, status: 'BUSY' } 
+            : v
+        ));
+
+        // Persist real-time position
+        supabase.from('vehicles').update({
+          x_position: x,
+          y_position: y,
+          current_floor_id: floorId,
+          status: 'BUSY'
+        }).eq('id', vId).then(() => {});
+
+        // Activity log display on each step
+        addLog(`[${vCode}] Step ${index + 1}/${total}: Moving to [X:${x}, Y:${y}] on ${floorLabel(floorId)}`, 'INFO');
       },
-      () => {
-        setCurrentStepLabel(`Arrived at ${destLoc.name}.`);
-        addLog(`✓ ${vCode} Arrived at destination.`, 'SUCCESS');
-        supabase.from('tasks').update({ status: 'PICKUP_PENDING' }).eq('id', task.id);
-        supabase.from('boxes').update({ status: 'PICKUP_PENDING' }).eq('id', box.id);
+      async () => {
+        setCurrentStepLabel(`Arrived at destination (${destLoc.name}).`);
+        addLog(`✓ ${vCode} arrived at destination (${destLoc.name}).`, 'SUCCESS');
+
+        setVehicles(prev => prev.map(v => 
+          v.id === vId 
+            ? { ...v, status: 'AVAILABLE', current_task_id: null, current_location_id: destLoc.id, x_position: destLoc.x, y_position: destLoc.y, current_floor_id: destLoc.floor_id } 
+            : v
+        ));
+
+        await Promise.all([
+          supabase.from('tasks').update({ status: 'PICKUP_PENDING' }).eq('id', task.id),
+          supabase.from('boxes').update({ status: 'PICKUP_PENDING' }).eq('id', box.id),
+          supabase.from('vehicles').update({ 
+            status: 'AVAILABLE',
+            current_task_id: null,
+            current_location_id: destLoc.id,
+            x_position: destLoc.x,
+            y_position: destLoc.y,
+            current_floor_id: destLoc.floor_id
+          }).eq('id', vId)
+        ]);
+
+        const curV = mockDb.getVehicles().find(x => x.id === vId);
+        if (curV) {
+          mockDb.saveVehicle({
+            ...curV,
+            status: 'AVAILABLE',
+            current_task_id: null,
+            current_location_id: destLoc.id,
+            x_position: destLoc.x,
+            y_position: destLoc.y,
+            current_floor_id: destLoc.floor_id
+          });
+        }
+
+        await loadData();
+        setActiveStepIndex(-1);
         setIsSimulating(false);
+      },
+      {
+        onObstacleWait: (obsX, obsY, obsFloor, waitSec) => {
+          setCurrentStepLabel(`Obstacle detected at [${obsX}, ${obsY}]. Halting and waiting ${waitSec}s...`);
+          addLog(`[${vCode}] Obstacle detected at [${obsX}, ${obsY}]. Halting vehicle. Waiting ${waitSec} seconds for clearance...`, 'WARN');
+        },
+        onObstacleCleared: (obsX, obsY, obsFloor) => {
+          setCurrentStepLabel(`Obstacle cleared at [${obsX}, ${obsY}]. Resuming drive...`);
+          addLog(`[${vCode}] Obstacle at [${obsX}, ${obsY}] cleared within 3s. Resuming original route.`, 'SUCCESS');
+        },
+        onObstaclePersisted: (obsX, obsY, obsFloor) => {
+          setCurrentStepLabel(`Obstacle still present at [${obsX}, ${obsY}]. Recalculating route...`);
+          addLog(`[${vCode}] Obstacle still present at [${obsX}, ${obsY}] after 3 seconds. Rerouting around obstacle...`, 'WARN');
+        },
+        onReroute: (newRoute) => {
+          setActiveRoutePts(newRoute);
+          setActiveStepIndex(0);
+          setCurrentStepLabel(`Rerouted: Step 1/${newRoute.length}`);
+          addLog(`[${vCode}] Recalculated new route (${newRoute.length} steps). Resuming drive.`, 'INFO');
+        },
+        onRerouteFailed: (obsX, obsY, obsFloor) => {
+          setCurrentStepLabel(`Path completely blocked at [${obsX}, ${obsY}]. Halting safely.`);
+          addLog(`[${vCode}] Path completely blocked at [${obsX}, ${obsY}]. No alternative route found. AMR halted safely.`, 'ERROR');
+        },
+        onElevatorEnter: (fromFloor, x, y) => {
+          addLog(`[${vCode}] Arrived at Elevator at [${x}, ${y}] on ${floorLabel(fromFloor)}. Boarding elevator...`, 'INFO');
+        },
+        onElevatorExit: (toFloor, x, y) => {
+          setSelectedFloor(toFloor);
+          addLog(`[${vCode}] Exited elevator on ${floorLabel(toFloor)} at [${x}, ${y}]. Continuing drive...`, 'INFO');
+        }
       }
     );
-  }, [selectedVehicle, ensureAssignedTask, locations, simSpeed, addLog]);
+  }, [selectedVehicle, ensureAssignedTask, locations, vehicles, obstacles, simSpeed, addLog, loadData, floorLabel]);
 
   const handleStartOut = useCallback(() => {
     if (!selectedVehicle) return;
@@ -331,41 +564,148 @@ export default function TrackingPage() {
       addLog('No Outbound / Delivery dock location found in warehouse map.', 'WARN');
       return;
     }
+    if (outLoc.x === selectedVehicle.x_position && outLoc.y === selectedVehicle.y_position && outLoc.floor_id === selectedVehicle.current_floor_id) {
+      addLog(`Vehicle is already at Outbound Dock (${outLoc.name}).`, 'INFO');
+      return;
+    }
 
     addLog(`Dispatching ${selectedVehicle.vehicle_code} to Outbound Dock (${outLoc.name})...`, 'INFO');
 
-    const pts = calculateRoute(selectedVehicle.current_floor_id, selectedVehicle.x_position, selectedVehicle.y_position, outLoc.floor_id, outLoc.x, outLoc.y, locations);
+    const otherVehs = vehicles.filter(v => v.id !== selectedVehicle.id);
+    const pts = calculateRoute(
+      selectedVehicle.current_floor_id, 
+      selectedVehicle.x_position, 
+      selectedVehicle.y_position, 
+      outLoc.floor_id, 
+      outLoc.x, 
+      outLoc.y, 
+      locations,
+      12,
+      8,
+      obstacles,
+      otherVehs
+    );
+    if (!pts || pts.length === 0) {
+      addLog(`No valid route found to Outbound Dock (${outLoc.name}). Route blocked.`, 'WARN');
+      return;
+    }
+
     setActiveRoutePts(pts);
+    setActiveStepIndex(0);
     addLog(`Calculated route to Out dock: ${pts.length} steps.`, 'INFO');
 
-    const controller = new SimulatorVehicleController(selectedVehicle.id);
+    // Single AMR mode: 0 obstacle probability
+    const controller = new SimulatorVehicleController(selectedVehicle.id, 0);
+    controller.setInitialVehicle(selectedVehicle);
+    controller.setLocations(locations);
+    controller.setOtherVehicles(otherVehs);
     controller.connect();
     controller.setSpeed(simSpeed);
     simControllerRef.current = controller;
+    isSimulatingRef.current = true;
+    selectedVehicleIdRef.current = selectedVehicle.id;
     setIsSimulating(true);
     setIsPaused(false);
 
     const vCode = selectedVehicle.vehicle_code;
+    const vId = selectedVehicle.id;
+
     controller.sendMoveCommand(
       pts,
-      (x, y, floorId, index) => {
+      (x, y, floorId, index, totalSteps) => {
+        const total = totalSteps || pts.length;
+        // Step-by-step updates for Single AMR mode
         setSelectedFloor(floorId);
-        setCurrentStepLabel(`Navigating to Outbound Dock: Step ${index + 1}/${pts.length} [X:${x}, Y:${y}]`);
+        setActiveStepIndex(index);
+        setCurrentStepLabel(`Navigating to Outbound Dock: Step ${index + 1}/${total} [X:${x}, Y:${y}]`);
+
+        // Real-time React state update so map immediately moves AMR
+        setVehicles(prev => prev.map(v => 
+          v.id === vId 
+            ? { ...v, x_position: x, y_position: y, current_floor_id: floorId, status: 'BUSY' } 
+            : v
+        ));
+
+        // Persist real-time position
+        supabase.from('vehicles').update({
+          x_position: x,
+          y_position: y,
+          current_floor_id: floorId,
+          status: 'BUSY'
+        }).eq('id', vId).then(() => {});
+
+        // Activity log display on each step
+        addLog(`[${vCode}] Step ${index + 1}/${total}: Moving to [X:${x}, Y:${y}] on ${floorLabel(floorId)}`, 'INFO');
       },
-      () => {
+      async () => {
         setCurrentStepLabel(`Arrived at Outbound Dock (${outLoc.name}).`);
-        addLog(`✓ ${vCode} arrived at Outbound Dock.`, 'SUCCESS');
-        supabase.from('vehicles').update({ 
+        addLog(`✓ ${vCode} arrived at Outbound Dock (${outLoc.name}).`, 'SUCCESS');
+
+        setVehicles(prev => prev.map(v => 
+          v.id === vId 
+            ? { ...v, status: 'AVAILABLE', current_task_id: null, current_location_id: outLoc.id, x_position: outLoc.x, y_position: outLoc.y, current_floor_id: outLoc.floor_id } 
+            : v
+        ));
+
+        await supabase.from('vehicles').update({ 
           status: 'AVAILABLE', 
+          current_task_id: null,
           current_location_id: outLoc.id, 
           x_position: outLoc.x, 
-          y_position: outLoc.y 
-        }).eq('id', selectedVehicle.id);
-        loadData();
+          y_position: outLoc.y, 
+          current_floor_id: outLoc.floor_id 
+        }).eq('id', vId);
+
+        const curV = mockDb.getVehicles().find(x => x.id === vId);
+        if (curV) {
+          mockDb.saveVehicle({
+            ...curV,
+            status: 'AVAILABLE',
+            current_task_id: null,
+            current_location_id: outLoc.id,
+            x_position: outLoc.x,
+            y_position: outLoc.y,
+            current_floor_id: outLoc.floor_id
+          });
+        }
+
+        await loadData();
+        setActiveStepIndex(-1);
         setIsSimulating(false);
+      },
+      {
+        onObstacleWait: (obsX, obsY, obsFloor, waitSec) => {
+          setCurrentStepLabel(`Obstacle detected at [${obsX}, ${obsY}]. Halting and waiting ${waitSec}s...`);
+          addLog(`[${vCode}] Obstacle detected at [${obsX}, ${obsY}]. Halting vehicle. Waiting ${waitSec} seconds for clearance...`, 'WARN');
+        },
+        onObstacleCleared: (obsX, obsY, obsFloor) => {
+          setCurrentStepLabel(`Obstacle cleared at [${obsX}, ${obsY}]. Resuming drive...`);
+          addLog(`[${vCode}] Obstacle at [${obsX}, ${obsY}] cleared within 3s. Resuming original route.`, 'SUCCESS');
+        },
+        onObstaclePersisted: (obsX, obsY, obsFloor) => {
+          setCurrentStepLabel(`Obstacle still present at [${obsX}, ${obsY}]. Recalculating route...`);
+          addLog(`[${vCode}] Obstacle still present at [${obsX}, ${obsY}] after 3 seconds. Rerouting around obstacle...`, 'WARN');
+        },
+        onReroute: (newRoute) => {
+          setActiveRoutePts(newRoute);
+          setActiveStepIndex(0);
+          setCurrentStepLabel(`Rerouted: Step 1/${newRoute.length}`);
+          addLog(`[${vCode}] Recalculated new route (${newRoute.length} steps). Resuming drive.`, 'INFO');
+        },
+        onRerouteFailed: (obsX, obsY, obsFloor) => {
+          setCurrentStepLabel(`Path completely blocked at [${obsX}, ${obsY}]. Halting safely.`);
+          addLog(`[${vCode}] Path completely blocked at [${obsX}, ${obsY}]. No alternative route found. AMR halted safely.`, 'ERROR');
+        },
+        onElevatorEnter: (fromFloor, x, y) => {
+          addLog(`[${vCode}] Arrived at Elevator at [${x}, ${y}] on ${floorLabel(fromFloor)}. Boarding elevator...`, 'INFO');
+        },
+        onElevatorExit: (toFloor, x, y) => {
+          setSelectedFloor(toFloor);
+          addLog(`[${vCode}] Exited elevator on ${floorLabel(toFloor)} at [${x}, ${y}]. Continuing drive...`, 'INFO');
+        }
       }
     );
-  }, [selectedVehicle, locations, simSpeed, addLog, loadData]);
+  }, [selectedVehicle, locations, vehicles, obstacles, simSpeed, addLog, loadData, floorLabel]);
 
   // --- FLEET MODE LOGIC ---
   const startFleetAll = () => {
@@ -379,77 +719,562 @@ export default function TrackingPage() {
     
     let allOnFloor = vehicles.filter(v => v.current_floor_id === selectedFloor && v.status !== 'OFFLINE');
     if (allOnFloor.length === 0) {
-      addLog('No vehicles found on this floor.', 'WARN');
+      allOnFloor = vehicles.filter(v => v.status !== 'OFFLINE');
+    }
+    if (allOnFloor.length === 0) {
+      addLog('No vehicles available for fleet simulation.', 'WARN');
       return;
     }
 
-    let available: Vehicle[] = [];
+    let fleetVehicles: Vehicle[] = [];
 
-    // Prioritize the user's selected vehicle if it's on this floor
+    // Prioritize the user's selected vehicle if available
     if (selectedVehicleId) {
       const selectedV = allOnFloor.find(v => v.id === selectedVehicleId);
       if (selectedV) {
-        available.push(selectedV);
+        fleetVehicles.push(selectedV);
         allOnFloor = allOnFloor.filter(v => v.id !== selectedVehicleId);
       }
     }
 
-    // Fill the rest with AVAILABLE vehicles, up to 3 total for the fleet sim
+    // Fill with up to 3 total vehicles for the fleet
     const availableOthers = allOnFloor.filter(v => v.status === 'AVAILABLE');
-    available = [...available, ...availableOthers].slice(0, 3);
+    fleetVehicles = [...fleetVehicles, ...availableOthers].slice(0, 3);
 
-    if (available.length === 0) {
-      // Fallback: forcefully use busy vehicles if absolutely no one is available
-      const busy = allOnFloor.filter(v => v.status === 'BUSY').slice(0, 3);
-      if (busy.length === 0) return;
-      available = busy;
-      addLog('Forced reset of BUSY vehicles to start simulation.', 'WARN');
+    if (fleetVehicles.length === 0) {
+      fleetVehicles = allOnFloor.slice(0, 3);
+      if (fleetVehicles.length === 0) return;
     }
 
-    available.forEach(v => {
-      const assignment = ensureAssignedTask(v);
-      if (!assignment) return;
+    const claimedTaskIds: string[] = [];
+    const claimedBoxIds: string[] = [];
+    const newFleetRoutes: Record<string, { pts: RouteSegment[]; stepIndex: number }> = {};
+    let startedCount = 0;
+
+    fleetVehicles.forEach(v => {
+      const assignment = ensureAssignedTask(v, claimedTaskIds, claimedBoxIds);
+      if (!assignment) {
+        addLog(`Could not assign task to ${v.vehicle_code}.`, 'WARN');
+        return;
+      }
 
       const { task, box } = assignment;
+      claimedTaskIds.push(task.id);
+      claimedBoxIds.push(box.id);
+
       const destLoc = locations.find((l) => l.id === task.destination_location_id);
-      
-      if (destLoc) {
-        const pts = calculateRoute(v.current_floor_id, v.x_position, v.y_position, destLoc.floor_id, destLoc.x, destLoc.y, locations);
-        if (pts.length > 0) {
-          const controller = new SimulatorVehicleController(v.id, 0.30);
-          controller.connect();
-          controller.setSpeed(3);
-          fleetControllersRef.current[v.id] = controller;
-          
-          supabase.from('vehicles').update({ status: 'BUSY' }).eq('id', v.id);
-          supabase.from('tasks').update({ status: 'IN_PROGRESS', started_at: new Date().toISOString() }).eq('id', task.id);
-          supabase.from('boxes').update({ status: 'IN_TRANSIT' }).eq('id', box.id);
-          
-          controller.sendMoveCommand(
-            pts,
-            () => {},
-            () => {
-              addLog(`✓ ${v.vehicle_code} reached destination.`, 'SUCCESS');
-              supabase.from('tasks').update({ status: 'PICKUP_PENDING' }).eq('id', task.id);
-              supabase.from('boxes').update({ status: 'PICKUP_PENDING' }).eq('id', box.id);
-              supabase.from('vehicles').update({ status: 'AVAILABLE' }).eq('id', v.id);
-              delete fleetControllersRef.current[v.id];
-              if (Object.keys(fleetControllersRef.current).length === 0) setIsSimulatingAll(false);
-            }
-          );
-        }
+      if (!destLoc) return;
+
+      const otherVehs = vehicles.filter(ov => ov.id !== v.id);
+      const pts = calculateRoute(
+        v.current_floor_id, 
+        v.x_position, 
+        v.y_position, 
+        destLoc.floor_id, 
+        destLoc.x, 
+        destLoc.y, 
+        locations,
+        12,
+        8,
+        obstacles,
+        otherVehs
+      );
+
+      if (!pts || pts.length === 0) {
+        addLog(`[${v.vehicle_code}] No route found to destination (${destLoc.name}).`, 'WARN');
+        return;
       }
+
+      newFleetRoutes[v.id] = { pts, stepIndex: 0 };
+      addLog(`[${v.vehicle_code}] Dispatched on Task ${task.task_code} (Box ${box.box_code}) to ${destLoc.name} (${pts.length} steps).`, 'INFO');
+
+      // 0 artificial obstacle probability (runs smoothly, stops only for real obstacles)
+      const controller = new SimulatorVehicleController(v.id, 0);
+      controller.setInitialVehicle(v);
+      controller.setLocations(locations);
+      controller.setOtherVehicles(otherVehs);
+      controller.connect();
+      controller.setSpeed(simSpeed);
+      fleetControllersRef.current[v.id] = controller;
+      
+      supabase.from('vehicles').update({ status: 'BUSY' }).eq('id', v.id).then(() => {});
+      supabase.from('tasks').update({ status: 'IN_PROGRESS', started_at: new Date().toISOString() }).eq('id', task.id).then(() => {});
+      supabase.from('boxes').update({ status: 'IN_TRANSIT' }).eq('id', box.id).then(() => {});
+
+      const vCode = v.vehicle_code;
+      const vId = v.id;
+
+      controller.sendMoveCommand(
+        pts,
+        (x, y, floorId, index, totalSteps) => {
+          const total = totalSteps || pts.length;
+          // Step-by-step position update in real-time React state
+          setVehicles(prev => prev.map(veh => 
+            veh.id === vId 
+              ? { ...veh, x_position: x, y_position: y, current_floor_id: floorId, status: 'BUSY' } 
+              : veh
+          ));
+
+          // Real-time route step update for map visualization
+          setFleetRoutes(prev => ({
+            ...prev,
+            [vId]: { pts: prev[vId]?.pts || pts, stepIndex: index }
+          }));
+
+          // If focused on this vehicle
+          if (selectedVehicleIdRef.current === vId) {
+            setSelectedFloor(floorId);
+            setActiveStepIndex(index);
+            setCurrentStepLabel(`[${vCode}] Step ${index + 1}/${total}: [X:${x}, Y:${y}] ${floorLabel(floorId)}`);
+          }
+
+          // Persist position
+          supabase.from('vehicles').update({
+            x_position: x,
+            y_position: y,
+            current_floor_id: floorId,
+            status: 'BUSY'
+          }).eq('id', vId).then(() => {});
+
+          const curV = mockDb.getVehicles().find(item => item.id === vId);
+          if (curV) {
+            mockDb.saveVehicle({
+              ...curV,
+              x_position: x,
+              y_position: y,
+              current_floor_id: floorId,
+              status: 'BUSY'
+            });
+          }
+
+          // Step-by-step activity log
+          addLog(`[${vCode}] Step ${index + 1}/${total}: Moving to [X:${x}, Y:${y}] on ${floorLabel(floorId)}`, 'INFO');
+        },
+        async () => {
+          addLog(`✓ ${vCode} arrived at destination (${destLoc.name}).`, 'SUCCESS');
+
+          setVehicles(prev => prev.map(veh => 
+            veh.id === vId 
+              ? { ...veh, status: 'AVAILABLE', current_task_id: null, current_location_id: destLoc.id, x_position: destLoc.x, y_position: destLoc.y, current_floor_id: destLoc.floor_id } 
+              : veh
+          ));
+
+          await Promise.all([
+            supabase.from('tasks').update({ status: 'PICKUP_PENDING' }).eq('id', task.id),
+            supabase.from('boxes').update({ status: 'PICKUP_PENDING', current_location_id: destLoc.id }).eq('id', box.id),
+            supabase.from('vehicles').update({ 
+              status: 'AVAILABLE', 
+              current_task_id: null, 
+              current_location_id: destLoc.id, 
+              x_position: destLoc.x, 
+              y_position: destLoc.y, 
+              current_floor_id: destLoc.floor_id 
+            }).eq('id', vId)
+          ]);
+
+          const curV = mockDb.getVehicles().find(x => x.id === vId);
+          if (curV) {
+            mockDb.saveVehicle({
+              ...curV,
+              status: 'AVAILABLE',
+              current_task_id: null,
+              current_location_id: destLoc.id,
+              x_position: destLoc.x,
+              y_position: destLoc.y,
+              current_floor_id: destLoc.floor_id
+            });
+          }
+
+          delete fleetControllersRef.current[vId];
+          if (Object.keys(fleetControllersRef.current).length === 0) {
+            setIsSimulatingAll(false);
+            setCurrentStepLabel('All fleet vehicles reached destinations.');
+            addLog('All fleet vehicles completed their delivery cycles.', 'SUCCESS');
+            await loadData();
+          }
+        },
+        {
+          onObstacleWait: (obsX, obsY, obsFloor, waitSec) => {
+            if (selectedVehicleIdRef.current === vId) {
+              setCurrentStepLabel(`[${vCode}] Obstacle detected at [${obsX}, ${obsY}]. Halting and waiting ${waitSec}s...`);
+            }
+            addLog(`[${vCode}] Obstacle detected at [${obsX}, ${obsY}]. Halting vehicle. Waiting ${waitSec} seconds for clearance...`, 'WARN');
+
+            // Fleet Inter-Vehicle Sensor Coordination:
+            // Warn other AMRs in sensor range of this AMR or whose path intersects the obstacle!
+            const curVeh = mockDb.getVehicles().find(veh => veh.id === vId);
+            const curX = curVeh ? curVeh.x_position : v.x_position;
+            const curY = curVeh ? curVeh.y_position : v.y_position;
+
+            Object.entries(fleetControllersRef.current).forEach(([otherId, otherCtrl]) => {
+              if (otherId === vId) return;
+              const otherVeh = mockDb.getVehicles().find(veh => veh.id === otherId);
+              if (!otherVeh || otherVeh.current_floor_id !== obsFloor) return;
+
+              const dist = Math.max(Math.abs(otherVeh.x_position - curX), Math.abs(otherVeh.y_position - curY));
+              const otherCode = otherVeh.vehicle_code;
+              const inSensorRange = dist <= 3;
+
+              const alertResult = otherCtrl.handleFleetObstacleAlert(obsX, obsY, obsFloor, vCode, curX, curY);
+
+              if (alertResult.action === 'REROUTED') {
+                addLog(`[COORDINATION] 📡 ${otherCode} (in sensor range of ${vCode}, dist: ${dist} cells) detected obstacle at [${obsX}, ${obsY}] on its path! Preemptively rerouting...`, 'WARN');
+                if (alertResult.newRoute) {
+                  setFleetRoutes(prev => ({
+                    ...prev,
+                    [otherId]: { pts: alertResult.newRoute!, stepIndex: 0 }
+                  }));
+                }
+              } else if (alertResult.action === 'HALTED_YIELD') {
+                addLog(`[COORDINATION] 🛑 ${otherCode} (in sensor range of ${vCode}, dist: ${dist} cells) halted safely to yield and maintain safety distance.`, 'WARN');
+              } else if (inSensorRange) {
+                addLog(`[COORDINATION] 📡 ${otherCode} received sensor proximity alert of obstacle at [${obsX}, ${obsY}] from ${vCode} (dist: ${dist} cells — path clear).`, 'INFO');
+              }
+            });
+
+            setObstacles(fleetCoordinator.getGlobalObstacles());
+            setFleetMetrics(fleetCoordinator.getMetrics());
+          },
+          onObstacleCleared: (obsX, obsY, obsFloor) => {
+            if (selectedVehicleIdRef.current === vId) {
+              setCurrentStepLabel(`[${vCode}] Obstacle cleared at [${obsX}, ${obsY}]. Resuming drive...`);
+            }
+            addLog(`[${vCode}] Obstacle at [${obsX}, ${obsY}] cleared within 3s. Resuming original route.`, 'SUCCESS');
+
+            // Notify yielding AMRs that obstacle is cleared so they can resume
+            Object.entries(fleetControllersRef.current).forEach(([otherId, otherCtrl]) => {
+              if (otherId === vId) return;
+              otherCtrl.notifyObstacleChanged();
+            });
+            setObstacles(fleetCoordinator.getGlobalObstacles());
+            setFleetMetrics(fleetCoordinator.getMetrics());
+          },
+          onObstaclePersisted: (obsX, obsY, obsFloor) => {
+            if (selectedVehicleIdRef.current === vId) {
+              setCurrentStepLabel(`[${vCode}] Obstacle still present at [${obsX}, ${obsY}]. Recalculating route...`);
+            }
+            addLog(`[${vCode}] Obstacle still present at [${obsX}, ${obsY}] after 3 seconds. Rerouting around obstacle...`, 'WARN');
+          },
+          onReroute: (newRoute) => {
+            setFleetRoutes(prev => ({
+              ...prev,
+              [vId]: { pts: newRoute, stepIndex: 0 }
+            }));
+            if (selectedVehicleIdRef.current === vId) {
+              setActiveRoutePts(newRoute);
+              setActiveStepIndex(0);
+              setCurrentStepLabel(`[${vCode}] Rerouted: Step 1/${newRoute.length}`);
+            }
+            addLog(`[${vCode}] Recalculated new route (${newRoute.length} steps). Resuming drive.`, 'INFO');
+
+            // Resume any yielding vehicle
+            Object.entries(fleetControllersRef.current).forEach(([otherId, otherCtrl]) => {
+              if (otherId === vId) return;
+              otherCtrl.notifyObstacleChanged();
+            });
+            setObstacles(fleetCoordinator.getGlobalObstacles());
+            setFleetMetrics(fleetCoordinator.getMetrics());
+          },
+          onRerouteFailed: (obsX, obsY, obsFloor) => {
+            if (selectedVehicleIdRef.current === vId) {
+              setCurrentStepLabel(`[${vCode}] Path completely blocked at [${obsX}, ${obsY}]. Halting safely.`);
+            }
+            addLog(`[${vCode}] Path completely blocked at [${obsX}, ${obsY}]. No alternative route found. AMR halted safely.`, 'ERROR');
+          },
+          onElevatorEnter: (fromFloor, x, y) => {
+            addLog(`[${vCode}] Arrived at Elevator at [${x}, ${y}] on ${floorLabel(fromFloor)}. Boarding elevator...`, 'INFO');
+          },
+          onElevatorExit: (toFloor, x, y) => {
+            if (selectedVehicleIdRef.current === vId) {
+              setSelectedFloor(toFloor);
+            }
+            addLog(`[${vCode}] Exited elevator on ${floorLabel(toFloor)} at [${x}, ${y}]. Continuing drive...`, 'INFO');
+          }
+        }
+      );
+      startedCount++;
     });
-    setIsSimulatingAll(true);
+
+    if (startedCount > 0) {
+      setFleetRoutes(newFleetRoutes);
+      setIsSimulatingAll(true);
+      setCurrentStepLabel(`Fleet simulation running: ${startedCount} AMRs actively driving.`);
+    }
+  };
+
+  const startFleetOutAll = () => {
+    if (isSimulatingAll) return;
+    if (isSimulating) {
+      addLog('Stop single vehicle simulation before starting fleet mode.', 'WARN');
+      return;
+    }
+
+    const outLoc = locations.find((l) => l.floor_id === selectedFloor && l.type === 'DELIVERY') || 
+                   locations.find((l) => l.type === 'DELIVERY') ||
+                   locations.find((l) => l.name.toUpperCase().includes('OUT'));
+    if (!outLoc) {
+      addLog('No Outbound / Delivery dock location found in warehouse map.', 'WARN');
+      return;
+    }
+
+    addLog(`Dispatching fleet to Outbound Dock (${outLoc.name})...`, 'INFO');
+
+    let allOnFloor = vehicles.filter(v => v.current_floor_id === selectedFloor && v.status !== 'OFFLINE');
+    if (allOnFloor.length === 0) allOnFloor = vehicles.filter(v => v.status !== 'OFFLINE');
+    const available = allOnFloor.filter(v => !(v.x_position === outLoc.x && v.y_position === outLoc.y && v.current_floor_id === outLoc.floor_id)).slice(0, 3);
+
+    if (available.length === 0) {
+      addLog('All available vehicles are already at Outbound Dock.', 'INFO');
+      return;
+    }
+
+    const newFleetRoutes: Record<string, { pts: RouteSegment[]; stepIndex: number }> = {};
+    let startedCount = 0;
+
+    available.forEach((v) => {
+      const otherVehs = vehicles.filter(ov => ov.id !== v.id);
+      const pts = calculateRoute(
+        v.current_floor_id,
+        v.x_position,
+        v.y_position,
+        outLoc.floor_id,
+        outLoc.x,
+        outLoc.y,
+        locations,
+        12,
+        8,
+        obstacles,
+        otherVehs
+      );
+
+      if (!pts || pts.length === 0) {
+        addLog(`[${v.vehicle_code}] No route found to Outbound Dock.`, 'WARN');
+        return;
+      }
+
+      newFleetRoutes[v.id] = { pts, stepIndex: 0 };
+      addLog(`[${v.vehicle_code}] Dispatched to Outbound Dock (${pts.length} steps).`, 'INFO');
+
+      const controller = new SimulatorVehicleController(v.id, 0);
+      controller.setInitialVehicle(v);
+      controller.setLocations(locations);
+      controller.setOtherVehicles(otherVehs);
+      controller.connect();
+      controller.setSpeed(simSpeed);
+      fleetControllersRef.current[v.id] = controller;
+
+      supabase.from('vehicles').update({ status: 'BUSY' }).eq('id', v.id).then(() => {});
+
+      const vCode = v.vehicle_code;
+      const vId = v.id;
+
+      controller.sendMoveCommand(
+        pts,
+        (x, y, floorId, index, totalSteps) => {
+          const total = totalSteps || pts.length;
+          setVehicles(prev => prev.map(veh => 
+            veh.id === vId 
+              ? { ...veh, x_position: x, y_position: y, current_floor_id: floorId, status: 'BUSY' } 
+              : veh
+          ));
+
+          setFleetRoutes(prev => ({
+            ...prev,
+            [vId]: { pts: prev[vId]?.pts || pts, stepIndex: index }
+          }));
+
+          if (selectedVehicleIdRef.current === vId) {
+            setSelectedFloor(floorId);
+            setActiveStepIndex(index);
+            setCurrentStepLabel(`[${vCode}] Navigating to Out: Step ${index + 1}/${total} [X:${x}, Y:${y}]`);
+          }
+
+          supabase.from('vehicles').update({
+            x_position: x,
+            y_position: y,
+            current_floor_id: floorId,
+            status: 'BUSY'
+          }).eq('id', vId).then(() => {});
+
+          const curV = mockDb.getVehicles().find(item => item.id === vId);
+          if (curV) {
+            mockDb.saveVehicle({
+              ...curV,
+              x_position: x,
+              y_position: y,
+              current_floor_id: floorId,
+              status: 'BUSY'
+            });
+          }
+
+          addLog(`[${vCode}] Step ${index + 1}/${total}: Moving to [X:${x}, Y:${y}] on ${floorLabel(floorId)}`, 'INFO');
+        },
+        async () => {
+          addLog(`✓ ${vCode} arrived at Outbound Dock (${outLoc.name}).`, 'SUCCESS');
+
+          setVehicles(prev => prev.map(veh => 
+            veh.id === vId 
+              ? { ...veh, status: 'AVAILABLE', current_task_id: null, current_location_id: outLoc.id, x_position: outLoc.x, y_position: outLoc.y, current_floor_id: outLoc.floor_id } 
+              : veh
+          ));
+
+          await supabase.from('vehicles').update({ 
+            status: 'AVAILABLE', 
+            current_task_id: null, 
+            current_location_id: outLoc.id, 
+            x_position: outLoc.x, 
+            y_position: outLoc.y, 
+            current_floor_id: outLoc.floor_id 
+          }).eq('id', vId);
+
+          const curV = mockDb.getVehicles().find(x => x.id === vId);
+          if (curV) {
+            mockDb.saveVehicle({
+              ...curV,
+              status: 'AVAILABLE',
+              current_task_id: null,
+              current_location_id: outLoc.id,
+              x_position: outLoc.x,
+              y_position: outLoc.y,
+              current_floor_id: outLoc.floor_id
+            });
+          }
+
+          delete fleetControllersRef.current[vId];
+          if (Object.keys(fleetControllersRef.current).length === 0) {
+            setIsSimulatingAll(false);
+            setCurrentStepLabel('All fleet vehicles reached Outbound Dock.');
+            addLog('All fleet vehicles reached Outbound Dock successfully.', 'SUCCESS');
+            await loadData();
+          }
+        },
+        {
+          onObstacleWait: (obsX, obsY, obsFloor, waitSec) => {
+            if (selectedVehicleIdRef.current === vId) {
+              setCurrentStepLabel(`[${vCode}] Obstacle detected at [${obsX}, ${obsY}]. Halting and waiting ${waitSec}s...`);
+            }
+            addLog(`[${vCode}] Obstacle detected at [${obsX}, ${obsY}]. Halting vehicle. Waiting ${waitSec} seconds for clearance...`, 'WARN');
+
+            // Fleet Inter-Vehicle Sensor Coordination:
+            // Warn other AMRs in sensor range of this AMR or whose path intersects the obstacle!
+            const curVeh = mockDb.getVehicles().find(veh => veh.id === vId);
+            const curX = curVeh ? curVeh.x_position : v.x_position;
+            const curY = curVeh ? curVeh.y_position : v.y_position;
+
+            Object.entries(fleetControllersRef.current).forEach(([otherId, otherCtrl]) => {
+              if (otherId === vId) return;
+              const otherVeh = mockDb.getVehicles().find(veh => veh.id === otherId);
+              if (!otherVeh || otherVeh.current_floor_id !== obsFloor) return;
+
+              const dist = Math.max(Math.abs(otherVeh.x_position - curX), Math.abs(otherVeh.y_position - curY));
+              const otherCode = otherVeh.vehicle_code;
+              const inSensorRange = dist <= 3;
+
+              const alertResult = otherCtrl.handleFleetObstacleAlert(obsX, obsY, obsFloor, vCode, curX, curY);
+
+              if (alertResult.action === 'REROUTED') {
+                addLog(`[COORDINATION] 📡 ${otherCode} (in sensor range of ${vCode}, dist: ${dist} cells) detected obstacle at [${obsX}, ${obsY}] on its path! Preemptively rerouting...`, 'WARN');
+                if (alertResult.newRoute) {
+                  setFleetRoutes(prev => ({
+                    ...prev,
+                    [otherId]: { pts: alertResult.newRoute!, stepIndex: 0 }
+                  }));
+                }
+              } else if (alertResult.action === 'HALTED_YIELD') {
+                addLog(`[COORDINATION] 🛑 ${otherCode} (in sensor range of ${vCode}, dist: ${dist} cells) halted safely to yield and maintain safety distance.`, 'WARN');
+              } else if (inSensorRange) {
+                addLog(`[COORDINATION] 📡 ${otherCode} received sensor proximity alert of obstacle at [${obsX}, ${obsY}] from ${vCode} (dist: ${dist} cells — path clear).`, 'INFO');
+              }
+            });
+
+            setObstacles(fleetCoordinator.getGlobalObstacles());
+            setFleetMetrics(fleetCoordinator.getMetrics());
+          },
+          onObstacleCleared: (obsX, obsY, obsFloor) => {
+            if (selectedVehicleIdRef.current === vId) {
+              setCurrentStepLabel(`[${vCode}] Obstacle cleared at [${obsX}, ${obsY}]. Resuming drive...`);
+            }
+            addLog(`[${vCode}] Obstacle at [${obsX}, ${obsY}] cleared within 3s. Resuming original route.`, 'SUCCESS');
+
+            // Notify yielding AMRs that obstacle is cleared so they can resume
+            Object.entries(fleetControllersRef.current).forEach(([otherId, otherCtrl]) => {
+              if (otherId === vId) return;
+              otherCtrl.notifyObstacleChanged();
+            });
+            setObstacles(fleetCoordinator.getGlobalObstacles());
+            setFleetMetrics(fleetCoordinator.getMetrics());
+          },
+          onObstaclePersisted: (obsX, obsY, obsFloor) => {
+            if (selectedVehicleIdRef.current === vId) {
+              setCurrentStepLabel(`[${vCode}] Obstacle still present at [${obsX}, ${obsY}]. Recalculating route...`);
+            }
+            addLog(`[${vCode}] Obstacle still present at [${obsX}, ${obsY}] after 3 seconds. Rerouting around obstacle...`, 'WARN');
+          },
+          onReroute: (newRoute) => {
+            setFleetRoutes(prev => ({
+              ...prev,
+              [vId]: { pts: newRoute, stepIndex: 0 }
+            }));
+            if (selectedVehicleIdRef.current === vId) {
+              setActiveRoutePts(newRoute);
+              setActiveStepIndex(0);
+              setCurrentStepLabel(`[${vCode}] Rerouted: Step 1/${newRoute.length}`);
+            }
+            addLog(`[${vCode}] Recalculated new route (${newRoute.length} steps). Resuming drive.`, 'INFO');
+
+            // Resume any yielding vehicle
+            Object.entries(fleetControllersRef.current).forEach(([otherId, otherCtrl]) => {
+              if (otherId === vId) return;
+              otherCtrl.notifyObstacleChanged();
+            });
+            setObstacles(fleetCoordinator.getGlobalObstacles());
+            setFleetMetrics(fleetCoordinator.getMetrics());
+          },
+          onRerouteFailed: (obsX, obsY, obsFloor) => {
+            if (selectedVehicleIdRef.current === vId) {
+              setCurrentStepLabel(`[${vCode}] Path completely blocked at [${obsX}, ${obsY}]. Halting safely.`);
+            }
+            addLog(`[${vCode}] Path completely blocked at [${obsX}, ${obsY}]. No alternative route found. AMR halted safely.`, 'ERROR');
+          },
+          onElevatorEnter: (fromFloor, x, y) => {
+            addLog(`[${vCode}] Arrived at Elevator at [${x}, ${y}] on ${floorLabel(fromFloor)}. Boarding elevator...`, 'INFO');
+          },
+          onElevatorExit: (toFloor, x, y) => {
+            if (selectedVehicleIdRef.current === vId) {
+              setSelectedFloor(toFloor);
+            }
+            addLog(`[${vCode}] Exited elevator on ${floorLabel(toFloor)} at [${x}, ${y}]. Continuing drive...`, 'INFO');
+          }
+        }
+      );
+      startedCount++;
+    });
+
+    if (startedCount > 0) {
+      setFleetRoutes(newFleetRoutes);
+      setIsSimulatingAll(true);
+      setCurrentStepLabel(`Dispatching ${startedCount} fleet AMRs to Outbound Dock.`);
+    }
   };
 
   const stopFleetAll = () => {
     Object.values(fleetControllersRef.current).forEach(c => c.stop());
     fleetControllersRef.current = {};
+    setFleetRoutes({});
     setIsSimulatingAll(false);
+    setCurrentStepLabel('Fleet simulation stopped.');
     vehicles.forEach(v => {
-      if (v.status === 'BUSY') supabase.from('vehicles').update({ status: 'AVAILABLE' }).eq('id', v.id);
+      if (v.status === 'BUSY') {
+        supabase.from('vehicles').update({ 
+          status: 'AVAILABLE',
+          x_position: v.x_position,
+          y_position: v.y_position,
+          current_floor_id: v.current_floor_id
+        }).eq('id', v.id).then(() => {});
+        mockDb.saveVehicle({ ...v, status: 'AVAILABLE' });
+      }
     });
+    setVehicles(prev => prev.map(v => v.status === 'BUSY' ? { ...v, status: 'AVAILABLE' } : v));
     addLog('Stopped fleet simulation.', 'WARN');
     loadData();
   };
@@ -599,8 +1424,23 @@ export default function TrackingPage() {
                 <WarehouseMap
                   floorId={selectedFloor}
                   warehouseName={warehouses.find(w => w.id === (floors.find(f => f.id === selectedFloor)?.warehouse_id || selectedWarehouseId))?.name}
-                  selectedVehicle={simMode === 'SINGLE' ? selectedVehicle : null}
-                  activeRoute={simMode === 'SINGLE' ? activeRoutePts : []}
+                  selectedVehicle={selectedVehicle}
+                  activeRoute={
+                    simMode === 'SINGLE'
+                      ? activeRoutePts
+                      : (selectedVehicleId && fleetRoutes[selectedVehicleId]
+                          ? fleetRoutes[selectedVehicleId].pts
+                          : null)
+                  }
+                  activeStepIndex={
+                    simMode === 'SINGLE'
+                      ? activeStepIndex
+                      : (selectedVehicleId && fleetRoutes[selectedVehicleId]
+                          ? fleetRoutes[selectedVehicleId].stepIndex
+                          : undefined)
+                  }
+                  vehicles={vehicles}
+                  locations={locations}
                   obstacles={obstacles}
                   showSensorRange={showSensorRanges}
                   edgeDecisions={edgeDecisions}
@@ -613,19 +1453,54 @@ export default function TrackingPage() {
                 
                 {/* Fleet Controls (If in FLEET mode) */}
                 {simMode === 'FLEET' && (
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-4 border-b border-slate-900">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-900">
                     <div>
-                      <h3 className="text-sm font-bold text-slate-200">Fleet Chaos Testing</h3>
-                      <p className="text-xs text-slate-400 mt-1">Start multiple vehicles to observe their Edge-AI communication.</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-black uppercase text-purple-400 font-mono tracking-widest">
+                          Fleet Drive Console
+                        </span>
+                        <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${isSimulatingAll ? 'bg-green-950 text-green-400' : 'bg-slate-800 text-slate-400'}`}>
+                          {isSimulatingAll ? `RUNNING (${Object.keys(fleetControllersRef.current).length} ACTIVE)` : 'IDLE'}
+                        </span>
+                        {selectedVehicle && (
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-purple-950 text-purple-400">
+                            FOCUSED: {selectedVehicle.vehicle_code}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-slate-200 font-bold mt-1">{currentStepLabel}</p>
                     </div>
-                    <div>
+
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      {/* Live Speed Multiplier Selector for Fleet */}
+                      <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 p-1 rounded-xl">
+                        <Gauge className="h-3 w-3 text-purple-400 ml-1.5 mr-0.5" />
+                        {[1, 2, 5, 10].map((s) => (
+                          <button
+                            key={s}
+                            onClick={() => {
+                              setSimSpeed(s);
+                              Object.values(fleetControllersRef.current).forEach(c => c.setSpeed(s));
+                            }}
+                            title={`Set Fleet AMR Speed to ${s}x`}
+                            className={`px-2 py-1 rounded-lg text-[10px] font-bold transition ${
+                              simSpeed === s
+                                ? 'bg-purple-600 text-white shadow-sm'
+                                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                            }`}
+                          >
+                            {s}x
+                          </button>
+                        ))}
+                      </div>
+
                       {!isSimulatingAll ? (
-                        <button onClick={startFleetAll} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-extrabold text-white transition shadow-lg shadow-emerald-600/20">
-                          <Play className="h-4 w-4" /> Start Fleet Sim
+                        <button onClick={startFleetAll} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-bold text-white transition shadow-md shadow-purple-600/20">
+                          <Play className="h-3.5 w-3.5" /> Start Fleet Drive
                         </button>
                       ) : (
-                        <button onClick={stopFleetAll} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-xs font-extrabold text-white transition shadow-lg shadow-red-600/20">
-                          <Pause className="h-4 w-4" /> Stop Sim
+                        <button onClick={stopFleetAll} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-950/40 border border-red-900/40 text-red-400 text-xs font-bold hover:bg-red-900/60 transition">
+                          <RotateCcw className="h-3.5 w-3.5" /> Stop Fleet
                         </button>
                       )}
                     </div>
@@ -664,6 +1539,7 @@ export default function TrackingPage() {
                               if (simControllerRef.current) {
                                 simControllerRef.current.setSpeed(s);
                               }
+                              Object.values(fleetControllersRef.current).forEach(c => c.setSpeed(s));
                             }}
                             title={`Set AMR Speed to ${s}x`}
                             className={`px-2 py-1 rounded-lg text-[10px] font-bold transition ${
@@ -761,13 +1637,15 @@ export default function TrackingPage() {
                   {vehicles.map((v) => (
                     <button
                       key={v.id}
-                      disabled={v.status === 'OFFLINE' || isSimulatingAll}
+                      disabled={v.status === 'OFFLINE'}
                       onClick={() => handleSelectVehicle(v)}
                       className={`w-full text-left p-4 rounded-xl border transition-all duration-200 ${
                         v.status === 'OFFLINE' ? 'opacity-30 cursor-not-allowed' : ''
                       } ${
                         selectedVehicleId === v.id
-                          ? 'border-blue-500 bg-blue-600/10 text-slate-100 shadow-lg ring-1 ring-blue-500/50'
+                          ? (simMode === 'FLEET'
+                              ? 'border-purple-500 bg-purple-600/10 text-slate-100 shadow-lg ring-1 ring-purple-500/50'
+                              : 'border-blue-500 bg-blue-600/10 text-slate-100 shadow-lg ring-1 ring-blue-500/50')
                           : 'border-slate-900 bg-slate-950/40 text-slate-400 hover:border-slate-700 hover:bg-slate-900/30'
                       }`}
                     >
