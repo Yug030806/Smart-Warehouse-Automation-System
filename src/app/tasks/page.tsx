@@ -85,9 +85,12 @@ export default function TasksPage() {
 
   useEffect(() => {
     loadTasksData();
-    const interval = setInterval(loadTasksData, 2000);
+    const interval = setInterval(() => {
+      if (document.hidden || showCreateTask || manualAssignTask || assigningTaskId) return;
+      loadTasksData();
+    }, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [showCreateTask, Boolean(manualAssignTask), Boolean(assigningTaskId)]);
 
   // Intelligent Priority Scoring Engine
   useEffect(() => {
@@ -293,7 +296,15 @@ export default function TasksPage() {
         ];
       }
 
-      await Promise.all([
+      // Optimistically update state immediately
+      setTasks(prev => prev.map(t => t.id === manualAssignTask.id ? { ...t, vehicle_id: chosen.id, status: 'ASSIGNED', assigned_at: new Date().toISOString() } : t));
+      setVehicles(prev => prev.map(v => v.id === chosen.id ? { ...v, status: 'BUSY', current_task_id: manualAssignTask.id } : v));
+      setBoxes(prev => prev.map(b => b.id === manualAssignTask.box_id ? { ...b, status: 'ASSIGNED' } : b));
+      setManualAssignTask(null);
+      setSelectedVehicleId('');
+      setIsManualAssigning(false);
+
+      Promise.all([
         supabase.from('routes').insert({
           id: generateUUID(),
           task_id: manualAssignTask.id,
@@ -322,20 +333,18 @@ export default function TasksPage() {
           new_state: { status: 'ASSIGNED', vehicle_id: chosen.id },
           timestamp: new Date().toISOString()
         })
-      ]);
-
-      setManualAssignTask(null);
-      setSelectedVehicleId('');
-      await loadTasksData();
+      ]).catch(err => {
+        console.error('Manual assign background sync error:', err);
+        loadTasksData();
+      });
     } catch (err: any) {
       console.error('Manual assign error:', err);
       alert('Failed to assign AMR: ' + (err?.message || 'Unknown error'));
-    } finally {
       setIsManualAssigning(false);
     }
   };
 
-  const handleCreateTaskSubmit = async (e: React.FormEvent) => {
+  const handleCreateTaskSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedBoxId) return;
 
@@ -362,16 +371,21 @@ export default function TasksPage() {
       created_at: new Date().toISOString()
     };
 
-    const { error: tErr } = await supabase.from('tasks').insert(newTask);
-    if (tErr) {
-      alert(`Failed to create task: ${tErr.message}`);
-      return;
-    }
-    await supabase.from('boxes').update({ status: 'WAITING', priority: taskPriority }).eq('id', targetBox.id);
-
+    // Optimistically update state immediately
+    setTasks(prev => [newTask, ...prev]);
+    setBoxes(prev => prev.map(b => b.id === targetBox.id ? { ...b, status: 'WAITING', priority: taskPriority } : b));
     setShowCreateTask(false);
     setSelectedBoxId('');
-    loadTasksData();
+
+    // Persist in background
+    Promise.all([
+      supabase.from('tasks').insert(newTask),
+      supabase.from('boxes').update({ status: 'WAITING', priority: taskPriority }).eq('id', targetBox.id)
+    ]).catch(err => {
+      console.error('Task creation background error:', err);
+      setTasks(prev => prev.filter(t => t.id !== newTask.id));
+      alert(`Failed to save task: ${err?.message || 'Error'}`);
+    });
   };
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);

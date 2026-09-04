@@ -42,30 +42,19 @@ export default function WarehouseMap({
 
   useEffect(() => {
     let isMounted = true;
+    if (!floorId) {
+      setLocations([]);
+      setVehicles([]);
+      if (warehouseName) setResolvedWarehouseName(warehouseName);
+      return;
+    }
 
-    const loadMapElements = async () => {
+    // 1. Load static floor topology once per floorId
+    const loadStaticElements = async () => {
       try {
-        const activeFloorId = floorId;
-
-        // If floorId is not provided, do not fall back to other warehouses' floors!
-        if (!activeFloorId) {
-          if (isMounted) {
-            setLocations([]);
-            setVehicles([]);
-            if (warehouseName) setResolvedWarehouseName(warehouseName);
-          }
-          return;
-        }
-
-        const locRes = await supabase.from('locations').select().eq('floor_id', activeFloorId);
+        const locRes = await supabase.from('locations').select().eq('floor_id', floorId);
         if (isMounted && locRes.data) {
           setLocations(locRes.data as Location[]);
-        }
-
-        const vehRes = await supabase.from('vehicles').select();
-        if (isMounted && vehRes.data) {
-          const vehs = (vehRes.data || []) as Vehicle[];
-          setVehicles(vehs.filter((v: any) => v.current_floor_id === activeFloorId));
         }
 
         if (warehouseName) {
@@ -74,7 +63,7 @@ export default function WarehouseMap({
           const wRes = await supabase
             .from('floors')
             .select('warehouse_id, warehouses(name)')
-            .eq('id', activeFloorId)
+            .eq('id', floorId)
             .single();
           if (isMounted && wRes.data) {
             const wName = (wRes.data as any)?.warehouses?.name;
@@ -82,12 +71,33 @@ export default function WarehouseMap({
           }
         }
       } catch (err) {
-        console.error('Failed to load map coordinates and vehicles:', err);
+        console.error('Failed to load map static elements:', err);
       }
     };
 
-    loadMapElements();
-    const interval = setInterval(loadMapElements, 1000);
+    // 2. Poll only dynamic vehicles
+    const loadVehicles = async () => {
+      if (document.hidden) return;
+      try {
+        const vehRes = await supabase.from('vehicles').select();
+        if (isMounted && vehRes.data) {
+          const vehs = (vehRes.data || []) as Vehicle[];
+          const floorVehicles = vehs.filter((v: any) => v.current_floor_id === floorId);
+          setVehicles(prev => {
+            if (prev.length === floorVehicles.length && prev.every((p, idx) => p.id === floorVehicles[idx].id && p.x_position === floorVehicles[idx].x_position && p.y_position === floorVehicles[idx].y_position && p.status === floorVehicles[idx].status)) {
+              return prev;
+            }
+            return floorVehicles;
+          });
+        }
+      } catch (err) {
+        console.error('Failed to load map vehicles:', err);
+      }
+    };
+
+    loadStaticElements();
+    loadVehicles();
+    const interval = setInterval(loadVehicles, 2500);
     return () => {
       isMounted = false;
       clearInterval(interval);

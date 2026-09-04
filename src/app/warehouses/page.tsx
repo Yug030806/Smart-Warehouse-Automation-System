@@ -90,9 +90,12 @@ export default function WarehousesPage() {
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 2000);
+    const interval = setInterval(() => {
+      if (document.hidden || showAddWarehouse || editingWarehouse || showAddFloor || editingFloor || showAddLoc || editingLoc || showAddZone) return;
+      loadData();
+    }, 6000);
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user, showAddWarehouse, Boolean(editingWarehouse), showAddFloor, Boolean(editingFloor), showAddLoc, Boolean(editingLoc), showAddZone]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -173,7 +176,6 @@ export default function WarehousesPage() {
       return;
     }
 
-    setIsSubmittingWarehouse(true);
     try {
       const newId = generateUUID();
       const newW: Warehouse = {
@@ -182,12 +184,6 @@ export default function WarehousesPage() {
         address: wAddress.trim() || 'Sector 1 Logistics Zone',
         created_at: new Date().toISOString()
       };
-
-      const { error: insertError } = await supabase.from('warehouses').insert(newW);
-      if (insertError) {
-        console.error('Error creating warehouse in database:', insertError);
-        throw new Error(insertError.message || 'Database rejected warehouse insertion.');
-      }
 
       // Auto-create initial default level/floor
       const newFloorId = generateUUID();
@@ -199,75 +195,92 @@ export default function WarehousesPage() {
         grid_width: 12,
         grid_height: 8
       };
-      const { error: floorErr } = await supabase.from('floors').insert(newFloor);
-      if (floorErr) {
-        console.warn('Notice creating initial floor:', floorErr);
-      }
 
-      // Update user profile assigned_warehouse_ids if user is restricted
-      if (user?.id || user?.email) {
-        try {
-          const pRes = await supabase.from('profiles').select();
-          const pList = pRes.data || [];
-          const currentUserProfile = pList.find(
-            (p: any) => p.id === user?.id || (user?.email && p.email?.toLowerCase() === user?.email?.toLowerCase())
-          );
-          if (currentUserProfile) {
-            const assigned = currentUserProfile.assigned_warehouse_ids || [];
-            if (!assigned.includes(newId)) {
-              await supabase.from('profiles').update({
-                assigned_warehouse_ids: [...assigned, newId]
-              }).eq('id', currentUserProfile.id);
-            }
-          }
-        } catch (pErr) {
-          console.warn('Profile warehouse assignment notice:', pErr);
-        }
-      }
-
+      // 1. Optimistically update local state immediately
+      setWarehouses(prev => [newW, ...prev]);
+      setSelectedWarehouse(newW);
+      setFloors([newFloor]);
+      setSelectedFloor(newFloor);
+      setShowAddWarehouse(false);
       setWName('');
       setWAddress('');
-      setShowAddWarehouse(false);
-      setSelectedWarehouse(newW);
-      await loadData();
+      setIsSubmittingWarehouse(false);
+
+      // 2. Persist to cloud database in background
+      Promise.all([
+        supabase.from('warehouses').insert(newW),
+        supabase.from('floors').insert(newFloor)
+      ]).then(async () => {
+        // Update user profile assigned_warehouse_ids if user is restricted
+        if (user?.id || user?.email) {
+          try {
+            const pRes = await supabase.from('profiles').select();
+            const pList = pRes.data || [];
+            const currentUserProfile = pList.find(
+              (p: any) => p.id === user?.id || (user?.email && p.email?.toLowerCase() === user?.email?.toLowerCase())
+            );
+            if (currentUserProfile) {
+              const assigned = currentUserProfile.assigned_warehouse_ids || [];
+              if (!assigned.includes(newId)) {
+                await supabase.from('profiles').update({
+                  assigned_warehouse_ids: [...assigned, newId]
+                }).eq('id', currentUserProfile.id);
+              }
+            }
+          } catch (pErr) {
+            console.warn('Profile warehouse assignment notice:', pErr);
+          }
+        }
+      }).catch(err => {
+        console.error('Failed to create warehouse in background:', err);
+        setWarehouses(prev => prev.filter(w => w.id !== newId));
+        alert('Failed to save logistics center: ' + (err?.message || 'Database error'));
+      });
     } catch (err: any) {
-      setWarehouseError(err?.message || 'Failed to save logistics center. Please check database permissions.');
-    } finally {
+      setWarehouseError(err?.message || 'Failed to save logistics center.');
       setIsSubmittingWarehouse(false);
     }
   };
 
-  const handleEditWarehouseSubmit = async (e: React.FormEvent) => {
+  const handleEditWarehouseSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingWarehouse || !editWName.trim()) return;
-    const { error } = await supabase.from('warehouses').update({
-      name: editWName.trim(),
-      address: editWAddress.trim()
-    }).eq('id', editingWarehouse.id);
-    if (error) {
-      alert('Failed to update warehouse: ' + error.message);
-      return;
-    }
+
+    const trimmedName = editWName.trim();
+    const trimmedAddress = editWAddress.trim();
+
+    // Optimistically update
+    setWarehouses(prev => prev.map(w => w.id === editingWarehouse.id ? { ...w, name: trimmedName, address: trimmedAddress } : w));
+    setSelectedWarehouse(prev => prev && prev.id === editingWarehouse.id ? { ...prev, name: trimmedName, address: trimmedAddress } : prev);
     setEditingWarehouse(null);
-    await loadData();
+
+    supabase.from('warehouses').update({
+      name: trimmedName,
+      address: trimmedAddress
+    }).eq('id', editingWarehouse.id).catch((err: any) => {
+      console.error('Failed to update warehouse:', err);
+      loadData();
+    });
   };
 
-  const handleDeleteWarehouse = async (id: string) => {
+  const handleDeleteWarehouse = (id: string) => {
     if (!confirm('Are you sure you want to delete this logistics facility?')) return;
-    const { error } = await supabase.from('warehouses').delete().eq('id', id);
-    if (error) {
-      alert('Failed to delete warehouse: ' + error.message);
-      return;
-    }
-    setSelectedWarehouse(null);
-    await loadData();
+
+    // Optimistically delete
+    setWarehouses(prev => prev.filter(w => w.id !== id));
+    setSelectedWarehouse(prev => prev && prev.id === id ? null : prev);
+
+    supabase.from('warehouses').delete().eq('id', id).catch((err: any) => {
+      console.error('Failed to delete warehouse:', err);
+      loadData();
+    });
   };
 
-  const handleAddFloorSubmit = async (e: React.FormEvent) => {
+  const handleAddFloorSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedWarehouse || !floorName.trim()) return;
     const newId = generateUUID();
-    const newF = {
+    const newF: Floor = {
       id: newId,
       warehouse_id: selectedWarehouse.id,
       floor_number: Number(floorNum),
@@ -275,114 +288,116 @@ export default function WarehousesPage() {
       grid_width: 12,
       grid_height: 8
     };
-    const { error } = await supabase.from('floors').insert(newF);
-    if (error) {
-      alert('Failed to add floor: ' + error.message);
-      return;
-    }
+
+    // Optimistically add floor
+    setFloors(prev => [...prev, newF]);
+    setSelectedFloor(newF);
     setFloorName('');
     setFloorNum(floors.length + 2);
     setShowAddFloor(false);
-    const fRes = await supabase.from('floors').select().eq('warehouse_id', selectedWarehouse.id);
-    const updatedFloors = (fRes.data || []) as Floor[];
-    setFloors(updatedFloors);
-    const createdFloor = updatedFloors.find(x => x.id === newId) || (newF as Floor);
-    setSelectedFloor(createdFloor);
+
+    supabase.from('floors').insert(newF).catch((err: any) => {
+      console.error('Failed to add floor:', err);
+      setFloors(prev => prev.filter(f => f.id !== newId));
+      alert('Failed to add floor level: ' + err.message);
+    });
   };
 
-  const handleEditFloorSubmit = async (e: React.FormEvent) => {
+  const handleEditFloorSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingFloor || !editFloorName.trim()) return;
-    const { error } = await supabase.from('floors').update({ name: editFloorName.trim() }).eq('id', editingFloor.id);
-    if (error) {
-      alert('Failed to update floor: ' + error.message);
-      return;
-    }
+    const trimmedName = editFloorName.trim();
+
+    // Optimistically update floor
+    setFloors(prev => prev.map(f => f.id === editingFloor.id ? { ...f, name: trimmedName } : f));
+    setSelectedFloor(prev => prev && prev.id === editingFloor.id ? { ...prev, name: trimmedName } : prev);
     setEditingFloor(null);
-    if (selectedWarehouse) {
-      const fRes = await supabase.from('floors').select().eq('warehouse_id', selectedWarehouse.id);
-      setFloors((fRes.data || []) as Floor[]);
-    }
+
+    supabase.from('floors').update({ name: trimmedName }).eq('id', editingFloor.id).catch((err: any) => {
+      console.error('Failed to update floor:', err);
+      alert('Failed to update floor: ' + err.message);
+    });
   };
 
-  const handleDeleteFloor = async (id: string) => {
+  const handleDeleteFloor = (id: string) => {
     if (!confirm('Are you sure you want to delete this floor level?')) return;
-    const { error } = await supabase.from('floors').delete().eq('id', id);
-    if (error) {
-      alert('Failed to delete floor: ' + error.message);
-      return;
-    }
-    if (selectedWarehouse) {
-      const fRes = await supabase.from('floors').select().eq('warehouse_id', selectedWarehouse.id);
-      const f = fRes.data || [];
-      setFloors(f as Floor[]);
-      setSelectedFloor(f.length > 0 ? (f[0] as Floor) : null);
-    }
+
+    // Optimistically remove floor
+    setFloors(prev => prev.filter(f => f.id !== id));
+    setSelectedFloor(prev => prev && prev.id === id ? (floors.find(f => f.id !== id) || null) : prev);
+
+    supabase.from('floors').delete().eq('id', id).catch((err: any) => {
+      console.error('Failed to delete floor:', err);
+      alert('Failed to delete floor: ' + err.message);
+    });
   };
 
-  const handleAddLocSubmit = async (e: React.FormEvent) => {
+  const handleAddLocSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFloor || !locName.trim()) return;
-    const zRes = await supabase.from('zones').select().eq('floor_id', selectedFloor.id);
-    const zList = zRes.data || [];
-    const zoneId = zList.length > 0 ? zList[0].id : null;
 
     const newId = generateUUID();
-    const newLoc = {
+    const newLoc: Location = {
       id: newId,
-      zone_id: zoneId,
+      zone_id: null,
       name: locName.trim(),
       type: locType,
       x: Number(locX),
       y: Number(locY),
       floor_id: selectedFloor.id
     };
-    const { error } = await supabase.from('locations').insert(newLoc);
-    if (error) {
-      alert('Failed to add location: ' + error.message);
-      return;
-    }
+
+    // Optimistically add location
+    setLocations(prev => [...prev, newLoc]);
     setLocName('');
     setLocX(0);
     setLocY(0);
     setShowAddLoc(false);
-    const lRes = await supabase.from('locations').select().eq('floor_id', selectedFloor.id);
-    setLocations((lRes.data || []) as Location[]);
+
+    supabase.from('locations').insert(newLoc).catch((err: any) => {
+      console.error('Failed to add location:', err);
+      setLocations(prev => prev.filter(l => l.id !== newId));
+      alert('Failed to add location: ' + err.message);
+    });
   };
 
-  const handleEditLocSubmit = async (e: React.FormEvent) => {
+  const handleEditLocSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingLoc || !editLocName.trim()) return;
-    const { error } = await supabase.from('locations').update({
+
+    const updatedLoc: Location = {
+      ...editingLoc,
       name: editLocName.trim(),
       type: editLocType,
       x: Number(editLocX),
       y: Number(editLocY)
-    }).eq('id', editingLoc.id);
-    if (error) {
-      alert('Failed to update location: ' + error.message);
-      return;
-    }
+    };
+
+    // Optimistically update location
+    setLocations(prev => prev.map(l => l.id === editingLoc.id ? updatedLoc : l));
     setEditingLoc(null);
-    if (selectedFloor) {
-      const lRes = await supabase.from('locations').select().eq('floor_id', selectedFloor.id);
-      setLocations((lRes.data || []) as Location[]);
-    }
+
+    supabase.from('locations').update({
+      name: editLocName.trim(),
+      type: editLocType,
+      x: Number(editLocX),
+      y: Number(editLocY)
+    }).eq('id', editingLoc.id).catch((err: any) => {
+      console.error('Failed to update location:', err);
+      alert('Failed to update location: ' + err.message);
+    });
   };
 
-  const handleDeleteLocation = async (id: string) => {
-    const { error } = await supabase.from('locations').delete().eq('id', id);
-    if (error) {
-      alert('Failed to delete location: ' + error.message);
-      return;
-    }
-    if (selectedFloor) {
-      const lRes = await supabase.from('locations').select().eq('floor_id', selectedFloor.id);
-      setLocations((lRes.data || []) as Location[]);
-    }
+  const handleDeleteLocation = (id: string) => {
+    // Optimistically remove location
+    setLocations(prev => prev.filter(l => l.id !== id));
+    supabase.from('locations').delete().eq('id', id).catch((err: any) => {
+      console.error('Failed to delete location:', err);
+      alert('Failed to delete location: ' + err.message);
+    });
   };
 
-  const handleAddZoneSubmit = async (e: React.FormEvent) => {
+  const handleAddZoneSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFloor || !zoneName.trim()) return;
     const newId = generateUUID();
@@ -393,28 +408,26 @@ export default function WarehousesPage() {
       code: zoneCode.trim() || `Z-${Date.now().toString().substring(8)}`,
       color: zoneColor
     };
-    const { error } = await supabase.from('zones').insert(newZ);
-    if (error) {
-      alert('Failed to add zone: ' + error.message);
-      return;
-    }
+    
+    // Optimistic update
+    setZones(prev => [...prev, newZ]);
     setZoneName('');
     setZoneCode('');
     setShowAddZone(false);
-    const zRes = await supabase.from('zones').select().eq('floor_id', selectedFloor.id);
-    setZones(zRes.data || []);
+
+    supabase.from('zones').insert(newZ).catch((err: any) => {
+      console.error('Failed to add zone:', err);
+      alert('Failed to add zone: ' + err.message);
+    });
   };
 
-  const handleDeleteZone = async (id: string) => {
-    const { error } = await supabase.from('zones').delete().eq('id', id);
-    if (error) {
-      alert('Failed to delete zone: ' + error.message);
-      return;
-    }
-    if (selectedFloor) {
-      const zRes = await supabase.from('zones').select().eq('floor_id', selectedFloor.id);
-      setZones(zRes.data || []);
-    }
+  const handleDeleteZone = (id: string) => {
+    // Optimistic update
+    setZones(prev => prev.filter(z => z.id !== id));
+    supabase.from('zones').delete().eq('id', id).catch((err: any) => {
+      console.error('Failed to delete zone:', err);
+      alert('Failed to delete zone: ' + err.message);
+    });
   };
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);

@@ -41,7 +41,10 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
     };
 
     fetchUpdates();
-    const interval = setInterval(fetchUpdates, 3000);
+    const interval = setInterval(() => {
+      if (document.hidden) return;
+      fetchUpdates();
+    }, 10000);
     return () => {
       isMounted = false;
       clearInterval(interval);

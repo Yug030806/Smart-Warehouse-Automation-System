@@ -143,7 +143,10 @@ export default function AlertPopupModal() {
     }
 
     fetchActiveAlerts();
-    const interval = setInterval(fetchActiveAlerts, 2500);
+    const interval = setInterval(() => {
+      if (document.hidden) return;
+      fetchActiveAlerts();
+    }, 10000);
 
     // Subscribe to Supabase realtime broadcast on alerts table
     const channel = supabase

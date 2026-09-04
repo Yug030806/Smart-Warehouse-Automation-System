@@ -24,7 +24,7 @@ export default function VehiclesPage() {
   // Edit Vehicle state
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [editVName, setEditVName] = useState('');
-  const [editStatus, setEditStatus] = useState<string>('AVAILABLE');
+  const [editStatus, setEditStatus] = useState<Vehicle['status']>('AVAILABLE');
 
   usePreventScroll(Boolean(editingVehicle || showAddModal));
 
@@ -62,24 +62,24 @@ export default function VehiclesPage() {
 
   useEffect(() => {
     loadVehicles();
-  }, []);
-
-  useEffect(() => {
     const interval = setInterval(() => {
       // Pause background polling while any modal is open
-      if (!showAddModal && !editingVehicle) {
+      if (!showAddModal && !editingVehicle && !document.hidden) {
         loadVehicles();
       }
-    }, 2000);
+    }, 5000);
     return () => clearInterval(interval);
   }, [showAddModal, editingVehicle]);
 
-  const handleDeleteVehicle = async (id: string) => {
-    await supabase.from('vehicles').delete().eq('id', id);
-    await loadVehicles();
+  const handleDeleteVehicle = (id: string) => {
+    setVehicles(prev => prev.filter(v => v.id !== id));
+    supabase.from('vehicles').delete().eq('id', id).catch((err: any) => {
+      console.error('Failed to delete vehicle:', err);
+      loadVehicles();
+    });
   };
 
-  const handleSendToCharging = async (id: string) => {
+  const handleSendToCharging = (id: string) => {
     const v = vehicles.find(x => x.id === id);
     if (!v) return;
 
@@ -87,18 +87,28 @@ export default function VehiclesPage() {
     const charger = locations.find(l => l.floor_id === v.current_floor_id && l.type === 'CHARGING');
     if (!charger) return;
 
-    await supabase.from('vehicles').update({
+    setVehicles(prev => prev.map(item => item.id === id ? {
+      ...item,
       status: 'CHARGING',
       x_position: charger.x,
       y_position: charger.y,
       current_location_id: charger.id,
       battery_percentage: 100
-    }).eq('id', id);
+    } : item));
 
-    await loadVehicles();
+    supabase.from('vehicles').update({
+      status: 'CHARGING',
+      x_position: charger.x,
+      y_position: charger.y,
+      current_location_id: charger.id,
+      battery_percentage: 100
+    }).eq('id', id).catch((err: any) => {
+      console.error('Failed to send vehicle to charging:', err);
+      loadVehicles();
+    });
   };
 
-  const handleResetVehicle = async (id: string) => {
+  const handleResetVehicle = (id: string) => {
     const v = vehicles.find(x => x.id === id);
     if (!v) return;
 
@@ -106,29 +116,47 @@ export default function VehiclesPage() {
     const x = charger ? charger.x : 5;
     const y = charger ? charger.y : 1;
 
-    await supabase.from('vehicles').update({
+    setVehicles(prev => prev.map(item => item.id === id ? {
+      ...item,
       status: 'AVAILABLE',
       x_position: x,
       y_position: y,
       current_location_id: charger ? charger.id : null,
       current_task_id: null,
       battery_percentage: 95
-    }).eq('id', id);
+    } : item));
 
-    await loadVehicles();
+    supabase.from('vehicles').update({
+      status: 'AVAILABLE',
+      x_position: x,
+      y_position: y,
+      current_location_id: charger ? charger.id : null,
+      current_task_id: null,
+      battery_percentage: 95
+    }).eq('id', id).catch((err: any) => {
+      console.error('Failed to reset vehicle:', err);
+      loadVehicles();
+    });
   };
 
-  const handleEditVehicleSubmit = async (e: React.FormEvent) => {
+  const handleEditVehicleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingVehicle || !editVName) return;
 
-    await supabase.from('vehicles').update({
+    setVehicles(prev => prev.map(v => v.id === editingVehicle.id ? {
+      ...v,
       name: editVName,
       status: editStatus
-    }).eq('id', editingVehicle.id);
-
+    } : v));
     setEditingVehicle(null);
-    await loadVehicles();
+
+    supabase.from('vehicles').update({
+      name: editVName,
+      status: editStatus
+    }).eq('id', editingVehicle.id).catch((err: any) => {
+      console.error('Failed to update vehicle:', err);
+      loadVehicles();
+    });
   };
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -311,7 +339,7 @@ export default function VehiclesPage() {
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Operational Status</label>
                 <select
                   value={editStatus}
-                  onChange={e => setEditStatus(e.target.value)}
+                  onChange={e => setEditStatus(e.target.value as Vehicle['status'])}
                   className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-100"
                 >
                   <option value="AVAILABLE">AVAILABLE</option>
@@ -337,7 +365,10 @@ export default function VehiclesPage() {
           onClose={() => setShowAddModal(false)}
           floors={floors}
           locations={locations}
-          onSuccess={loadVehicles}
+          onSuccess={(newV) => {
+            if (newV) setVehicles(prev => [newV, ...prev]);
+            else loadVehicles();
+          }}
         />
       )}
     </div>
@@ -348,7 +379,7 @@ interface CommissionModalProps {
   onClose: () => void;
   floors: Floor[];
   locations: Location[];
-  onSuccess: () => Promise<void>;
+  onSuccess: (newV?: Vehicle) => void;
 }
 
 function CommissionAmrModal({ onClose, floors, locations, onSuccess }: CommissionModalProps) {
@@ -382,7 +413,6 @@ function CommissionAmrModal({ onClose, floors, locations, onSuccess }: Commissio
     if (!vCode.trim() || !vName.trim()) return;
 
     setModalError(null);
-    setIsSubmitting(true);
 
     try {
       const selectedLoc = locations.find(l => l.id === startLocId);
@@ -392,12 +422,11 @@ function CommissionAmrModal({ onClose, floors, locations, onSuccess }: Commissio
       const targetFloorId = floorId || (floors.length > 0 ? floors[0].id : null);
       if (!targetFloorId) {
         setModalError('No floor level found to commission this AMR.');
-        setIsSubmitting(false);
         return;
       }
 
       const newId = generateUUID();
-      const newVehicle = {
+      const newVehicle: Vehicle = {
         id: newId,
         vehicle_code: vCode.trim(),
         name: vName.trim(),
@@ -412,19 +441,16 @@ function CommissionAmrModal({ onClose, floors, locations, onSuccess }: Commissio
         created_at: new Date().toISOString()
       };
 
-      const { error } = await supabase.from('vehicles').insert(newVehicle);
-      if (error) {
-        setModalError(error.message);
-        setIsSubmitting(false);
-        return;
-      }
-
-      await onSuccess();
+      // Optimistically add to list and close immediately
+      onSuccess(newVehicle);
       onClose();
+
+      supabase.from('vehicles').insert(newVehicle).catch((err: any) => {
+        console.error('Failed to commission AMR in background:', err);
+        alert('Failed to commission AMR: ' + err.message);
+      });
     } catch (err: any) {
       setModalError(err?.message || 'Failed to commission AMR.');
-    } finally {
-      setIsSubmitting(false);
     }
   };
 

@@ -73,8 +73,6 @@ export default function Dashboard() {
     };
 
     checkPending();
-    const interval = setInterval(checkPending, 3000);
-    return () => clearInterval(interval);
   }, [user]);
 
   const [warehouses, setWarehouses] = useState<any[]>([]);
@@ -136,6 +134,15 @@ export default function Dashboard() {
           setRawAlerts(alerts);
           setRawProfiles(pList);
           setRawLocations(locs);
+
+          const pending = pList.filter(p => !p.is_active);
+          if (pending.length > 0) {
+            setPendingUsers(pending);
+            setShowPendingPopup(true);
+          } else {
+            setPendingUsers([]);
+            setShowPendingPopup(false);
+          }
         }
       } catch (err) {
         console.error('Error fetching dashboard live data:', err);
@@ -143,7 +150,10 @@ export default function Dashboard() {
     };
 
     fetchDashboardData();
-    const interval = setInterval(fetchDashboardData, 2000);
+    const interval = setInterval(() => {
+      if (document.hidden) return;
+      fetchDashboardData();
+    }, 6000);
     return () => {
       isMounted = false;
       clearInterval(interval);

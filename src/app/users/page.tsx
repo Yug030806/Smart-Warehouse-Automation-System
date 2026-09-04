@@ -61,11 +61,14 @@ export default function UsersPage() {
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 2000);
+    const interval = setInterval(() => {
+      if (document.hidden || showAddModal || editingUser) return;
+      loadData();
+    }, 6000);
     return () => clearInterval(interval);
-  }, []);
+  }, [showAddModal, Boolean(editingUser)]);
 
-  const handleAddUserSubmit = async (e: React.FormEvent) => {
+  const handleAddUserSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !name) return;
 
@@ -81,15 +84,21 @@ export default function UsersPage() {
       is_active: true
     };
 
-    await supabase.from('profiles').insert(newProfile);
+    // Optimistically update local state immediately
+    setUsers(prev => [...prev, newProfile]);
     setShowAddModal(false);
     setEmail('');
     setName('');
     setAssignedWarehouses([]);
-    await loadData();
+
+    supabase.from('profiles').insert(newProfile).catch((err: any) => {
+      console.error('Failed to add profile:', err);
+      setUsers(prev => prev.filter(u => u.id !== newId));
+      alert('Failed to save user profile: ' + err.message);
+    });
   };
 
-  const handleDeactivate = async (id: string, currentStatus: boolean, profileRole: string) => {
+  const handleDeactivate = (id: string, currentStatus: boolean, profileRole: string) => {
     if (!currentStatus && ['MANAGER'].includes(profileRole)) {
       // If approving a manager, force them to go through the edit modal to assign warehouses
       const u = users.find(x => x.id === id);
@@ -102,31 +111,34 @@ export default function UsersPage() {
       return;
     }
 
-    try {
-      await fetch('/api/users/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: id,
-          updates: { is_active: !currentStatus },
-          adminEmail: user?.email
-        })
+    // Optimistically update user status
+    setUsers(prev => prev.map(u => u.id === id ? { ...u, is_active: !currentStatus } : u));
+
+    fetch('/api/users/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: id,
+        updates: { is_active: !currentStatus },
+        adminEmail: user?.email
+      })
+    }).catch(() => {
+      supabase.from('profiles').update({ is_active: !currentStatus }).eq('id', id).catch((err: any) => {
+        console.error('Failed to update user status:', err);
+        loadData();
       });
-    } catch (err) {
-      console.error('Failed to update user status via API:', err);
-      await supabase.from('profiles').update({ is_active: !currentStatus }).eq('id', id);
-    }
+    });
 
-    const mockDb = require('@/lib/supabase/mockDb').default;
-    const profile = mockDb.getProfiles().find((p: any) => p.id === id);
-    if (profile) {
-      mockDb.saveProfile({ ...profile, is_active: !currentStatus });
-    }
-
-    await loadData();
+    try {
+      const mockDb = require('@/lib/supabase/mockDb').default;
+      const profile = mockDb.getProfiles().find((p: any) => p.id === id);
+      if (profile) {
+        mockDb.saveProfile({ ...profile, is_active: !currentStatus });
+      }
+    } catch {}
   };
 
-  const handleEditUserSubmit = async (e: React.FormEvent) => {
+  const handleEditUserSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser || !editName) return;
 
@@ -146,26 +158,27 @@ export default function UsersPage() {
       updates.assigned_warehouse_ids = [];
     }
 
-    try {
-      await fetch('/api/users/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: editingUser.id,
-          updates,
-          adminEmail: user?.email
-        })
-      });
-    } catch (err) {
-      console.error('Failed to update user via API:', err);
-      await supabase.from('profiles').update(updates).eq('id', editingUser.id);
-    }
-
+    // Optimistically update user in state
+    setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, ...updates } : u));
     setEditingUser(null);
-    await loadData();
+
+    fetch('/api/users/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: editingUser.id,
+        updates,
+        adminEmail: user?.email
+      })
+    }).catch(() => {
+      supabase.from('profiles').update(updates).eq('id', editingUser.id).catch((err: any) => {
+        console.error('Failed to update user via supabase:', err);
+        loadData();
+      });
+    });
   };
 
-  const handleDeleteUser = async (id: string) => {
+  const handleDeleteUser = (id: string) => {
     if (id === user?.id) {
       alert('You cannot delete your own admin account while logged in.');
       return;
@@ -173,23 +186,23 @@ export default function UsersPage() {
 
     if (!confirm('Are you sure you want to permanently delete this user?')) return;
 
-    try {
-      const res = await fetch('/api/users/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: id })
-      });
+    // Optimistically remove user
+    setUsers(prev => prev.filter(u => u.id !== id));
 
+    fetch('/api/users/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: id })
+    }).then(async res => {
       const data = await res.json();
       if (!res.ok || data.error) {
         alert('Failed to delete user: ' + (data.error?.message || 'Server error'));
-        return;
+        loadData();
       }
-
-      await loadData();
-    } catch (err: any) {
+    }).catch((err: any) => {
       alert('Error deleting user: ' + err.message);
-    }
+      loadData();
+    });
   };
 
   // Filter users based on search and roles

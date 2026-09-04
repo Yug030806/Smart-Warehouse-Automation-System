@@ -26,21 +26,31 @@ export default function AlertsPage() {
 
   useEffect(() => {
     loadAlerts();
-    const interval = setInterval(loadAlerts, 3000);
+    const interval = setInterval(() => {
+      if (document.hidden) return;
+      loadAlerts();
+    }, 6000);
     return () => clearInterval(interval);
   }, []);
 
-  const handleAcknowledge = async (id: string) => {
-    await supabase.from('alerts').update({ is_acknowledged: true }).eq('id', id);
-    loadAlerts();
+  const handleAcknowledge = (id: string) => {
+    setAlerts(prev => prev.map(a => a.id === id ? { ...a, is_acknowledged: true } : a));
+    supabase.from('alerts').update({ is_acknowledged: true }).eq('id', id).catch((err: any) => {
+      console.error('Failed to acknowledge alert:', err);
+      loadAlerts();
+    });
   };
 
-  const handleResolve = async (id: string) => {
-    await supabase.from('alerts').update({
+  const handleResolve = (id: string) => {
+    const now = new Date().toISOString();
+    setAlerts(prev => prev.map(a => a.id === id ? { ...a, is_acknowledged: true, resolved_at: now } : a));
+    supabase.from('alerts').update({
       is_acknowledged: true,
-      resolved_at: new Date().toISOString()
-    }).eq('id', id);
-    loadAlerts();
+      resolved_at: now
+    }).eq('id', id).catch((err: any) => {
+      console.error('Failed to resolve alert:', err);
+      loadAlerts();
+    });
   };
 
   const triggerTestAlert = (severity: 'CRITICAL' | 'WARNING' | 'INFO') => {

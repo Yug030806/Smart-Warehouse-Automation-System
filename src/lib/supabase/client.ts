@@ -29,6 +29,12 @@ export const supabaseReal = useSupabaseReal
 
 // In-memory cache to support legacy synchronous .data calls while queries run asynchronously
 const tableCache: Record<string, any[]> = {};
+const tableCacheTime: Record<string, number> = {};
+const inFlightSelects = new Map<string, Promise<any>>();
+
+const STATIC_TABLES = new Set(['warehouses', 'floors', 'zones', 'locations', 'profiles']);
+const STATIC_CACHE_TTL = 15000; // 15 seconds for layout / topology
+const DYNAMIC_CACHE_TTL = 2500;  // 2.5 seconds for high-churn tables
 
 function isRlsError(err: any): boolean {
   if (!err) return false;
@@ -40,6 +46,7 @@ function isRlsError(err: any): boolean {
 function updateLocalState(table: string, action: 'INSERT' | 'UPDATE' | 'DELETE', item: any, match?: Record<string, any>) {
   if (!item && !match) return;
   if (!tableCache[table]) tableCache[table] = [];
+  tableCacheTime[table] = Date.now();
 
   if (action === 'INSERT') {
     const single = Array.isArray(item) ? item[0] : item;
@@ -203,46 +210,85 @@ function createSelectProxy(rawQuery: any, table: string) {
       }
       if (prop === 'then') {
         return (onfulfilled?: (value: any) => any, onrejected?: (reason: any) => any) => {
-          return target.then(async (res: any) => {
-            // If query succeeded without error, return the real result directly!
-            // Notice: res.data being an empty array [] is a valid success response (0 rows found).
-            if (res && !res.error && res.data !== undefined) {
-              return onfulfilled ? onfulfilled(res) : res;
+          const cacheKey = `${table}:${JSON.stringify(match)}:${isSingle}`;
+          const ttl = STATIC_TABLES.has(table) ? STATIC_CACHE_TTL : DYNAMIC_CACHE_TTL;
+          const cached = tableCache[table];
+          const cacheAge = Date.now() - (tableCacheTime[table] || 0);
+
+          // If cache is fresh, resolve instantly from memory
+          if (cached && cached.length > 0 && cacheAge < ttl) {
+            let list = [...cached];
+            if (Object.keys(match).length > 0) {
+              Object.entries(match).forEach(([k, v]) => {
+                list = list.filter((item: any) => item[k] === v);
+              });
             }
+            if (isSingle) {
+              const singleData = list[0] || null;
+              const res = { data: singleData, error: singleData ? null : { message: 'Row not found' } };
+              return onfulfilled ? onfulfilled(res) : Promise.resolve(res);
+            }
+            const res = { data: list, error: null };
+            return onfulfilled ? onfulfilled(res) : Promise.resolve(res);
+          }
 
-            // Fallback to /api/db ONLY if an error occurred (e.g. RLS code 42501 or network error)
-            const isRls = isRlsError(res?.error);
-            if ((isRls || res?.error) && typeof window !== 'undefined') {
-              try {
-                const apiRes = await fetch('/api/db', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    action: 'select',
-                    table,
-                    match: Object.keys(match).length > 0 ? match : undefined
-                  })
-                }).then(r => r.json());
-
-                if (apiRes && !apiRes.error && apiRes.data !== undefined) {
-                  let list = Array.isArray(apiRes.data) ? apiRes.data : [apiRes.data];
-                  Object.entries(match).forEach(([k, v]) => {
-                    list = list.filter((item: any) => item[k] === v);
-                  });
-
-                  if (isSingle) {
-                    const singleData = list[0] || null;
-                    const singleRes = { data: singleData, error: singleData ? null : { message: 'Row not found' } };
-                    return onfulfilled ? onfulfilled(singleRes) : singleRes;
-                  }
-                  const finalRes = { data: list, error: null };
-                  return onfulfilled ? onfulfilled(finalRes) : finalRes;
+          // Deduplicate in-flight query
+          let pending = inFlightSelects.get(cacheKey);
+          if (!pending) {
+            const promise: Promise<any> = target.then(async (res: any) => {
+              if (res && !res.error && res.data !== undefined) {
+                if (Object.keys(match).length === 0) {
+                  tableCache[table] = Array.isArray(res.data) ? res.data : [res.data];
+                  tableCacheTime[table] = Date.now();
                 }
-              } catch (apiErr) {
-                console.error('[RLS Fallback] Server API select error:', apiErr);
+                return res;
               }
-            }
 
+              // Fallback to /api/db ONLY if an error occurred (e.g. RLS code 42501 or network error)
+              const isRls = isRlsError(res?.error);
+              if ((isRls || res?.error) && typeof window !== 'undefined') {
+                try {
+                  const apiRes = await fetch('/api/db', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      action: 'select',
+                      table,
+                      match: Object.keys(match).length > 0 ? match : undefined
+                    })
+                  }).then(r => r.json());
+
+                  if (apiRes && !apiRes.error && apiRes.data !== undefined) {
+                    let list = Array.isArray(apiRes.data) ? apiRes.data : [apiRes.data];
+                    Object.entries(match).forEach(([k, v]) => {
+                      list = list.filter((item: any) => item[k] === v);
+                    });
+
+                    if (isSingle) {
+                      const singleData = list[0] || null;
+                      return { data: singleData, error: singleData ? null : { message: 'Row not found' } };
+                    }
+                    if (Object.keys(match).length === 0) {
+                      tableCache[table] = list;
+                      tableCacheTime[table] = Date.now();
+                    }
+                    return { data: list, error: null };
+                  }
+                } catch (apiErr) {
+                  console.error('[RLS Fallback] Server API select error:', apiErr);
+                }
+              }
+
+              return res;
+            }).finally(() => {
+              inFlightSelects.delete(cacheKey);
+            });
+
+            inFlightSelects.set(cacheKey, promise);
+            pending = promise;
+          }
+
+          return (pending as Promise<any>).then((res: any) => {
             return onfulfilled ? onfulfilled(res) : res;
           }, onrejected);
         };
@@ -273,6 +319,7 @@ function createUpdateProxy(rawQuery: any, table: string, payload: any) {
       if (prop === 'eq') {
         return (col: string, val: any) => {
           match[col] = val;
+          updateLocalState(table, 'UPDATE', payload, { [col]: val });
           const res = target.eq(col, val);
           return new Proxy(res, handler);
         };
@@ -281,6 +328,7 @@ function createUpdateProxy(rawQuery: any, table: string, payload: any) {
         return (queryMatch: Record<string, any>) => {
           if (queryMatch && typeof queryMatch === 'object') {
             Object.assign(match, queryMatch);
+            updateLocalState(table, 'UPDATE', payload, queryMatch);
           }
           const res = target.match(queryMatch);
           return new Proxy(res, handler);
@@ -340,6 +388,7 @@ function createDeleteProxy(rawQuery: any, table: string) {
       if (prop === 'eq') {
         return (col: string, val: any) => {
           match[col] = val;
+          updateLocalState(table, 'DELETE', null, { [col]: val });
           const res = target.eq(col, val);
           return new Proxy(res, handler);
         };
@@ -348,6 +397,7 @@ function createDeleteProxy(rawQuery: any, table: string) {
         return (queryMatch: Record<string, any>) => {
           if (queryMatch && typeof queryMatch === 'object') {
             Object.assign(match, queryMatch);
+            updateLocalState(table, 'DELETE', null, queryMatch);
           }
           const res = target.match(queryMatch);
           return new Proxy(res, handler);
@@ -416,6 +466,10 @@ function createProxiedRealClient(rawClient: any): any {
           // 2. Intercept INSERT
           const origInsert = builder.insert.bind(builder);
           builder.insert = (payload: any, options?: any) => {
+            const optItem = Array.isArray(payload) ? payload[0] : payload;
+            if (optItem) {
+              updateLocalState(table, 'INSERT', optItem);
+            }
             const insertQuery = origInsert(payload, options);
             const origThen = insertQuery.then.bind(insertQuery);
             insertQuery.then = (onfulfilled: any, onrejected: any) => {

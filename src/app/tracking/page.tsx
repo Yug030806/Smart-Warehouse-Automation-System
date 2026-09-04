@@ -223,7 +223,10 @@ export default function TrackingPage() {
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 2000);
+    const interval = setInterval(() => {
+      if (document.hidden) return;
+      loadData();
+    }, 5000);
     return () => clearInterval(interval);
   }, [loadData]);
 

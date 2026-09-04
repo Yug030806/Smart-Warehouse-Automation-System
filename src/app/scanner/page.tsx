@@ -76,7 +76,10 @@ export default function ScannerPage() {
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 2000);
+    const interval = setInterval(() => {
+      if (document.hidden) return;
+      loadData();
+    }, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -155,87 +158,94 @@ export default function ScannerPage() {
       try {
         if (isPickup) {
           setStatusMessage(`PICKUP_CONFIRMED: Verified code ${enteredCode}. Cargo payload pickup complete.`);
-          
-          // Update Task status
-          await supabase.from('tasks').update({
-            status: 'PICKED_UP'
-          }).eq('id', selectedTask.id);
-
-          // Update Box status
-          await supabase.from('boxes').update({
-            status: 'PICKED_UP'
-          }).eq('id', box.id);
-
-          // Add Scan Event
-          await supabase.from('scan_events').insert({
-            id: generateUUID(),
-            task_id: selectedTask.id,
-            box_id: box.id,
-            vehicle_id: selectedTask.vehicle_id || null,
-            location_id: selectedTask.source_location_id,
-            scanned_by: user?.id || 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33',
-            scan_type: 'PICKUP',
-            is_verified: true,
-            scanned_code: enteredCode,
-            created_at: new Date().toISOString()
-          });
-
-          // Trigger haptic animation sound/confetti
           confetti();
+
+          // 1. Optimistic state updates
+          setTasks(prev => prev.map(t => t.id === selectedTask.id ? { ...t, status: 'PICKED_UP' } : t));
+          setBoxes(prev => prev.map(b => b.id === box.id ? { ...b, status: 'PICKED_UP' } : b));
+          setSelectedTask(prev => prev ? { ...prev, status: 'PICKED_UP' } : null);
+
+          // 2. Parallel cloud persistence
+          Promise.all([
+            supabase.from('tasks').update({ status: 'PICKED_UP' }).eq('id', selectedTask.id),
+            supabase.from('boxes').update({ status: 'PICKED_UP' }).eq('id', box.id),
+            supabase.from('scan_events').insert({
+              id: generateUUID(),
+              task_id: selectedTask.id,
+              box_id: box.id,
+              vehicle_id: selectedTask.vehicle_id || null,
+              location_id: selectedTask.source_location_id,
+              scanned_by: user?.id || 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33',
+              scan_type: 'PICKUP',
+              is_verified: true,
+              scanned_code: enteredCode,
+              created_at: new Date().toISOString()
+            })
+          ]).catch(err => {
+            console.error('Pickup sync error:', err);
+          });
         } else {
           setStatusMessage(`DELIVERY_CONFIRMED: Verified code ${enteredCode}. Parcel successfully checked into Destination.`);
+          confetti();
 
-          // Finalise Task complete
-          await supabase.from('tasks').update({
-            status: 'COMPLETED',
-            completed_at: new Date().toISOString()
-          }).eq('id', selectedTask.id);
-
-          // Update Box status
-          await supabase.from('boxes').update({
-            status: 'DELIVERED',
-            current_location_id: selectedTask.destination_location_id
-          }).eq('id', box.id);
-
-          // Update Vehicle status to standby available again
+          // 1. Optimistic state updates
+          setTasks(prev => prev.map(t => t.id === selectedTask.id ? { ...t, status: 'COMPLETED', completed_at: new Date().toISOString() } : t));
+          setBoxes(prev => prev.map(b => b.id === box.id ? { ...b, status: 'DELIVERED', current_location_id: selectedTask.destination_location_id } : b));
           if (selectedTask.vehicle_id) {
-            const vehicleObj = vehicles.find(v => v.id === selectedTask.vehicle_id);
-            const currentCharger = locations.find(l => l.floor_id === vehicleObj?.current_floor_id && l.type === 'CHARGING');
-            
-            await supabase.from('vehicles').update({
-              status: 'AVAILABLE',
-              current_task_id: null,
-              current_location_id: currentCharger ? currentCharger.id : null
-            }).eq('id', selectedTask.vehicle_id);
+            setVehicles(prev => prev.map(v => v.id === selectedTask.vehicle_id ? { ...v, status: 'AVAILABLE', current_task_id: null } : v));
+          }
+          setSelectedTask(null);
+
+          const vehicleObj = selectedTask.vehicle_id ? vehicles.find(v => v.id === selectedTask.vehicle_id) : null;
+          const currentCharger = vehicleObj ? locations.find(l => l.floor_id === vehicleObj.current_floor_id && l.type === 'CHARGING') : null;
+
+          const deliveryPromises: Promise<any>[] = [
+            supabase.from('tasks').update({
+              status: 'COMPLETED',
+              completed_at: new Date().toISOString()
+            }).eq('id', selectedTask.id),
+            supabase.from('boxes').update({
+              status: 'DELIVERED',
+              current_location_id: selectedTask.destination_location_id
+            }).eq('id', box.id),
+            supabase.from('scan_events').insert({
+              id: generateUUID(),
+              task_id: selectedTask.id,
+              box_id: box.id,
+              vehicle_id: selectedTask.vehicle_id || null,
+              location_id: selectedTask.destination_location_id,
+              scanned_by: user?.id || 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33',
+              scan_type: 'DELIVERY',
+              is_verified: true,
+              scanned_code: enteredCode,
+              created_at: new Date().toISOString()
+            }),
+            supabase.from('audit_logs').insert({
+              id: generateUUID(),
+              user_email: user?.email || 'operator@demo.com',
+              action: 'DELIVERY_CONFIRMED',
+              object_type: 'TASK',
+              object_id: selectedTask.id,
+              previous_state: { status: selectedTask.status },
+              new_state: { status: 'COMPLETED' },
+              timestamp: new Date().toISOString()
+            })
+          ];
+
+          if (selectedTask.vehicle_id) {
+            deliveryPromises.push(
+              supabase.from('vehicles').update({
+                status: 'AVAILABLE',
+                current_task_id: null,
+                current_location_id: currentCharger ? currentCharger.id : null
+              }).eq('id', selectedTask.vehicle_id)
+            );
           }
 
-          // Add Scan Event
-          await supabase.from('scan_events').insert({
-            id: generateUUID(),
-            task_id: selectedTask.id,
-            box_id: box.id,
-            vehicle_id: selectedTask.vehicle_id || null,
-            location_id: selectedTask.destination_location_id,
-            scanned_by: user?.id || 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33',
-            scan_type: 'DELIVERY',
-            is_verified: true,
-            scanned_code: enteredCode,
-            created_at: new Date().toISOString()
+          // 2. Parallel cloud persistence
+          Promise.all(deliveryPromises).catch(err => {
+            console.error('Delivery sync error:', err);
           });
-
-          // Add Audit Log
-          await supabase.from('audit_logs').insert({
-            id: generateUUID(),
-            user_email: user?.email || 'operator@demo.com',
-            action: 'DELIVERY_CONFIRMED',
-            object_type: 'TASK',
-            object_id: selectedTask.id,
-            previous_state: { status: selectedTask.status },
-            new_state: { status: 'COMPLETED' },
-            timestamp: new Date().toISOString()
-          });
-
-          confetti();
         }
       } catch (err: any) {
         console.error('Scan processing error:', err);

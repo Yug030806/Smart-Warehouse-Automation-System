@@ -47,44 +47,65 @@ export default function BoxesPage() {
   const [destCustomFloorId, setDestCustomFloorId] = useState('');
   const [destCustomName, setDestCustomName] = useState('');
 
-  const loadBoxes = async () => {
-    const [bRes, pRes, lRes, fRes, wRes] = await Promise.all([
-      supabase.from('boxes').select(),
-      supabase.from('profiles').select(),
-      supabase.from('locations').select(),
-      supabase.from('floors').select(),
-      supabase.from('warehouses').select()
-    ]);
+  const loadBoxes = async (forceMetadata = false) => {
+    try {
+      if (forceMetadata || locations.length === 0 || warehouses.length === 0) {
+        const [bRes, pRes, lRes, fRes, wRes] = await Promise.all([
+          supabase.from('boxes').select(),
+          supabase.from('profiles').select(),
+          supabase.from('locations').select(),
+          supabase.from('floors').select(),
+          supabase.from('warehouses').select()
+        ]);
 
-    let list = (bRes.data || []) as any[];
-    const pList = pRes.data || [];
-    const currentUserProfile = pList.find((p: any) => p.id === user?.id);
-    const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
-    const isRestricted = ['MANAGER'].includes(userRole as string);
-    let locs = (lRes.data || []) as Location[];
-    const fls = (fRes.data || []) as Floor[];
-    const whs = (wRes.data || []) as Warehouse[];
+        let list = (bRes.data || []) as any[];
+        const pList = pRes.data || [];
+        const currentUserProfile = pList.find((p: any) => p.id === user?.id);
+        const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
+        const isRestricted = ['MANAGER'].includes(userRole as string);
+        let locs = (lRes.data || []) as Location[];
+        const fls = (fRes.data || []) as Floor[];
+        const whs = (wRes.data || []) as Warehouse[];
 
-    if (isRestricted && assignedWarehouses.length > 0) {
-      const allowedF = fls.filter((f: any) => assignedWarehouses.includes(f.warehouse_id)).map((f: any) => f.id);
-      const allowedL = locs.filter((l: any) => allowedF.includes(l.floor_id)).map((l: any) => l.id);
-      
-      list = list.filter((b: any) => allowedL.includes(b.current_location_id));
-      locs = locs.filter((l: any) => allowedL.includes(l.id));
+        if (isRestricted && assignedWarehouses.length > 0) {
+          const allowedF = fls.filter((f: any) => assignedWarehouses.includes(f.warehouse_id)).map((f: any) => f.id);
+          const allowedL = locs.filter((l: any) => allowedF.includes(l.floor_id)).map((l: any) => l.id);
+          list = list.filter((b: any) => allowedL.includes(b.current_location_id));
+          locs = locs.filter((l: any) => allowedL.includes(l.id));
+        }
+
+        locs.sort((a, b) => {
+          const fA = fls.find(f => f.id === a.floor_id)?.floor_number ?? 0;
+          const fB = fls.find(f => f.id === b.floor_id)?.floor_number ?? 0;
+          if (fA !== fB) return fA - fB;
+          return a.name.localeCompare(b.name);
+        });
+
+        setBoxes(list as Box[]);
+        setLocations(locs as Location[]);
+        setFloors(fls);
+        setWarehouses(whs);
+      } else {
+        // Fast background poll: only boxes table!
+        const bRes = await supabase.from('boxes').select();
+        if (bRes.data) {
+          let list = bRes.data as any[];
+          const isRestricted = ['MANAGER'].includes(userRole as string);
+          if (isRestricted && locations.length > 0) {
+            const allowedIds = new Set(locations.map(l => l.id));
+            list = list.filter((b: any) => allowedIds.has(b.current_location_id));
+          }
+          setBoxes(prev => {
+            if (prev.length === list.length && prev.every((b, i) => b.id === list[i]?.id && b.status === list[i]?.status && b.updated_at === list[i]?.updated_at)) {
+              return prev;
+            }
+            return list as Box[];
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load boxes:', err);
     }
-
-    // Sort locations by floor number and name for a consistent and grouped dropdown
-    locs.sort((a, b) => {
-      const fA = fls.find(f => f.id === a.floor_id)?.floor_number ?? 0;
-      const fB = fls.find(f => f.id === b.floor_id)?.floor_number ?? 0;
-      if (fA !== fB) return fA - fB;
-      return a.name.localeCompare(b.name);
-    });
-
-    setBoxes(list as Box[]);
-    setLocations(locs as Location[]);
-    setFloors(fls);
-    setWarehouses(whs);
   };
 
   // Initialize default location and floor selections once when data is loaded, without overwriting user choices
@@ -108,11 +129,22 @@ export default function BoxesPage() {
     }
   }, [floors]);
 
+  // Edit Box Modal state
+  const [editingBox, setEditingBox] = useState<Box | null>(null);
+  const [editProdName, setEditProdName] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+  const [editWeight, setEditWeight] = useState(1);
+  const [editPriority, setEditPriority] = useState<'NORMAL' | 'HIGH' | 'URGENT'>('NORMAL');
+
   useEffect(() => {
-    loadBoxes();
-    const interval = setInterval(loadBoxes, 2000);
+    loadBoxes(true);
+    const interval = setInterval(() => {
+      // Avoid polling and re-renders while typing in a modal or when tab is inactive
+      if (document.hidden || showAddModal || editingBox) return;
+      loadBoxes(false);
+    }, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [showAddModal, Boolean(editingBox)]);
 
   const [modalError, setModalError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -151,34 +183,31 @@ export default function BoxesPage() {
     if (!boxCode || !prodName) return;
 
     setModalError(null);
-    setIsSubmitting(true);
 
     try {
       let finalSrcLocId = srcLoc;
       let finalDestLocId = destLoc;
+      const newLocs: Location[] = [];
+      const locInserts: Promise<any>[] = [];
 
       // Handle custom source location creation
       if (srcMode === 'CUSTOM' || !finalSrcLocId) {
         if (!srcCustomName.trim()) {
           setModalError('Please enter a source location name.');
-          setIsSubmitting(false);
           return;
         }
         const newLocId = generateUUID();
         const targetFloor = srcCustomFloorId || floors[0]?.id;
-        const { error: locErr } = await supabase.from('locations').insert({
+        const newL: Location = {
           id: newLocId,
           name: srcCustomName.trim(),
           floor_id: targetFloor,
           type: 'PICKUP',
           x: 1,
           y: 1
-        });
-        if (locErr) {
-          setModalError('Failed to create source location: ' + locErr.message);
-          setIsSubmitting(false);
-          return;
-        }
+        };
+        newLocs.push(newL);
+        locInserts.push(supabase.from('locations').insert(newL));
         finalSrcLocId = newLocId;
       }
 
@@ -186,24 +215,20 @@ export default function BoxesPage() {
       if (destMode === 'CUSTOM' || !finalDestLocId) {
         if (!destCustomName.trim()) {
           setModalError('Please enter a destination location name.');
-          setIsSubmitting(false);
           return;
         }
         const newLocId = generateUUID();
         const targetFloor = destCustomFloorId || floors[1]?.id || floors[0]?.id;
-        const { error: locErr } = await supabase.from('locations').insert({
+        const newL: Location = {
           id: newLocId,
           name: destCustomName.trim(),
           floor_id: targetFloor,
           type: 'DELIVERY',
           x: 6,
           y: 6
-        });
-        if (locErr) {
-          setModalError('Failed to create destination location: ' + locErr.message);
-          setIsSubmitting(false);
-          return;
-        }
+        };
+        newLocs.push(newL);
+        locInserts.push(supabase.from('locations').insert(newL));
         finalDestLocId = newLocId;
       }
 
@@ -224,14 +249,6 @@ export default function BoxesPage() {
         updated_at: new Date().toISOString()
       };
 
-      const { error: boxErr } = await supabase.from('boxes').insert(newBox);
-      if (boxErr) {
-        setModalError(boxErr.message);
-        setIsSubmitting(false);
-        return;
-      }
-      
-      // Auto-create task if box is created
       const estDistance = 15;
       const estDuration = 120;
       
@@ -254,53 +271,73 @@ export default function BoxesPage() {
         completed_at: null,
         created_at: new Date().toISOString()
       };
-      
-      const { error: taskErr } = await supabase.from('tasks').insert(newTask);
-      if (taskErr) {
-        setModalError(`Box created, but task creation returned: ${taskErr.message}`);
-        await loadBoxes();
-        return;
-      }
 
+      // 1. Instantly update local UI state (0ms perceived latency!)
+      if (newLocs.length > 0) {
+        setLocations(prev => [...prev, ...newLocs]);
+      }
+      setBoxes(prev => [newBox, ...prev]);
+
+      // 2. Immediately close modal and reset form fields
       setShowAddModal(false);
       setBoxCode('');
       setProdName('');
-      await loadBoxes();
+      setIsSubmitting(false);
+
+      // 3. Persist to DB concurrently in background
+      Promise.all([
+        ...locInserts,
+        supabase.from('boxes').insert(newBox),
+        supabase.from('tasks').insert(newTask)
+      ]).catch(err => {
+        console.error('Failed to save box/task to server:', err);
+        setBoxes(prev => prev.filter(b => b.id !== newBox.id));
+        alert('Failed to save box to server: ' + (err?.message || 'Database error'));
+      });
     } catch (err: any) {
       setModalError(err?.message || 'Failed to save box.');
-    } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Edit Box Modal state
-  const [editingBox, setEditingBox] = useState<Box | null>(null);
-  const [editProdName, setEditProdName] = useState('');
-  const [editCategory, setEditCategory] = useState('');
-  const [editWeight, setEditWeight] = useState(1);
-  const [editPriority, setEditPriority] = useState<'NORMAL' | 'HIGH' | 'URGENT'>('NORMAL');
-
   usePreventScroll(Boolean(editingBox || showAddModal));
 
-  const handleDeleteBox = async (id: string) => {
-    await supabase.from('boxes').delete().eq('id', id);
-    await loadBoxes();
+  const handleDeleteBox = (id: string) => {
+    // Instant optimistic removal
+    setBoxes(prev => prev.filter(b => b.id !== id));
+    supabase.from('boxes').delete().eq('id', id).catch((err: any) => {
+      console.error('Failed to delete box:', err);
+      loadBoxes(true);
+    });
   };
 
-  const handleEditBoxSubmit = async (e: React.FormEvent) => {
+  const handleEditBoxSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingBox || !editProdName) return;
 
-    await supabase.from('boxes').update({
+    const updatedBox: Box = {
+      ...editingBox,
       product_name: editProdName,
       category: editCategory,
       weight: Number(editWeight),
       priority: editPriority,
       updated_at: new Date().toISOString()
-    }).eq('id', editingBox.id);
+    };
 
+    // Instant optimistic update
+    setBoxes(prev => prev.map(b => b.id === editingBox.id ? updatedBox : b));
     setEditingBox(null);
-    await loadBoxes();
+
+    supabase.from('boxes').update({
+      product_name: editProdName,
+      category: editCategory,
+      weight: Number(editWeight),
+      priority: editPriority,
+      updated_at: new Date().toISOString()
+    }).eq('id', editingBox.id).catch((err: any) => {
+      console.error('Failed to update box:', err);
+      loadBoxes(true);
+    });
   };
 
   // Filter, Sort, Paginate Pipeline

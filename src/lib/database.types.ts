@@ -36,7 +36,7 @@ export interface Zone {
 
 export interface Location {
   id: string;
-  zone_id: string;
+  zone_id?: string | null;
   name: string;
   type: 'RACK' | 'PICKUP' | 'DELIVERY' | 'CHARGING' | 'ELEVATOR' | 'WALKWAY';
   x: number;
