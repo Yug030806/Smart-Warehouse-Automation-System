@@ -39,11 +39,10 @@ export default function MotionBackground() {
 
 
   const isAesthetic = theme === 'aesthetic';
-  const isLight = theme === 'light';
-  const orbClass = (num: number) => isAesthetic ? `orb-aesthetic-${num}` : isLight ? `orb-light-${num}` : `orb-dark-${num}`;
-  const streamClass = isAesthetic ? 'stream-aesthetic' : isLight ? 'stream-light' : 'stream-dark';
-  const nodeClass = isAesthetic ? 'node-aesthetic' : isLight ? 'node-light' : 'node-dark';
-  const particleClass = isAesthetic ? 'particle-aesthetic' : isLight ? 'particle-light' : 'particle-dark';
+  const orbClass = (num: number) => isAesthetic ? `orb-aesthetic-${num}` : `orb-dark-${num}`;
+  const streamClass = isAesthetic ? 'stream-aesthetic' : 'stream-dark';
+  const nodeClass = isAesthetic ? 'node-aesthetic' : 'node-dark';
+  const particleClass = isAesthetic ? 'particle-aesthetic' : 'particle-dark';
 
   return (
     <div className="motion-bg-container pointer-events-none fixed inset-0 z-0 overflow-hidden">

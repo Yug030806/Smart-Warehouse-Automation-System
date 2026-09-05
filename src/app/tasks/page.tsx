@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/supabase/AuthProvider';
 import { usePreventScroll } from '@/lib/usePreventScroll';
-import { Task, Vehicle, Box, Location, Floor, RouteSegment } from '@/lib/database.types';
+import { Task, Vehicle, Box, Location, Floor, Warehouse, RouteSegment } from '@/lib/database.types';
 import { generateUUID } from '@/lib/uuid';
 
 export default function TasksPage() {
@@ -29,6 +29,7 @@ export default function TasksPage() {
   const [boxes, setBoxes] = useState<Box[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [floors, setFloors] = useState<Floor[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
 
   // Search & Recommendations
   const [searchQuery, setSearchQuery] = useState('');
@@ -47,23 +48,26 @@ export default function TasksPage() {
   usePreventScroll(Boolean(manualAssignTask || showCreateTask));
 
   const loadTasksData = async () => {
-    const tRes = await supabase.from('tasks').select();
-    let t = tRes.data || [];
-    const vRes = await supabase.from('vehicles').select();
-    let v = vRes.data || [];
-    const bRes = await supabase.from('boxes').select();
-    let b = bRes.data || [];
-    const lRes = await supabase.from('locations').select();
-    let l = lRes.data || [];
+    const [tRes, vRes, bRes, lRes, pRes, fRes, wRes] = await Promise.all([
+      supabase.from('tasks').select(),
+      supabase.from('vehicles').select(),
+      supabase.from('boxes').select(),
+      supabase.from('locations').select(),
+      supabase.from('profiles').select(),
+      supabase.from('floors').select(),
+      supabase.from('warehouses').select()
+    ]);
 
-    const pRes = await supabase.from('profiles').select();
+    let t = tRes.data || [];
+    let v = vRes.data || [];
+    let b = bRes.data || [];
+    let l = lRes.data || [];
     const pList = pRes.data || [];
     const currentUserProfile = pList.find((p: any) => p.id === user?.id);
     const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
     const isRestricted = ['MANAGER'].includes(userRole);
-
-    const fRes = await supabase.from('floors').select();
     let fls = (fRes.data || []) as Floor[];
+    let whs = (wRes.data || []) as Warehouse[];
 
     if (isRestricted && assignedWarehouses.length > 0) {
         const allowedF = fls.filter((f: any) => assignedWarehouses.includes(f.warehouse_id)).map((f: any) => f.id);
@@ -74,6 +78,7 @@ export default function TasksPage() {
         t = t.filter((tsk: any) => allowedL.includes(tsk.source_location_id));
         l = l.filter((loc: any) => allowedL.includes(loc.id));
         fls = fls.filter((f: any) => allowedF.includes(f.id));
+        whs = whs.filter((w: any) => assignedWarehouses.includes(w.id));
     }
 
     setTasks(t as Task[]);
@@ -81,6 +86,7 @@ export default function TasksPage() {
     setBoxes(b as Box[]);
     setLocations(l as Location[]);
     setFloors(fls);
+    setWarehouses(whs);
   };
 
   useEffect(() => {
@@ -135,10 +141,23 @@ export default function TasksPage() {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
 
-    // Filter available vehicles (battery > 15)
-    const candidates = vehicles.filter(v => v.status === 'AVAILABLE' && (v.battery_percentage ?? 100) > 15);
+    const srcLoc = locations.find(l => l.id === task.source_location_id);
+    const srcFloor = floors.find(f => f.id === srcLoc?.floor_id);
+    const taskWarehouseId = srcFloor?.warehouse_id;
+
+    // Filter available vehicles strictly within the task's warehouse (battery > 15)
+    const candidates = vehicles.filter(v => {
+      if (v.status !== 'AVAILABLE' || (v.battery_percentage ?? 100) <= 15) return false;
+      if (taskWarehouseId) {
+        const vFloor = floors.find(f => f.id === v.current_floor_id);
+        if (vFloor && vFloor.warehouse_id !== taskWarehouseId) return false;
+      }
+      return true;
+    });
+
     if (candidates.length === 0) {
-      alert('No available AMR found with battery > 15%. Please commission an AMR or wait for an active AMR to become available.');
+      const whName = warehouses.find(w => w.id === taskWarehouseId)?.name || 'this warehouse facility';
+      alert(`No available AMR found in ${whName} with battery > 15%. AMR assignments cannot cross warehouses.`);
       return;
     }
 
@@ -558,16 +577,28 @@ export default function TasksPage() {
                   className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-100 outline-none"
                 >
                   {(() => {
-                    const availableVehicles = vehicles.filter(v => v.status === 'AVAILABLE');
+                    const taskSrcLoc = locations.find(l => l.id === manualAssignTask.source_location_id);
+                    const taskFloor = floors.find(f => f.id === taskSrcLoc?.floor_id);
+                    const taskWarehouseId = taskFloor?.warehouse_id;
+                    const whName = warehouses.find(w => w.id === taskWarehouseId)?.name;
+
+                    const availableVehicles = vehicles.filter(v => {
+                      if (v.status !== 'AVAILABLE') return false;
+                      if (taskWarehouseId) {
+                        const vFloor = floors.find(f => f.id === v.current_floor_id);
+                        if (vFloor && vFloor.warehouse_id !== taskWarehouseId) return false;
+                      }
+                      return true;
+                    });
                     if (availableVehicles.length === 0) {
-                      return <option value="" disabled>No available AMRs found (all busy or offline)</option>;
+                      return <option value="" disabled>No available AMRs found in {whName || 'this facility'}</option>;
                     }
                     return availableVehicles.map(v => {
                       const fl = floors.find(f => f.id === v.current_floor_id);
                       const flName = fl?.name || (v.current_floor_id ? `Floor ${fl?.floor_number || 1}` : 'Unassigned');
                       return (
                         <option key={v.id} value={v.id}>
-                          {v.vehicle_code} - {v.name} (Battery: {v.battery_percentage}%, {flName})
+                          {v.vehicle_code} - {v.name} ({whName ? `${whName} - ` : ''}{flName}, Battery: {v.battery_percentage}%)
                         </option>
                       );
                     });

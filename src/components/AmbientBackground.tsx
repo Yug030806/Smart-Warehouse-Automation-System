@@ -29,7 +29,6 @@ export default function AmbientBackground({ intensity = 'low', className = '' }:
     let height = (canvas.height = window.innerHeight);
 
     const isAesthetic = theme === 'aesthetic';
-    const isLight = theme === 'light';
 
     // Responsive particle count budget
     const isMobile = width < 768;
@@ -68,29 +67,19 @@ export default function AmbientBackground({ intensity = 'low', className = '' }:
     // Theme-dependent colors
     const nodeColor = isAesthetic
       ? (a: number) => `rgba(204, 179, 163, ${a})`    // dark nude #CCB3A3 nodes
-      : isLight
-      ? (a: number) => `rgba(166, 124, 51, ${a})`     // warm bronze nodes
       : (a: number) => `rgba(56, 189, 248, ${a})`;    // cyan nodes
 
     const lineColor = isAesthetic
       ? (a: number) => `rgba(217, 196, 183, ${a})`   // warm nude lines
-      : isLight
-      ? (a: number) => `rgba(218, 218, 182, ${a})`   // soft beige lines
       : (a: number) => `rgba(168, 85, 247, ${a})`;   // purple lines
 
-    const glowColor = isAesthetic ? '#CCB3A3' : isLight ? '#F5F5DC' : '#38bdf8';
+    const glowColor = isAesthetic ? '#CCB3A3' : '#38bdf8';
 
     const glowStops = isAesthetic
       ? {
           inner: intensity === 'high' ? 'rgba(204, 179, 163, 0.28)' : 'rgba(217, 196, 183, 0.16)',
           mid:   intensity === 'high' ? 'rgba(140, 118, 105, 0.20)'  : 'rgba(99, 82, 72, 0.12)',
           outer: 'rgba(26, 22, 20, 0)'
-        }
-      : isLight
-      ? {
-          inner: intensity === 'high' ? 'rgba(245, 245, 220, 0.60)' : 'rgba(245, 245, 220, 0.30)',
-          mid:   intensity === 'high' ? 'rgba(225, 225, 185, 0.35)' : 'rgba(225, 225, 185, 0.18)',
-          outer: 'rgba(250, 250, 240, 0)'
         }
       : {
           inner: intensity === 'high' ? 'rgba(59, 130, 246, 0.28)' : 'rgba(14, 165, 233, 0.16)',

@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
-export type ThemeMode = 'dark' | 'light' | 'aesthetic';
+export type ThemeMode = 'dark' | 'aesthetic';
 
 interface ThemeContextType {
   theme: ThemeMode;
@@ -19,7 +19,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('swl_theme') as ThemeMode;
-    if (savedTheme && ['dark', 'light', 'aesthetic'].includes(savedTheme)) {
+    if (savedTheme && ['dark', 'aesthetic'].includes(savedTheme)) {
       setThemeState(savedTheme);
     } else {
       setThemeState('dark');

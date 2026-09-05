@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { useTheme, ThemeMode } from '@/lib/ThemeProvider';
-import { Bell, AlertTriangle, Menu, Sun, Moon, Sparkles, PlusCircle } from 'lucide-react';
+import { Bell, AlertTriangle, Menu, Moon, Sparkles, PlusCircle } from 'lucide-react';
 import { Alert, Notification } from '@/lib/database.types';
 import { triggerGlobalAlert } from '@/lib/alertService';
 
@@ -12,7 +12,6 @@ interface NavbarProps {
 
 const themeOptions: { mode: ThemeMode; icon: typeof Moon; label: string }[] = [
   { mode: 'dark', icon: Moon, label: 'Dark' },
-  { mode: 'light', icon: Sun, label: 'Light' },
   { mode: 'aesthetic', icon: Sparkles, label: 'Aesthetic' },
 ];
 
@@ -113,9 +112,7 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
                 theme === mode
                   ? mode === 'aesthetic'
                     ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
-                    : mode === 'light'
-                      ? 'bg-[#a67c33] text-white shadow-md shadow-[#a67c33]/30'
-                      : 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                    : 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
               }`}
             >

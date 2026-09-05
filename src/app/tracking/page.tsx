@@ -345,6 +345,9 @@ export default function TrackingPage() {
   }, [stopCurrentSimulation, addLog, isSimulatingAll, fleetRoutes, floorLabel]);
 
   const ensureAssignedTask = useCallback((veh: Vehicle, excludedTaskIds: string[] = [], excludedBoxIds: string[] = []): { task: Task; box: Box } | null => {
+    const vehFloor = floors.find(f => f.id === veh.current_floor_id);
+    const vehWhId = vehFloor?.warehouse_id;
+
     if (veh.current_task_id && !excludedTaskIds.includes(veh.current_task_id)) {
       const existingTask = tasks.find((t) => t.id === veh.current_task_id);
       const existingBox = existingTask ? boxes.find((b) => b.id === existingTask.box_id) : null;
@@ -355,7 +358,18 @@ export default function TrackingPage() {
         }
       }
     }
-    const pending = tasks.filter((t) => t.status === 'PENDING' && !excludedTaskIds.includes(t.id));
+
+    // Filter pending tasks strictly to the vehicle's warehouse facility
+    const pending = tasks.filter((t) => {
+      if (t.status !== 'PENDING' || excludedTaskIds.includes(t.id)) return false;
+      if (vehWhId) {
+        const srcLoc = locations.find(l => l.id === t.source_location_id);
+        const srcFloor = floors.find(f => f.id === srcLoc?.floor_id);
+        if (srcFloor && srcFloor.warehouse_id !== vehWhId) return false;
+      }
+      return true;
+    });
+
     let targetTask: Task;
     const sameFloorPending = pending.find((t) => {
       const destLoc = locations.find((l) => l.id === t.destination_location_id);
@@ -367,12 +381,25 @@ export default function TrackingPage() {
     } else {
       const otherFloorPending = pending.find((t) => {
         const destLoc = locations.find((l) => l.id === t.destination_location_id);
+        const destFloor = floors.find(f => f.id === destLoc?.floor_id);
+        if (vehWhId && destFloor && destFloor.warehouse_id !== vehWhId) return false;
         return destLoc && !(destLoc.x === veh.x_position && destLoc.y === veh.y_position && destLoc.floor_id === veh.current_floor_id);
       });
       if (otherFloorPending) {
         targetTask = otherFloorPending;
       } else {
-        const availableBox = boxes.find((b) => b.status === 'WAITING' && !excludedBoxIds.includes(b.id)) || 
+        const whBoxes = boxes.filter(b => {
+          if (excludedBoxIds.includes(b.id)) return false;
+          if (vehWhId) {
+            const bLoc = locations.find(l => l.id === b.current_location_id);
+            const bFloor = floors.find(f => f.id === bLoc?.floor_id);
+            if (bFloor && bFloor.warehouse_id !== vehWhId) return false;
+          }
+          return true;
+        });
+
+        const availableBox = whBoxes.find((b) => b.status === 'WAITING') || 
+                             whBoxes[0] ||
                              boxes.find((b) => !excludedBoxIds.includes(b.id)) || 
                              boxes[0];
         if (!availableBox) return null;
@@ -392,7 +419,7 @@ export default function TrackingPage() {
           task_code: `TSK-SIM-${Date.now().toString().substring(8)}-${veh.vehicle_code.substring(4)}`,
           box_id: availableBox.id,
           vehicle_id: veh.id,
-          source_location_id: veh.current_location_id || locations.find(l => l.floor_id === veh.current_floor_id)?.id || 'loc-f1-pickup',
+          source_location_id: veh.current_location_id || locations.find(l => l.floor_id === veh.current_floor_id)?.id || destLocation.id,
           destination_location_id: destLocation.id,
           priority: 'HIGH',
           status: 'PENDING',
@@ -413,7 +440,7 @@ export default function TrackingPage() {
     supabase.from('tasks').update({ status: 'ASSIGNED', vehicle_id: veh.id, assigned_at: new Date().toISOString() }).eq('id', targetTask.id);
     const targetBox = boxes.find((b) => b.id === targetTask.box_id) || boxes[0];
     return { task: targetTask, box: targetBox };
-  }, [tasks, boxes, locations, user]);
+  }, [tasks, boxes, locations, floors, user]);
 
   const handleStartSimulation = useCallback(() => {
     if (!selectedVehicle) return;
@@ -1025,22 +1052,37 @@ export default function TrackingPage() {
       return;
     }
 
+    const curFloorObj = floors.find(f => f.id === selectedFloor);
+    const curWhId = curFloorObj?.warehouse_id || selectedWarehouseId;
+
     const outLoc = locations.find((l) => l.floor_id === selectedFloor && l.type === 'DELIVERY') || 
-                   locations.find((l) => l.type === 'DELIVERY') ||
-                   locations.find((l) => l.name.toUpperCase().includes('OUT'));
+                   locations.find((l) => {
+                     const lf = floors.find(f => f.id === l.floor_id);
+                     return (!curWhId || lf?.warehouse_id === curWhId) && l.type === 'DELIVERY';
+                   }) ||
+                   locations.find((l) => {
+                     const lf = floors.find(f => f.id === l.floor_id);
+                     return (!curWhId || lf?.warehouse_id === curWhId) && l.name.toUpperCase().includes('OUT');
+                   });
     if (!outLoc) {
-      addLog('No Outbound / Delivery dock location found in warehouse map.', 'WARN');
+      addLog('No Outbound / Delivery dock location found in this warehouse map.', 'WARN');
       return;
     }
 
     addLog(`Dispatching fleet to Outbound Dock (${outLoc.name})...`, 'INFO');
 
     let allOnFloor = vehicles.filter(v => v.current_floor_id === selectedFloor && v.status !== 'OFFLINE');
-    if (allOnFloor.length === 0) allOnFloor = vehicles.filter(v => v.status !== 'OFFLINE');
+    if (allOnFloor.length === 0) {
+      allOnFloor = vehicles.filter(v => {
+        if (v.status === 'OFFLINE') return false;
+        const vf = floors.find(f => f.id === v.current_floor_id);
+        return !curWhId || vf?.warehouse_id === curWhId;
+      });
+    }
     const available = allOnFloor.filter(v => !(v.x_position === outLoc.x && v.y_position === outLoc.y && v.current_floor_id === outLoc.floor_id)).slice(0, 3);
 
     if (available.length === 0) {
-      addLog('All available vehicles are already at Outbound Dock.', 'INFO');
+      addLog('All available vehicles in this warehouse are already at Outbound Dock.', 'INFO');
       return;
     }
 
