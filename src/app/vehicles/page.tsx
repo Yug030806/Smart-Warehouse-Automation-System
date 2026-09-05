@@ -7,7 +7,7 @@ import AmbientBackground from '@/components/AmbientBackground';
 import { useAuth } from '@/lib/supabase/AuthProvider';
 import { usePreventScroll } from '@/lib/usePreventScroll';
 import { Search, MapPin, Truck, Plus, Trash2, BatteryCharging, AlertCircle, RefreshCw } from 'lucide-react';
-import { Vehicle, Floor, Location, Task } from '@/lib/database.types';
+import { Vehicle, Floor, Location, Task, Warehouse } from '@/lib/database.types';
 import { generateUUID } from '@/lib/uuid';
 
 export default function VehiclesPage() {
@@ -17,6 +17,9 @@ export default function VehiclesPage() {
   const [floors, setFloors] = useState<Floor[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [filterWarehouse, setFilterWarehouse] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Add vehicle modal visibility
   const [showAddModal, setShowAddModal] = useState(false);
@@ -29,20 +32,25 @@ export default function VehiclesPage() {
   usePreventScroll(Boolean(editingVehicle || showAddModal));
 
   const loadVehicles = async () => {
-    const vRes = await supabase.from('vehicles').select();
+    const [vRes, pRes, fRes, lRes, tRes, wRes] = await Promise.all([
+      supabase.from('vehicles').select(),
+      supabase.from('profiles').select(),
+      supabase.from('floors').select(),
+      supabase.from('locations').select(),
+      supabase.from('tasks').select(),
+      supabase.from('warehouses').select(),
+    ]);
+
     let list = (vRes.data || []) as any[];
-    const pRes = await supabase.from('profiles').select();
     const pList = pRes.data || [];
     const currentUserProfile = pList.find((p: any) => p.id === user?.id);
     const assignedWarehouses = currentUserProfile?.assigned_warehouse_ids || [];
     const isRestricted = ['MANAGER'].includes(userRole as string);
 
-    const fRes = await supabase.from('floors').select();
-    let fls = fRes.data || [];
-    const lRes = await supabase.from('locations').select();
-    let locs = lRes.data || [];
-    const tRes = await supabase.from('tasks').select();
-    let tsk = tRes.data || [];
+    let fls = (fRes.data || []) as Floor[];
+    let locs = (lRes.data || []) as Location[];
+    let tsk = (tRes.data || []) as Task[];
+    let whs = (wRes.data || []) as Warehouse[];
 
     if (isRestricted && assignedWarehouses.length > 0) {
       const allowedF = fls.filter((f: any) => assignedWarehouses.includes(f.warehouse_id)).map((f: any) => f.id);
@@ -52,12 +60,14 @@ export default function VehiclesPage() {
       fls = fls.filter((f: any) => allowedF.includes(f.id));
       locs = locs.filter((l: any) => allowedL.includes(l.id));
       tsk = tsk.filter((t: any) => allowedL.includes(t.source_location_id));
+      whs = whs.filter((w: any) => assignedWarehouses.includes(w.id));
     }
 
     setVehicles(list as Vehicle[]);
     setFloors(fls as Floor[]);
     setLocations(locs as Location[]);
     setTasks(tsk as Task[]);
+    setWarehouses(whs as Warehouse[]);
   };
 
   useEffect(() => {
@@ -169,6 +179,14 @@ export default function VehiclesPage() {
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  const displayedVehicles = vehicles.filter(v => {
+    if (filterWarehouse !== 'ALL') {
+      const fl = floors.find(f => f.id === v.current_floor_id);
+      if (fl?.warehouse_id !== filterWarehouse) return false;
+    }
+    return true;
+  });
+
   return (
     <div className="flex h-screen w-full overflow-hidden bg-slate-950 relative">
       <AmbientBackground intensity="low" />
@@ -182,14 +200,28 @@ export default function VehiclesPage() {
               <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Vehicle Fleet Roster</h1>
               <p className="text-xs sm:text-sm text-slate-400">Manage autonomous AMRs, view battery charges, assign locations and monitor tasks.</p>
             </div>
-            {['ADMIN', 'MANAGER'].includes(userRole) && (
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-semibold text-slate-50 transition duration-150 shrink-0"
-              >
-                <Plus className="h-4 w-4" /> Commission AMR
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {warehouses.length > 1 && (
+                <select
+                  value={filterWarehouse}
+                  onChange={e => setFilterWarehouse(e.target.value)}
+                  className="px-3 py-2 rounded-xl border border-slate-800 bg-slate-900 text-xs font-semibold text-slate-200 outline-none focus:border-blue-500"
+                >
+                  <option value="ALL">All Warehouses ({warehouses.length})</option>
+                  {warehouses.map(w => (
+                    <option key={w.id} value={w.id}>{w.name}</option>
+                  ))}
+                </select>
+              )}
+              {['ADMIN', 'MANAGER'].includes(userRole) && (
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-semibold text-slate-50 transition duration-150 shrink-0"
+                >
+                  <Plus className="h-4 w-4" /> Commission AMR
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
@@ -209,13 +241,18 @@ export default function VehiclesPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-900/60 text-slate-300">
-                      {vehicles.length === 0 ? (
+                      {displayedVehicles.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="py-8 text-center text-slate-500">No vehicles registered in fleet database.</td>
+                          <td colSpan={6} className="py-8 text-center text-slate-500">
+                            {vehicles.length === 0 ? 'No vehicles registered in fleet database.' : 'No vehicles match current warehouse filter.'}
+                          </td>
                         </tr>
                       ) : (
-                        vehicles.map(v => {
+                        displayedVehicles.map(v => {
                           const activeTask = tasks.find(t => t.id === v.current_task_id);
+                          const fl = floors.find(f => f.id === v.current_floor_id);
+                          const wh = warehouses.find(w => w.id === fl?.warehouse_id);
+                          const flName = fl?.name || (v.current_floor_id ? `Floor ${fl?.floor_number || 1}` : 'Unassigned');
                           return (
                             <tr key={v.id}>
                               <td className="py-4 font-mono font-bold text-blue-400">{v.vehicle_code}</td>
@@ -224,13 +261,11 @@ export default function VehiclesPage() {
                                 {activeTask && <p className="text-[10px] text-slate-500">Active Task: {activeTask.task_code}</p>}
                               </td>
                               <td className="py-4">
-                                <span className="font-medium text-slate-300">
-                                  {(() => {
-                                    const fl = floors.find(f => f.id === v.current_floor_id);
-                                    return fl?.name || (v.current_floor_id ? `Floor ${fl?.floor_number || 1}` : 'Unassigned');
-                                  })()}
-                                </span>
-                                <span className="block text-[10px] text-slate-500 font-mono">[{v.x_position}, {v.y_position}]</span>
+                                <div>
+                                  {wh && <span className="block text-[10px] font-semibold text-blue-400">{wh.name}</span>}
+                                  <span className="font-medium text-slate-200">{flName}</span>
+                                  <span className="block text-[10px] text-slate-500 font-mono">[{v.x_position}, {v.y_position}]</span>
+                                </div>
                               </td>
                               <td className="py-4">
                                 <div className="flex items-center gap-1.5 font-bold">
@@ -304,19 +339,21 @@ export default function VehiclesPage() {
             {/* Quick status summary panels */}
             <div className="space-y-6">
               <div className="rounded-xl border border-slate-900 bg-slate-950 p-6 space-y-4">
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest font-bold block">Status Breakdown</span>
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest font-bold block">
+                  Status Breakdown {filterWarehouse !== 'ALL' && <span className="text-blue-400 font-normal">({warehouses.find(w => w.id === filterWarehouse)?.name})</span>}
+                </span>
                 <div className="space-y-2 text-xs">
                   <div className="flex justify-between">
                     <span className="text-slate-400">Total commissioned:</span>
-                    <span className="font-bold text-slate-200">{vehicles.length}</span>
+                    <span className="font-bold text-slate-200">{displayedVehicles.length}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">Active Duty (BUSY):</span>
-                    <span className="font-bold text-blue-400">{vehicles.filter(x => x.status === 'BUSY').length}</span>
+                    <span className="font-bold text-blue-400">{displayedVehicles.filter(x => x.status === 'BUSY').length}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">Standby (AVAILABLE):</span>
-                    <span className="font-bold text-green-400">{vehicles.filter(x => x.status === 'AVAILABLE').length}</span>
+                    <span className="font-bold text-green-400">{displayedVehicles.filter(x => x.status === 'AVAILABLE').length}</span>
                   </div>
                 </div>
               </div>
@@ -373,6 +410,8 @@ export default function VehiclesPage() {
           onClose={() => setShowAddModal(false)}
           floors={floors}
           locations={locations}
+          warehouses={warehouses}
+          initialWarehouseId={filterWarehouse !== 'ALL' ? filterWarehouse : undefined}
           onSuccess={(newV) => {
             if (newV) setVehicles(prev => [newV, ...prev]);
             else loadVehicles();
@@ -387,28 +426,63 @@ interface CommissionModalProps {
   onClose: () => void;
   floors: Floor[];
   locations: Location[];
+  warehouses: Warehouse[];
+  initialWarehouseId?: string;
   onSuccess: (newV?: Vehicle) => void;
 }
 
-function CommissionAmrModal({ onClose, floors, locations, onSuccess }: CommissionModalProps) {
-  const initialFloor = floors.length > 0 ? floors[0].id : '';
-  const initialLocs = locations.filter(l => l.floor_id === initialFloor);
+function CommissionAmrModal({ onClose, floors, locations, warehouses, initialWarehouseId, onSuccess }: CommissionModalProps) {
+  const [selectedWhId, setSelectedWhId] = useState<string>(() => {
+    if (initialWarehouseId && warehouses.some(w => w.id === initialWarehouseId)) {
+      return initialWarehouseId;
+    }
+    if (floors.length > 0 && floors[0].warehouse_id) {
+      return floors[0].warehouse_id;
+    }
+    return warehouses.length > 0 ? warehouses[0].id : '';
+  });
 
+  const availableFloors = selectedWhId
+    ? floors.filter(f => f.warehouse_id === selectedWhId)
+    : floors;
+
+  const initialFloor = availableFloors.length > 0 ? availableFloors[0].id : (floors[0]?.id || '');
   const [vCode, setVCode] = useState(() => `AMR-${Math.floor(Math.random() * 900 + 100)}`);
   const [vName, setVName] = useState('');
   const [floorId, setFloorId] = useState(() => initialFloor);
-  const [startLocId, setStartLocId] = useState(() => initialLocs.length > 0 ? initialLocs[0].id : '');
+
+  const currentFloorLocations = locations.filter(l => l.floor_id === floorId);
+  const [startLocId, setStartLocId] = useState(() => currentFloorLocations.length > 0 ? currentFloorLocations[0].id : '');
   const [modalError, setModalError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // If floors were not yet loaded when modal mounted, initialize floorId once floors arrive
+  // If warehouses arrive asynchronously, initialize selectedWhId
   useEffect(() => {
-    if (!floorId && floors.length > 0) {
-      setFloorId(floors[0].id);
-      const flLocs = locations.filter(l => l.floor_id === floors[0].id);
-      setStartLocId(flLocs.length > 0 ? flLocs[0].id : '');
+    if (!selectedWhId && warehouses.length > 0) {
+      setSelectedWhId(warehouses[0].id);
     }
-  }, [floors, floorId, locations]);
+  }, [warehouses, selectedWhId]);
+
+  // Keep floorId and startLocId valid when available floors change
+  useEffect(() => {
+    if (availableFloors.length > 0) {
+      if (!floorId || !availableFloors.some(f => f.id === floorId)) {
+        const nextFloor = availableFloors[0].id;
+        setFloorId(nextFloor);
+        const flLocs = locations.filter(l => l.floor_id === nextFloor);
+        setStartLocId(flLocs.length > 0 ? flLocs[0].id : '');
+      }
+    }
+  }, [availableFloors, floorId, locations]);
+
+  const handleWarehouseChange = (newWhId: string) => {
+    setSelectedWhId(newWhId);
+    const whFloors = floors.filter(f => f.warehouse_id === newWhId);
+    const nextFid = whFloors.length > 0 ? whFloors[0].id : '';
+    setFloorId(nextFid);
+    const flLocs = locations.filter(l => l.floor_id === nextFid);
+    setStartLocId(flLocs.length > 0 ? flLocs[0].id : '');
+  };
 
   const handleFloorChange = (newFid: string) => {
     setFloorId(newFid);
@@ -427,7 +501,7 @@ function CommissionAmrModal({ onClose, floors, locations, onSuccess }: Commissio
       const x = selectedLoc ? selectedLoc.x : 5;
       const y = selectedLoc ? selectedLoc.y : 1;
 
-      const targetFloorId = floorId || (floors.length > 0 ? floors[0].id : null);
+      const targetFloorId = floorId || (availableFloors.length > 0 ? availableFloors[0].id : (floors.length > 0 ? floors[0].id : null));
       if (!targetFloorId) {
         setModalError('No floor level found to commission this AMR.');
         return;
@@ -466,10 +540,11 @@ function CommissionAmrModal({ onClose, floors, locations, onSuccess }: Commissio
     }
   };
 
-  const currentFloorLocations = locations.filter(l => l.floor_id === floorId);
-
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4 backdrop-blur-sm">
+    <div 
+      className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4 backdrop-blur-sm"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
       <form onSubmit={handleSubmit} className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
         <h3 className="text-lg font-bold text-slate-100">Commission Autonomous Vehicle (AMR)</h3>
 
@@ -503,17 +578,38 @@ function CommissionAmrModal({ onClose, floors, locations, onSuccess }: Commissio
             />
           </div>
 
+          {warehouses.length > 1 && (
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Warehouse Facility</label>
+              <select
+                value={selectedWhId}
+                onChange={e => handleWarehouseChange(e.target.value)}
+                className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs font-semibold text-slate-100 outline-none focus:border-blue-500"
+              >
+                {warehouses.map(w => (
+                  <option key={w.id} value={w.id}>{w.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Starting Level</label>
               <select
                 value={floorId}
                 onChange={e => handleFloorChange(e.target.value)}
-                className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-200 outline-none"
+                className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-200 outline-none focus:border-blue-500"
               >
-                {floors.map(f => (
-                  <option key={f.id} value={f.id}>{f.name || `Floor ${f.floor_number}`}</option>
-                ))}
+                {availableFloors.map(f => {
+                  const wh = warehouses.find(w => w.id === f.warehouse_id);
+                  const flLabel = f.name || `Floor ${f.floor_number}`;
+                  return (
+                    <option key={f.id} value={f.id}>
+                      {wh && warehouses.length > 1 ? `${flLabel} (${wh.name})` : flLabel}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
@@ -522,7 +618,7 @@ function CommissionAmrModal({ onClose, floors, locations, onSuccess }: Commissio
               <select
                 value={startLocId}
                 onChange={e => setStartLocId(e.target.value)}
-                className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-200 outline-none"
+                className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-200 outline-none focus:border-blue-500"
               >
                 <option value="">(Origin Node [5, 1])</option>
                 {currentFloorLocations.map(l => (
