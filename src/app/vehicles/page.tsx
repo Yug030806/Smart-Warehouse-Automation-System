@@ -213,12 +213,12 @@ export default function VehiclesPage() {
                   ))}
                 </select>
               )}
-              {['ADMIN', 'MANAGER'].includes(userRole) && (
+              {['ADMIN', 'MANAGER', 'OPERATOR'].includes(userRole) && (
                 <button
                   onClick={() => setShowAddModal(true)}
                   className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-semibold text-slate-50 transition duration-150 shrink-0"
                 >
-                  <Plus className="h-4 w-4" /> Commission AMR
+                  <Plus className="h-4 w-4" /> Commission Autonomous Vehicle (AMR)
                 </button>
               )}
             </div>

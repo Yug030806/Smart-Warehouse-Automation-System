@@ -5,7 +5,9 @@ export interface ActionPermissions {
   canAssignTask: boolean;
   canCancelTask: boolean;
   canManageBoxes: boolean;
+  canRegisterBox?: boolean;
   canManageVehicles: boolean;
+  canCommissionVehicle?: boolean;
   canManageWarehouses: boolean;
   canManageUsers: boolean;
   canEditSettings: boolean;
@@ -19,7 +21,9 @@ export const ROLE_PERMISSIONS: Record<UserRole, ActionPermissions> = {
     canAssignTask: true,
     canCancelTask: true,
     canManageBoxes: true,
+    canRegisterBox: true,
     canManageVehicles: true,
+    canCommissionVehicle: true,
     canManageWarehouses: true,
     canManageUsers: true,
     canEditSettings: true,
@@ -31,7 +35,9 @@ export const ROLE_PERMISSIONS: Record<UserRole, ActionPermissions> = {
     canAssignTask: true,
     canCancelTask: true,
     canManageBoxes: true,
+    canRegisterBox: true,
     canManageVehicles: true,
+    canCommissionVehicle: true,
     canManageWarehouses: true,
     canManageUsers: true,
     canEditSettings: false, // Read-only access to settings
@@ -42,15 +48,16 @@ export const ROLE_PERMISSIONS: Record<UserRole, ActionPermissions> = {
     canCreateTask: false,
     canAssignTask: false,
     canCancelTask: false,
-    canManageBoxes: true, // View and update box status
-    canManageVehicles: true, // View and update vehicle status
+    canManageBoxes: false, // Cannot register or modify box catalog; view & scan only
+    canRegisterBox: false,
+    canManageVehicles: true, // View, commission and update vehicle status
+    canCommissionVehicle: true,
     canManageWarehouses: false,
     canManageUsers: false,
     canEditSettings: false,
     canScanQR: true,
     canResolveAlerts: true,
   },
-  
 };
 
 export const ROUTE_ALLOWED_ROLES: Record<string, UserRole[]> = {

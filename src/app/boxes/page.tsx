@@ -207,6 +207,7 @@ export default function BoxesPage() {
   };
 
   const handleOpenAddModal = () => {
+    if (!['ADMIN', 'MANAGER'].includes(userRole)) return;
     setBoxCode(`BX-${Math.floor(Math.random() * 9000 + 1000)}`);
     setProdName('');
     setCategory('Electronics');
@@ -232,6 +233,7 @@ export default function BoxesPage() {
 
   const handleAddBox = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!['ADMIN', 'MANAGER'].includes(userRole)) return;
     if (!boxCode || !prodName) return;
 
     setModalError(null);
@@ -470,7 +472,7 @@ export default function BoxesPage() {
               <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Warehouse Cargo & Boxes</h1>
               <p className="text-xs sm:text-sm text-slate-400">View register catalogs, download generated QR identities, and assign priorities.</p>
             </div>
-            {['ADMIN', 'MANAGER', 'OPERATOR'].includes(userRole) && (
+            {['ADMIN', 'MANAGER'].includes(userRole) && (
               <button
                 onClick={handleOpenAddModal}
                 className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-semibold text-slate-50 transition duration-150 shrink-0"
@@ -734,7 +736,7 @@ export default function BoxesPage() {
       )}
 
       {/* Add Box Modal */}
-      {showAddModal && (
+      {showAddModal && ['ADMIN', 'MANAGER'].includes(userRole) && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget) { const cancelBtn = Array.from((e.target as HTMLElement).querySelectorAll('button')).find(b => b.textContent?.match(/cancel|close/i) || b.querySelector('svg.lucide-x')); if (cancelBtn) (cancelBtn as HTMLButtonElement).click(); } }}>
           <form onSubmit={handleAddBox} className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
             <h3 className="text-lg font-bold text-slate-100">Register New Box Packet</h3>

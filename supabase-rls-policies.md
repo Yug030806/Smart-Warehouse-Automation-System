@@ -16,7 +16,7 @@ The security architecture enforces fine-grained Role-Based Access Control (RBAC)
 | :--- | :--- | :--- | :--- |
 | **`ADMIN`** | System Administrator | Global / Full System | Full CRUD across all tables, manage user profiles, approve pending registrations, assign warehouse scopes, update global system settings, view/delete audit logs. |
 | **`MANAGER`** | Warehouse Manager | Warehouse-Scoped (or All if unassigned) | Full operational CRUD on infrastructure (Floors, Zones, Locations, Paths), Docks, Vehicles, Boxes, Tasks, Routes, and Alerts within assigned warehouses. Read-only on Profiles & Audit Logs. |
-| **`OPERATOR`** | AMR Docks & Floor Operator | Warehouse-Scoped Operational | View live telemetry, tasks, maps, vehicles, and boxes. Create/verify Scan Events, update task execution states (`IN_PROGRESS`, `PICKED_UP`, `COMPLETED`), update AMR vehicle status/battery. Cannot edit infrastructure, user profiles, or system settings. |
+| **`OPERATOR`** | AMR Docks & Floor Operator | Warehouse-Scoped Operational | View live telemetry, tasks, maps, vehicles, and boxes. Commission Autonomous Vehicles (AMRs), update AMR vehicle status/battery/docking, create/verify Scan Events, update task execution states (`IN_PROGRESS`, `PICKED_UP`, `COMPLETED`). Cannot register new boxes, edit infrastructure, user profiles, or system settings. |
 
 ---
 
@@ -30,8 +30,8 @@ The security architecture enforces fine-grained Role-Based Access Control (RBAC)
 | **`zones`** | Full CRUD | Read/Write Assigned Warehouse | Read Assigned Warehouse | DENY ALL |
 | **`locations`** | Full CRUD | Read/Write Assigned Warehouse | Read Assigned Warehouse | DENY ALL |
 | **`paths`** | Full CRUD | Read/Write Assigned Warehouse | Read Assigned Warehouse | DENY ALL |
-| **`vehicles`** | Full CRUD | Read/Write Assigned Warehouse | Read & Update Status/Battery/Telemetry | DENY ALL |
-| **`boxes`** | Full CRUD | Read/Write Assigned Warehouse | Read/Write Assigned Warehouse | DENY ALL |
+| **`vehicles`** | Full CRUD | Read/Write Assigned Warehouse | Read, Commission (Insert) & Update Status/Battery | DENY ALL |
+| **`boxes`** | Full CRUD | Read/Write Assigned Warehouse | Read & Scan Only (Cannot Register) | DENY ALL |
 | **`tasks`** | Full CRUD | Read/Write Assigned Warehouse | Read/Write Status & Execution States | DENY ALL |
 | **`routes`** | Full CRUD | Read/Write Assigned Warehouse | Read & Create Route Segments | DENY ALL |
 | **`scan_events`** | Full CRUD | Read/Write Assigned Warehouse | Read & Insert Verification Scans | DENY ALL |
