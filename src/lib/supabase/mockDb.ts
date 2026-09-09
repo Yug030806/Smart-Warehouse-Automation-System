@@ -234,10 +234,8 @@ class MockDB {
           if (this.state.alerts) {
             const initialCount = this.state.alerts.length;
             this.state.alerts = this.state.alerts.filter(a => {
-              if (a.id === 'alert-01' || a.type === 'SYSTEM_ERROR') return false;
               const msg = (a.message || '').toLowerCase();
               return (
-                !msg.includes('system error') &&
                 !msg.includes('typeerror') &&
                 !msg.includes('uncaught') &&
                 !msg.includes('is not a function') &&
@@ -250,6 +248,31 @@ class MockDB {
               mutated = true;
             }
           }
+
+          // Ensure active warning alerts exist in cached storage
+          const activeWarnings = (this.state.alerts || []).filter(a => !a.resolved_at && a.severity === 'WARNING');
+          if (activeWarnings.length === 0) {
+            const defaultWarnings: Alert[] = [
+              { id: 'alert-warn-01', type: 'LOW_BATTERY', severity: 'WARNING', message: 'Vehicle AMR-04 battery depleted to 12%. Scheduled charging dock required.', vehicle_id: 'v-04', is_acknowledged: false, resolved_at: null, created_at: new Date(Date.now() - 15 * 60000).toISOString() },
+              { id: 'alert-warn-02', type: 'SYSTEM_ERROR', severity: 'WARNING', message: 'Vehicle AMR-03 offline in Maintenance Bay. LiDAR sensor calibration scheduled.', vehicle_id: 'v-03', is_acknowledged: false, resolved_at: null, created_at: new Date(Date.now() - 35 * 60000).toISOString() }
+            ];
+            this.state.alerts = [...(this.state.alerts || []).filter(a => a.id !== 'alert-01'), ...defaultWarnings];
+            mutated = true;
+          }
+
+          // Ensure tasks has completed entries with valid duration
+          if (!this.state.tasks || this.state.tasks.filter(t => t.status === 'COMPLETED').length === 0) {
+            this.state.tasks = initialTasks;
+            mutated = true;
+          } else {
+            this.state.tasks.forEach(t => {
+              if (t.status === 'COMPLETED' && (!t.actual_duration || t.actual_duration <= 0)) {
+                t.actual_duration = t.estimated_duration ? Math.round(t.estimated_duration * 0.95) : 115;
+                mutated = true;
+              }
+            });
+          }
+
           if (mutated) {
             this.save();
           }
@@ -278,7 +301,8 @@ class MockDB {
       routes: [],
       scanEvents: [],
       alerts: [
-        { id: 'alert-01', type: 'LOW_BATTERY', severity: 'WARNING', message: 'Vehicle AMR-04 has low battery (12%) and requires docking soon.', vehicle_id: 'v-04', is_acknowledged: true, resolved_at: new Date().toISOString(), created_at: new Date().toISOString() }
+        { id: 'alert-warn-01', type: 'LOW_BATTERY', severity: 'WARNING', message: 'Vehicle AMR-04 battery depleted to 12%. Scheduled charging dock required.', vehicle_id: 'v-04', is_acknowledged: false, resolved_at: null, created_at: new Date(Date.now() - 15 * 60000).toISOString() },
+        { id: 'alert-warn-02', type: 'SYSTEM_ERROR', severity: 'WARNING', message: 'Vehicle AMR-03 offline in Maintenance Bay. LiDAR sensor calibration scheduled.', vehicle_id: 'v-03', is_acknowledged: false, resolved_at: null, created_at: new Date(Date.now() - 35 * 60000).toISOString() }
       ],
       auditLogs: [
         { id: 'log-01', user_email: 'system', action: 'SEED_DATA', object_type: 'SYSTEM', object_id: 'sys', previous_state: null, new_state: { seeded: true }, timestamp: new Date().toISOString() }

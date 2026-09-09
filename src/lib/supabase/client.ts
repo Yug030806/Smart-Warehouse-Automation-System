@@ -27,14 +27,25 @@ export const supabaseReal = useSupabaseReal
     }) 
   : null;
 
-// In-memory cache to support legacy synchronous .data calls while queries run asynchronously
-const tableCache: Record<string, any[]> = {};
-const tableCacheTime: Record<string, number> = {};
+export const tableCache: Record<string, any[]> = {};
+export const tableCacheTime: Record<string, number> = {};
 const inFlightSelects = new Map<string, Promise<any>>();
 
-const STATIC_TABLES = new Set(['warehouses', 'floors', 'zones', 'locations', 'profiles']);
+const STATIC_TABLES = new Set(['warehouses', 'floors', 'zones', 'locations']);
 const STATIC_CACHE_TTL = 15000; // 15 seconds for layout / topology
-const DYNAMIC_CACHE_TTL = 2500;  // 2.5 seconds for high-churn tables
+const DYNAMIC_CACHE_TTL = 1500;  // 1.5 seconds for dynamic tables
+
+export function invalidateTableCache(table?: string) {
+  if (table) {
+    delete tableCache[table];
+    delete tableCacheTime[table];
+  } else {
+    Object.keys(tableCache).forEach(k => {
+      delete tableCache[k];
+      delete tableCacheTime[k];
+    });
+  }
+}
 
 function isRlsError(err: any): boolean {
   if (!err) return false;
@@ -43,7 +54,7 @@ function isRlsError(err: any): boolean {
   return code === '42501' || msg.includes('row-level security') || msg.includes('policy') || msg.includes('permission denied');
 }
 
-function updateLocalState(table: string, action: 'INSERT' | 'UPDATE' | 'DELETE', item: any, match?: Record<string, any>) {
+export function updateLocalState(table: string, action: 'INSERT' | 'UPDATE' | 'DELETE', item: any, match?: Record<string, any>) {
   if (!item && !match) return;
   if (!tableCache[table]) tableCache[table] = [];
   tableCacheTime[table] = Date.now();

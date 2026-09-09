@@ -76,10 +76,10 @@ export default function Dashboard() {
   }, [user]);
 
   const [warehouses, setWarehouses] = useState<any[]>([]);
-  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('');
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('ALL');
 
   useEffect(() => {
-    if (selectedWarehouseId) {
+    if (selectedWarehouseId && selectedWarehouseId !== 'ALL') {
       const whFloors = floors.filter(f => f.warehouse_id === selectedWarehouseId);
       if (whFloors.length > 0) {
         if (!whFloors.some(f => f.id === selectedFloor)) {
@@ -88,8 +88,12 @@ export default function Dashboard() {
       } else {
         setSelectedFloor('');
       }
+    } else {
+      if (!floors.some(f => f.id === selectedFloor)) {
+        setSelectedFloor(floors.length > 0 ? floors[0].id : '');
+      }
     }
-  }, [selectedWarehouseId, floors]);
+  }, [selectedWarehouseId, floors, selectedFloor]);
 
   useEffect(() => {
     let isMounted = true;
@@ -119,8 +123,8 @@ export default function Dashboard() {
           if (wRes.data) {
             setWarehouses(wRes.data);
             setSelectedWarehouseId(prev => {
-              if (prev && wRes.data.some((w: any) => w.id === prev)) return prev;
-              return wRes.data.length > 0 ? wRes.data[0].id : '';
+              if (prev && (prev === 'ALL' || wRes.data.some((w: any) => w.id === prev))) return prev;
+              return 'ALL';
             });
           }
 
@@ -162,8 +166,9 @@ export default function Dashboard() {
 
   // Dynamically compute stats and rosters filtered by the selected warehouse
   const { stats, activeTasksList, vehiclesList, alertsList } = useMemo(() => {
+    const isFiltered = Boolean(selectedWarehouseId && selectedWarehouseId !== 'ALL');
     const isFirstWarehouse = warehouses.length > 0 && selectedWarehouseId === warehouses[0].id;
-    const whFloors = floors.filter(f => f.warehouse_id === selectedWarehouseId);
+    const whFloors = isFiltered ? floors.filter(f => f.warehouse_id === selectedWarehouseId) : floors;
     const whFloorIds = new Set(whFloors.map(f => f.id));
     const whLocs = rawLocations.filter(l => whFloorIds.has(l.floor_id));
     const whLocIds = new Set(whLocs.map(l => l.id));
@@ -190,7 +195,7 @@ export default function Dashboard() {
       tasks = tasks.filter((t: any) => allowedL.includes(t.source_location_id));
     }
 
-    if (selectedWarehouseId) {
+    if (isFiltered) {
       vehicles = vehicles.filter(v => 
         (v.current_floor_id && whFloorIds.has(v.current_floor_id)) || 
         (!v.current_floor_id && isFirstWarehouse)
@@ -250,7 +255,9 @@ export default function Dashboard() {
         edgeAiActive,
         obstaclesToday
       },
-      activeTasksList: tasks.filter(t => t.status !== 'COMPLETED' && t.status !== 'CANCELLED').slice(0, 5) as Task[],
+      activeTasksList: [...tasks.filter(t => t.status !== 'COMPLETED' && t.status !== 'CANCELLED')]
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 10) as Task[],
       vehiclesList: vehicles as Vehicle[],
       alertsList: alerts.slice(0, 5) as Alert[]
     };
@@ -331,11 +338,11 @@ export default function Dashboard() {
         
         <main className="flex-grow p-3 sm:p-6 md:p-8 overflow-y-auto space-y-6 md:space-y-8 overscroll-contain w-full min-w-0">
           {/* Top Section Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full min-w-0">
-            <div className="min-w-0 w-full sm:w-auto flex-1">
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 w-full">
+            <div>
+              <div className="flex items-center gap-2 sm:gap-3">
                 <span className="h-6 w-1.5 rounded-full bg-blue-500 shadow-[0_0_12px_#3b82f6] shrink-0" />
-                <h1 className="text-xl sm:text-2xl font-black text-slate-100 tracking-tight leading-tight min-w-0">
+                <h1 className="text-xl sm:text-2xl font-black text-slate-100 tracking-tight leading-tight whitespace-nowrap">
                   Smart Warehouse Telemetry
                 </h1>
                 <div className="system-optimal-badge hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 shrink-0">
@@ -343,11 +350,12 @@ export default function Dashboard() {
                   <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">System Optimal</span>
                 </div>
               </div>
-              <p className="text-xs sm:text-sm text-slate-400 mt-1 sm:pl-4.5">
+              <p className="text-xs sm:text-sm text-slate-400 mt-1 pl-4.5">
                 Autonomous fleet telemetry, inventory throughput, and AGV performance metrics.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
+
+            <div className="flex items-center gap-2.5 shrink-0 flex-wrap sm:flex-nowrap">
               {/* Warehouse selector (if multiple warehouses exist) */}
               {warehouses.length > 1 && (
                 <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-[#141419] border border-slate-800/80 shrink-0">
@@ -356,11 +364,15 @@ export default function Dashboard() {
                     onChange={(e) => {
                       const newWid = e.target.value;
                       setSelectedWarehouseId(newWid);
-                      const whF = floors.filter(f => f.warehouse_id === newWid);
+                      const targetWid = newWid === 'ALL' ? (warehouses[0]?.id || '') : newWid;
+                      const whF = floors.filter(f => f.warehouse_id === targetWid);
                       setSelectedFloor(whF.length > 0 ? whF[0].id : '');
                     }}
                     className="bg-slate-900 text-xs font-bold text-slate-200 px-3 py-1.5 rounded-xl border border-slate-800 outline-none cursor-pointer"
                   >
+                    <option value="ALL" className="bg-slate-900 text-slate-200 font-bold">
+                      All Facilities (Global)
+                    </option>
                     {warehouses.map((w) => (
                       <option key={w.id} value={w.id} className="bg-slate-900 text-slate-200">
                         {w.name}
@@ -370,12 +382,13 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* Dynamic Floor Switcher synced to the selected warehouse */}
-              <div className="flex items-center gap-1.5 sm:gap-2 p-1.5 rounded-2xl bg-[#141419] border border-slate-800/80 shrink-0 w-full sm:w-auto overflow-x-auto">
+              {/* Dynamic Floor Switcher synced to the active warehouse facility */}
+              <div className="flex items-center gap-1.5 sm:gap-2 p-1.5 rounded-2xl bg-[#141419] border border-slate-800/80 shrink-0 overflow-x-auto">
                 {(() => {
-                  const currentWarehouseFloors = floors.filter(
-                    f => !selectedWarehouseId || f.warehouse_id === selectedWarehouseId
-                  );
+                  const activeWhId = (selectedWarehouseId && selectedWarehouseId !== 'ALL')
+                    ? selectedWarehouseId
+                    : (floors.find(f => f.id === selectedFloor)?.warehouse_id || warehouses[0]?.id);
+                  const currentWarehouseFloors = floors.filter(f => f.warehouse_id === activeWhId);
 
                   if (currentWarehouseFloors.length === 0) {
                     return (
@@ -389,7 +402,7 @@ export default function Dashboard() {
                     <button
                       key={f.id}
                       onClick={() => setSelectedFloor(f.id)}
-                      className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 text-center whitespace-nowrap ${
+                      className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 text-center whitespace-nowrap ${
                         selectedFloor === f.id
                           ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(59,130,246,0.4)]'
                           : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
@@ -483,9 +496,10 @@ export default function Dashboard() {
             <div className="lg:col-span-2 space-y-6">
               {/* Floor Switcher */}
               {(() => {
-                const whFloors = floors.filter(
-                  f => !selectedWarehouseId || f.warehouse_id === selectedWarehouseId
-                );
+                const activeWhId = (selectedWarehouseId && selectedWarehouseId !== 'ALL')
+                  ? selectedWarehouseId
+                  : (floors.find(f => f.id === selectedFloor)?.warehouse_id || warehouses[0]?.id);
+                const whFloors = floors.filter(f => f.warehouse_id === activeWhId);
                 if (whFloors.length <= 1) return null;
                 return (
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#141419] border border-slate-800/80 rounded-2xl p-3 px-4 shadow-lg">
@@ -546,9 +560,19 @@ export default function Dashboard() {
                           <td colSpan={5} className="py-6 text-center text-slate-500 font-medium">No active transportation tasks currently executing.</td>
                         </tr>
                       ) : (
-                        activeTasksList.map(task => (
+                        activeTasksList.map(task => {
+                          const srcLoc = rawLocations.find(l => l.id === task.source_location_id);
+                          const srcFloor = floors.find(f => f.id === srcLoc?.floor_id);
+                          const taskWarehouse = warehouses.find(w => w.id === srcFloor?.warehouse_id);
+
+                          return (
                           <tr key={task.id} className="text-slate-300">
-                            <td className="py-3.5 font-mono font-bold text-cyan-400">{task.task_code}</td>
+                            <td className="py-3.5">
+                              <span className="font-mono font-bold text-cyan-400 block">{task.task_code}</span>
+                              {taskWarehouse && (
+                                <span className="text-[10px] text-slate-400 block mt-0.5">{taskWarehouse.name}</span>
+                              )}
+                            </td>
                             <td className="py-3.5 font-bold">
                               {task.vehicle_id ? (
                                 <span className="flex items-center gap-1.5 text-blue-400"><Truck className="h-3.5 w-3.5" /> {vehiclesList.find(v => v.id === task.vehicle_id)?.vehicle_code}</span>
@@ -569,7 +593,8 @@ export default function Dashboard() {
                             </td>
                             <td className="py-3.5 text-slate-400 font-mono">{task.estimated_duration}s</td>
                           </tr>
-                        ))
+                        );
+                      })
                       )}
                     </tbody>
                   </table>

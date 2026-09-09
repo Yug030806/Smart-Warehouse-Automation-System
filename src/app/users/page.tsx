@@ -1,6 +1,7 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase/client';
+import { useState, useEffect, useRef } from 'react';
+import { supabase, invalidateTableCache } from '@/lib/supabase/client';
+import mockDb from '@/lib/supabase/mockDb';
 import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
 import AmbientBackground from '@/components/AmbientBackground';
@@ -17,6 +18,8 @@ export default function UsersPage() {
   const [users, setUsers] = useState<Profile[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
+  const updatingUserIdRef = useRef<string | null>(null);
 
   // Add User states
   const [showAddModal, setShowAddModal] = useState(false);
@@ -50,7 +53,17 @@ export default function UsersPage() {
           list = apiRes.data;
         }
       }
-      setUsers(list.map(p => ({ ...p })));
+      // If an update is actively in progress, don't overwrite that specific user's status with stale data
+      setUsers(prev => {
+        const inFlightId = updatingUserIdRef.current;
+        return list.map(p => {
+          if (inFlightId && p.id === inFlightId) {
+            const currentLocal = prev.find(u => u.id === inFlightId);
+            return currentLocal ? { ...p, is_active: currentLocal.is_active } : { ...p };
+          }
+          return { ...p };
+        });
+      });
 
       const wRes = await supabase.from('warehouses').select();
       setWarehouses((wRes.data || []) as Warehouse[]);
@@ -62,7 +75,7 @@ export default function UsersPage() {
   useEffect(() => {
     loadData();
     const interval = setInterval(() => {
-      if (document.hidden || showAddModal || editingUser) return;
+      if (document.hidden || showAddModal || editingUser || updatingUserIdRef.current) return;
       loadData();
     }, 6000);
     return () => clearInterval(interval);
@@ -102,57 +115,69 @@ export default function UsersPage() {
     })();
   };
 
-  const handleDeactivate = (id: string, currentStatus: boolean, profileRole: string) => {
-    if (!currentStatus && ['MANAGER'].includes(profileRole)) {
-      // If approving a manager, force them to go through the edit modal to assign warehouses
-      const u = users.find(x => x.id === id);
-      if (u) {
-        setEditingUser(u);
-        setEditName(u.full_name);
-        setEditRole(u.role as any);
-        setEditAssignedWarehouses(u.assigned_warehouse_ids || []);
-      }
-      return;
-    }
+  const handleDeactivate = async (id: string, currentStatus: boolean) => {
+    if (updatingUserIdRef.current) return;
+    updatingUserIdRef.current = id;
+    setUpdatingUserId(id);
 
-    // Optimistically update user status
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, is_active: !currentStatus } : u));
+    const nextStatus = !currentStatus;
 
-    (async () => {
-      try {
-        const res = await fetch('/api/users/update', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: id,
-            updates: { is_active: !currentStatus },
-            adminEmail: user?.email
-          })
-        });
-        if (!res.ok) throw new Error('API update failed');
-      } catch {
-        try {
-          await supabase.from('profiles').update({ is_active: !currentStatus }).eq('id', id);
-        } catch (err: any) {
-          console.error('Failed to update user status:', err);
-          loadData();
-        }
-      }
-    })();
+    // 1. Optimistically update local UI state immediately
+    setUsers(prev => prev.map(u => u.id === id ? { ...u, is_active: nextStatus } : u));
 
+    // 2. Invalidate cache so subsequent selects don't return stale state
+    invalidateTableCache('profiles');
+
+    // 3. Update mockDb in-memory & localStorage
     try {
-      const mockDb = require('@/lib/supabase/mockDb').default;
-      const profile = mockDb.getProfiles().find((p: any) => p.id === id);
-      if (profile) {
-        mockDb.saveProfile({ ...profile, is_active: !currentStatus });
+      const p = mockDb.getProfiles().find((x: any) => x.id === id);
+      if (p) {
+        mockDb.saveProfile({ ...p, is_active: nextStatus });
       }
     } catch {}
+
+    // 4. Update via server API and fallback to supabase client
+    try {
+      const res = await fetch('/api/users/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: id,
+          updates: { is_active: nextStatus },
+          adminEmail: user?.email
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error?.message || 'API update failed');
+      }
+
+      if (data.profile) {
+        setUsers(prev => prev.map(u => u.id === id ? { ...u, ...data.profile } : u));
+      }
+      invalidateTableCache('profiles');
+    } catch (err) {
+      console.warn('API update failed, trying direct supabase update:', err);
+      try {
+        await supabase.from('profiles').update({ is_active: nextStatus }).eq('id', id);
+        invalidateTableCache('profiles');
+      } catch (fallbackErr: any) {
+        console.error('Failed to update user status:', fallbackErr);
+        // Revert optimistic update
+        setUsers(prev => prev.map(u => u.id === id ? { ...u, is_active: currentStatus } : u));
+        alert('Failed to update user status: ' + (fallbackErr?.message || 'Error'));
+      }
+    } finally {
+      updatingUserIdRef.current = null;
+      setUpdatingUserId(null);
+    }
   };
 
-  const handleEditUserSubmit = (e: React.FormEvent) => {
+  const handleEditUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser || !editName) return;
 
+    const targetId = editingUser.id;
     const updates: any = {
       full_name: editName,
       role: editRole,
@@ -169,34 +194,54 @@ export default function UsersPage() {
       updates.assigned_warehouse_ids = [];
     }
 
-    // Optimistically update user in state
-    setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, ...updates } : u));
     setEditingUser(null);
+    updatingUserIdRef.current = targetId;
+    setUpdatingUserId(targetId);
 
-    (async () => {
-      try {
-        const res = await fetch('/api/users/update', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: editingUser.id,
-            updates,
-            adminEmail: user?.email
-          })
-        });
-        if (!res.ok) throw new Error('API update failed');
-      } catch {
-        try {
-          await supabase.from('profiles').update(updates).eq('id', editingUser.id);
-        } catch (err: any) {
-          console.error('Failed to update user via supabase:', err);
-          loadData();
-        }
+    // Optimistically update user in state
+    setUsers(prev => prev.map(u => u.id === targetId ? { ...u, ...updates } : u));
+    invalidateTableCache('profiles');
+
+    try {
+      const p = mockDb.getProfiles().find((x: any) => x.id === targetId);
+      if (p) {
+        mockDb.saveProfile({ ...p, ...updates });
       }
-    })();
+    } catch {}
+
+    try {
+      const res = await fetch('/api/users/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: targetId,
+          updates,
+          adminEmail: user?.email
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error?.message || 'Update failed');
+      }
+
+      if (data.profile) {
+        setUsers(prev => prev.map(u => u.id === targetId ? { ...u, ...data.profile } : u));
+      }
+      invalidateTableCache('profiles');
+    } catch (err) {
+      try {
+        await supabase.from('profiles').update(updates).eq('id', targetId);
+        invalidateTableCache('profiles');
+      } catch (err2: any) {
+        console.error('Failed to update user via supabase:', err2);
+      }
+    } finally {
+      updatingUserIdRef.current = null;
+      setUpdatingUserId(null);
+    }
   };
 
-  const handleDeleteUser = (id: string) => {
+  const handleDeleteUser = async (id: string) => {
     if (id === user?.id) {
       alert('You cannot delete your own admin account while logged in.');
       return;
@@ -204,23 +249,40 @@ export default function UsersPage() {
 
     if (!confirm('Are you sure you want to permanently delete this user?')) return;
 
-    // Optimistically remove user
+    updatingUserIdRef.current = id;
+    setUpdatingUserId(id);
     setUsers(prev => prev.filter(u => u.id !== id));
+    invalidateTableCache('profiles');
 
-    fetch('/api/users/delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: id })
-    }).then(async res => {
+    try {
+      mockDb.deleteProfile(id);
+    } catch {}
+
+    try {
+      const res = await fetch('/api/users/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: id })
+      });
       const data = await res.json();
       if (!res.ok || data.error) {
-        alert('Failed to delete user: ' + (data.error?.message || 'Server error'));
+        throw new Error(data.error?.message || 'Server error');
+      }
+
+      invalidateTableCache('profiles');
+    } catch (err: any) {
+      console.warn('API delete error, falling back to direct delete:', err);
+      try {
+        await supabase.from('profiles').delete().eq('id', id);
+        invalidateTableCache('profiles');
+      } catch (delErr: any) {
+        alert('Failed to delete user: ' + (delErr?.message || err.message));
         loadData();
       }
-    }).catch((err: any) => {
-      alert('Error deleting user: ' + err.message);
-      loadData();
-    });
+    } finally {
+      updatingUserIdRef.current = null;
+      setUpdatingUserId(null);
+    }
   };
 
   // Filter users based on search and roles
@@ -300,26 +362,41 @@ export default function UsersPage() {
                         </span>
                       </td>
                       <td className="py-4">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          u.is_active ? 'bg-green-950 text-green-400' : 'bg-orange-950 text-orange-400'
-                        }`}>{u.is_active ? 'ACTIVE' : 'PENDING APPROVAL'}</span>
+                        <span className={`px-2.5 py-1 rounded text-[10px] font-bold tracking-wider ${
+                          u.is_active ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/40' : 'bg-amber-950/40 text-amber-400 border border-amber-800/40'
+                        }`}>
+                          {u.is_active ? 'ACTIVE' : 'DEACTIVATED'}
+                        </span>
                       </td>
-                      <td className="py-4 text-right space-x-3">
+                      <td className="py-4 text-right space-x-3 whitespace-nowrap">
                         <button
+                          disabled={Boolean(updatingUserId)}
                           onClick={() => { setEditingUser(u); setEditName(u.full_name); setEditRole(u.role as any); setEditAssignedWarehouses(u.assigned_warehouse_ids || []); }}
-                          className="text-xs text-slate-300 hover:text-slate-100 font-semibold"
+                          className="text-xs text-slate-300 hover:text-slate-100 font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition"
                         >
                           Edit
                         </button>
                         <button
-                          onClick={() => handleDeactivate(u.id, u.is_active, u.role)}
-                          className="text-xs text-blue-400 hover:text-blue-300 font-semibold"
+                          disabled={Boolean(updatingUserId)}
+                          onClick={() => handleDeactivate(u.id, u.is_active)}
+                          className={`text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition ${
+                            updatingUserId === u.id
+                              ? 'text-slate-400'
+                              : u.is_active
+                              ? 'text-amber-400 hover:text-amber-300'
+                              : 'text-emerald-400 hover:text-emerald-300'
+                          }`}
                         >
-                          {u.is_active ? 'Deactivate' : 'Approve'}
+                          {updatingUserId === u.id
+                            ? 'Saving...'
+                            : u.is_active
+                            ? 'Deactivate'
+                            : 'Approve'}
                         </button>
                         <button
+                          disabled={Boolean(updatingUserId)}
                           onClick={() => handleDeleteUser(u.id)}
-                          className="text-xs text-red-400 hover:text-red-300 font-semibold"
+                          className="text-xs text-red-400 hover:text-red-300 font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition"
                         >
                           Delete
                         </button>

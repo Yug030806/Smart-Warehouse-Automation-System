@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/lib/supabase/AuthProvider';
-import { KeyRound, Eye, EyeOff, Lock, Mail, Sparkles, ShieldCheck, UserCheck, Bot } from 'lucide-react';
+import { KeyRound, Eye, EyeOff, Lock, Mail } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import AmbientBackground from '@/components/AmbientBackground';
@@ -14,7 +14,6 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [selectedRoleChip, setSelectedRoleChip] = useState<string | null>(null);
   const [bgStyle, setBgStyle] = useState({ transform: 'scale(1.05)', transition: 'transform 0.2s ease-out' });
 
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -28,17 +27,10 @@ export default function LoginPage() {
   };
 
   const credentials = [
-    { role: 'ADMIN' as const, email: 'admin@demo.com', pass: 'admin123', label: 'Admin', icon: ShieldCheck },
-    { role: 'MANAGER' as const, email: 'manager@demo.com', pass: 'manager123', label: 'Manager', icon: UserCheck },
-    { role: 'OPERATOR' as const, email: 'operator@demo.com', pass: 'operator123', label: 'Operator', icon: Bot },
+    { role: 'ADMIN' as const, email: 'admin@demo.com', pass: 'admin123' },
+    { role: 'MANAGER' as const, email: 'manager@demo.com', pass: 'manager123' },
+    { role: 'OPERATOR' as const, email: 'operator@demo.com', pass: 'operator123' },
   ];
-
-  const handleSelectQuickCred = (cred: typeof credentials[0]) => {
-    setEmail(cred.email);
-    setPassword(cred.pass);
-    setSelectedRoleChip(cred.role);
-    setError('');
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,35 +123,6 @@ export default function LoginPage() {
           </Link>
         </div>
 
-        {/* Interactive Demo Role Selector Pills */}
-        <div className="mt-5 space-y-2">
-          <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 flex items-center gap-1">
-            <Sparkles className="h-3 w-3 text-cyan-400" />
-            Quick Demo Role Selector
-          </span>
-          <div className="grid grid-cols-3 gap-2">
-            {credentials.map((cred) => {
-              const isSelected = selectedRoleChip === cred.role;
-              const IconComp = cred.icon;
-              return (
-                <button
-                  key={cred.role}
-                  type="button"
-                  onClick={() => handleSelectQuickCred(cred)}
-                  className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all duration-200 ${
-                    isSelected 
-                      ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.3)] scale-105' 
-                      : 'bg-slate-950/60 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                  }`}
-                >
-                  <IconComp className={`h-4 w-4 mb-1 ${isSelected ? 'text-cyan-300' : 'text-slate-400'}`} />
-                  <span>{cred.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           {error && (
             <motion.div 
@@ -179,7 +142,7 @@ export default function LoginPage() {
                 type="email"
                 required
                 value={email}
-                onChange={(e) => { setEmail(e.target.value); setSelectedRoleChip(null); }}
+                onChange={(e) => setEmail(e.target.value)}
                 placeholder="Enter email..."
                 className="w-full rounded-xl border border-slate-800/80 bg-slate-950/90 pl-10 pr-4 py-3 text-xs font-medium text-slate-100 placeholder-slate-600 outline-none transition duration-200 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 shadow-inner"
               />
