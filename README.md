@@ -1,8 +1,6 @@
-# 🏭 Smart Warehouse Autonomous System
+#  Smart Warehouse Autonomous System
 
 <div align="center">
-
-![Platform Banner](public/logo.jpg)
 
 ### Next-Generation Multi-Floor Autonomous Mobile Robot (AMR) Fleet Orchestration & Cyber-Physical Digital Twin
 
@@ -14,35 +12,35 @@
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](#license)
 [![Smart India Hackathon](https://img.shields.io/badge/SIH-Finalist_Prototype-orange?style=for-the-badge)](https://sih.gov.in)
 
-[🚀 Live Demo Workflow](#-sih-evaluator--judges-quick-tour) • [📐 Architecture](#-system-architecture) • [🤖 Edge-AI & Algorithms](#-core-algorithms--technical-innovations) • [⚡ Quickstart](#-getting-started) • [📊 Feature Matrix](#-feature-matrix)
+[🚀 Live Demo Workflow](#sih-evaluator--judges-quick-tour) • [📐 Architecture](#system-architecture) • [🤖 Edge-AI & Algorithms](#core-algorithms--technical-innovations) • [⚡ Quickstart](#getting-started) • [📊 Feature Matrix](#feature-matrix)
 
 </div>
 
 ---
 
-## 🌟 Executive Summary
+## Executive Summary
 
 Modern high-throughput fulfillment centers face critical bottlenecks: multi-level floor transitions, corridor deadlocks, manual handoff inaccuracies, and battery-depleted idle fleets.
 
-The **Smart Warehouse Autonomous Logistics Platform (SWAL)** is an enterprise-grade Cyber-Physical Digital Twin and Fleet Management System engineered for modern automated facilities. It unites **distributed Edge-AI vehicle autonomy**, **global multi-agent fleet conflict arbitration**, **3D multi-floor A\* pathfinding with automatic elevator transits**, and **end-to-end QR code custody verification** in a reactive, real-time command center.
+The **Smart Warehouse Autonomous System** is an enterprise-grade Cyber-Physical Digital Twin and Fleet Management System engineered for modern automated facilities. It unites **distributed Edge-AI vehicle autonomy**, **global multi-agent fleet conflict arbitration**, **3D multi-floor A\* pathfinding with automatic elevator transits**, and **end-to-end QR code custody verification** in a reactive, real-time command center.
 
 > **Built for High Stakes**: Designed and benchmarked as a master prototype for the **Smart India Hackathon (SIH)** Logistics & Supply Chain track.
 
 ---
 
-## 🧭 SIH Evaluator & Judges Quick Tour
+## SIH Evaluator & Judges Quick Tour
 
 For rapid assessment, the platform includes a **built-in 9-step automated demonstration wizard** and pre-seeded multi-role accounts.
 
-### 🔑 1-Click Role-Based Credentials
+### 1-Click Role-Based Credentials
 
 | Role | Email | Password | Access Privileges |
 | :--- | :--- | :--- | :--- |
-| 👑 **Administrator** | `admin@demo.com` | `admin123` | Complete governance, RLS rules, warehouse & floor topology designer, user RBAC |
-| 💼 **Warehouse Manager** | `manager@demo.com` | `manager123` | Fleet dispatching, live route monitoring, inventory management, analytics HUD |
-| 👷 **Floor Operator** | `operator@demo.com` | `operator123` | QR intake/dispatch scanner, task execution, AMR manual assignments |
+| **Administrator** | `admin@demo.com` | `admin123` | Complete governance, RLS rules, warehouse & floor topology designer, user RBAC |
+| **Warehouse Manager** | `manager@demo.com` | `manager123` | Fleet dispatching, live route monitoring, inventory management, analytics HUD |
+| **Floor Operator** | `operator@demo.com` | `operator123` | QR intake/dispatch scanner, task execution, AMR manual assignments |
 
-### ⚡ 9-Step End-to-End Evaluation Flow (`/tracking/demo`)
+### 9-Step End-to-End Evaluation Flow (`/tracking/demo`)
 
 Navigate directly to **`/tracking/demo`** after logging in to witness the end-to-end autonomous fulfillment pipeline:
 
@@ -65,9 +63,9 @@ flowchart LR
 
 ---
 
-## 📐 System Architecture
+## System Architecture
 
-SWAL implements a **decoupled hybrid architecture** that balances immediate edge safety with centralized fleet optimization:
+Smart Warehouse Autonomous System implements a **decoupled hybrid architecture** that balances immediate edge safety with centralized fleet optimization:
 
 ```mermaid
 graph TD
@@ -108,10 +106,10 @@ graph TD
 
 ---
 
-## 🤖 Core Algorithms & Technical Innovations
+## Core Algorithms & Technical Innovations
 
 ### 1. Decentralized Edge-AI Safety Sovereignity
-Unlike traditional naive central dispatchers where network latency can cause fatal robot collisions, each AMR in SWAL runs an independent **Edge-AI Safety Engine** (`edgeAIEngine.ts`):
+Unlike traditional naive central dispatchers where network latency can cause fatal robot collisions, each AMR in Smart Warehouse Autonomous System runs an independent **Edge-AI Safety Engine** (`edgeAIEngine.ts`):
 - **Autonomous Local Control**: The vehicle maintains unilateral authority over safety actions (`STOP`, `SLOW_DOWN`, `EMERGENCY_STOP`). The central server can never override a local safety halt.
 - **Sensor Fusion Emulation**: Simulates obstacle proximity sensors, calculating dynamic time-to-impact (TTI).
 - **Zero-Latency Response**: Processes collision hazards locally in $< 5\text{ ms}$, then asynchronously reports hazards upstream to the fleet coordinator.
@@ -143,47 +141,47 @@ $$\text{Score} = w_{\text{prio}} \cdot P_{\text{task}} + w_{\text{wait}} \cdot T
 
 ---
 
-## 📊 Feature Matrix
+## Feature Matrix
 
 | Functional Module | Capabilities & Implementation Details | Status |
 | :--- | :--- | :---: |
-| 🗺️ **Digital Twin Map** | Multi-floor 2D grid, interactive coordinate picking, rack overlays, live AMR icons, path trace animations | ✅ Production Ready |
-| 🤖 **AMR Fleet Simulation** | Autonomous velocity stepping, 1x–10x playback speed, play/pause/reset, battery consumption model | ✅ Production Ready |
-| 🛗 **Multi-Floor Transit** | Seamless vertical elevator routing between arbitrary warehouse levels | ✅ Production Ready |
-| 📦 **Box & SKU Management** | Full CRUD, weight/category tags, status lifecycle (`WAITING` $\to$ `DELIVERED`), printable QR labels | ✅ Production Ready |
-| 📱 **QR Verification Suite** | Real-time browser barcode reader, simulated camera input, payload integrity checking | ✅ Production Ready |
-| 🎯 **Intelligent Dispatch** | Automatic heuristic-based AMR allocation and manual operator override modal | ✅ Production Ready |
-| 📈 **Telemetry & Analytics** | Throughput curves, SLA completion rates, fleet health distribution via Recharts | ✅ Production Ready |
-| 🛡️ **Enterprise Security** | Granular 4-Tier RBAC, PostgreSQL Row Level Security (RLS), immutable audit trail | ✅ Production Ready |
-| 🚨 **Alert & Safety Dispatch** | Instant anomaly banners, low-battery warnings, obstacle deadlocks, collision logs | ✅ Production Ready |
-| 🎬 **SIH Demo Console** | One-click 9-stage automated evaluator presentation with confetti triggers | ✅ Production Ready |
+| **Digital Twin Map** | Multi-floor 2D grid, interactive coordinate picking, rack overlays, live AMR icons, path trace animations | ✅ Production Ready |
+| **AMR Fleet Simulation** | Autonomous velocity stepping, 1x–10x playback speed, play/pause/reset, battery consumption model | ✅ Production Ready |
+| **Multi-Floor Transit** | Seamless vertical elevator routing between arbitrary warehouse levels | ✅ Production Ready |
+| **Box & SKU Management** | Full CRUD, weight/category tags, status lifecycle (`WAITING` $\to$ `DELIVERED`), printable QR labels | ✅ Production Ready |
+| **QR Verification Suite** | Real-time browser barcode reader, simulated camera input, payload integrity checking | ✅ Production Ready |
+| **Intelligent Dispatch** | Automatic heuristic-based AMR allocation and manual operator override modal | ✅ Production Ready |
+| **Telemetry & Analytics** | Throughput curves, SLA completion rates, fleet health distribution via Recharts | ✅ Production Ready |
+| **Enterprise Security** | Granular 4-Tier RBAC, PostgreSQL Row Level Security (RLS), immutable audit trail | ✅ Production Ready |
+| **Alert & Safety Dispatch** | Instant anomaly banners, low-battery warnings, obstacle deadlocks, collision logs | ✅ Production Ready |
+| **SIH Demo Console** | One-click 9-stage automated evaluator presentation with confetti triggers | ✅ Production Ready |
 
 ---
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 ```
-Smart Warehouse Autonomous Logistics Platform
+Smart Warehouse Autonomous System
 │
-├── 🎨 Frontend Framework
+├── Frontend Framework
 │   ├── Next.js 16.3.2 (App Router, Turbopack / Webpack hybrid)
 │   ├── React 19.2.8 (Server & Client Components, Concurrent Mode)
 │   ├── TypeScript 5.0 (Strict typing, zero unchecked any in algorithms)
 │   └── Tailwind CSS v4.0 (Modern utility-first styling + Glassmorphism UI)
 │
-├── 🧠 Autonomous Algorithms & Motion
+├── Autonomous Algorithms & Motion
 │   ├── Custom A* Pathfinding Engine (Multi-floor, elevator integration)
 │   ├── Edge-AI Safety Simulator (Decentralized collision avoidance)
 │   ├── Fleet Conflict Arbitrator (Right-of-Way queue management)
 │   └── Framer Motion 13 (Physics-based micro-interactions)
 │
-├── 📊 Visualization & Scanning
+├── Visualization & Scanning
 │   ├── Recharts 3.10.1 (Fleet metrics, telemetry, and KPI analytics)
 │   ├── QRCode & Canvas-Confetti (Label generation, print style, celebrations)
 │   ├── Lucide React (Industrial iconography)
 │   └── Radix UI Primitives (Accessible tooltips & modals)
 │
-└── 🗄️ Backend & Security
+└── Backend & Security
     ├── PostgreSQL 15+ (Relational schema with cascading foreign keys)
     ├── Supabase SSR / Client 2.112 (Row-Level Security & Realtime channels)
     └── Enterprise RBAC (ADMIN, MANAGER, OPERATOR, VIEWER permissions)
@@ -191,7 +189,7 @@ Smart Warehouse Autonomous Logistics Platform
 
 ---
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```
 SWL/
@@ -207,7 +205,7 @@ SWL/
 │   │   ├── settings/             # Simulation speed & facility preferences
 │   │   ├── tasks/                # Dispatch engine & task assignment
 │   │   ├── tracking/             # Live AMR trajectory telemetry HUD
-│   │   │   └── demo/             # 🏆 9-Step SIH Evaluator Demo Console
+│   │   │   └── demo/             # 9-Step SIH Evaluator Demo Console
 │   │   ├── users/                # User RBAC administration
 │   │   ├── vehicles/             # AMR fleet roster & battery monitors
 │   │   └── warehouses/           # Multi-facility & floor topology editor
@@ -233,7 +231,7 @@ SWL/
 
 ---
 
-## ⚡ Getting Started
+## Getting Started
 
 Follow these steps to spin up the platform locally in under 2 minutes:
 
@@ -259,7 +257,7 @@ Create a `.env.local` file in the root directory:
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
-> 💡 *Note: The system features a built-in high-fidelity in-memory client (`mockDb.ts`). If Supabase credentials are not provided, the entire simulation, demo mode, and database operations execute seamlessly in local development mode!*
+> **Note**: The system features a built-in high-fidelity in-memory client (`mockDb.ts`). If Supabase credentials are not provided, the entire simulation, demo mode, and database operations execute seamlessly in local development mode!
 
 ### 5. Launch Development Server
 ```bash
@@ -275,19 +273,19 @@ npm run build
 
 ---
 
-## 🏆 SIH Hackathon Evaluation Mapping
+## SIH Hackathon Evaluation Mapping
 
-| Hackathon Evaluation Criterion | How SWAL Addresses It |
+| Hackathon Evaluation Criterion | How Smart Warehouse Autonomous System Addresses It |
 | :--- | :--- |
-| **💡 Innovation & Originality** | Decentralized Edge-AI safety combined with centralized global conflict arbitration eliminates single points of failure in robotics. |
-| **⚙️ Technical Depth** | Real multi-floor A\* pathfinding that handles vertical elevator scheduling, dynamic moving obstacles, and priority yielding. |
-| **📱 User Experience & UI** | Responsive, dark-mode glassmorphic interface with interactive digital twin map, live path traces, and step-by-step presentation modes. |
-| **🔒 Enterprise Readiness** | Complete PostgreSQL Row-Level Security (RLS) enforcement, 4-tier RBAC, and immutable audit logging for full traceability. |
-| **📈 Commercial Feasibility** | Hardware-agnostic architecture: simulator coordinates map directly to physical AGV/AMR kinematic waypoints over ROS 2 / MQTT. |
+| **Innovation & Originality** | Decentralized Edge-AI safety combined with centralized global conflict arbitration eliminates single points of failure in robotics. |
+| **Technical Depth** | Real multi-floor A\* pathfinding that handles vertical elevator scheduling, dynamic moving obstacles, and priority yielding. |
+| **User Experience & UI** | Responsive, dark-mode glassmorphic interface with interactive digital twin map, live path traces, and step-by-step presentation modes. |
+| **Enterprise Readiness** | Complete PostgreSQL Row-Level Security (RLS) enforcement, 4-tier RBAC, and immutable audit logging for full traceability. |
+| **Commercial Feasibility** | Hardware-agnostic architecture: simulator coordinates map directly to physical AGV/AMR kinematic waypoints over ROS 2 / MQTT. |
 
 ---
 
-## 🔮 Future Roadmap
+## Future Roadmap
 
 - [ ] **ROS 2 / micro-ROS Bridge**: Direct WebSocket bridge transmitting waypoints to physical ESP32-powered differential-drive AMRs.
 - [ ] **3D WebGL Digital Twin**: Three.js rendering for photorealistic facility visualization and LiDAR point cloud overlays.
@@ -296,13 +294,13 @@ npm run build
 
 ---
 
-## 👥 Authors & Acknowledgments
+## Authors & Acknowledgments
 
 - **Yug Patel** ([@Yug030806](https://github.com/Yug030806)) - *Lead Architect & Full-Stack Developer*
 - Developed as a benchmark prototype for the **Smart India Hackathon (SIH)**.
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
