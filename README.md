@@ -1,4 +1,4 @@
-# 🏭 Smart Warehouse Autonomous Logistics Platform (SWAL)
+# 🏭 Smart Warehouse Autonomous System
 
 <div align="center">
 
